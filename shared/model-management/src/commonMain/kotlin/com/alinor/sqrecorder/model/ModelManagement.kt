@@ -57,6 +57,7 @@ public enum class ModelInstallReason {
     MANIFEST_INVALID,
     MODEL_UNTRUSTED,
     PARTIAL_RESTART_REQUIRED,
+    INVALID_STORAGE_SNAPSHOT,
 }
 
 public data class ModelInstallPlan(
@@ -79,6 +80,13 @@ public object ModelInstallPlanner {
         }
         if (trust != ModelTrust.VERIFIED) {
             return ModelInstallPlan(ModelInstallAction.REJECT, ModelInstallReason.MODEL_UNTRUSTED, null)
+        }
+        if (freeBytes < 0L || interruptedPartialBytes < 0L) {
+            return ModelInstallPlan(
+                ModelInstallAction.REJECT,
+                ModelInstallReason.INVALID_STORAGE_SNAPSHOT,
+                null,
+            )
         }
         if (existingVerifiedDigest == manifest.sha256Hex) {
             return ModelInstallPlan(ModelInstallAction.REUSE_VERIFIED, ModelInstallReason.ALREADY_INSTALLED, 0L)

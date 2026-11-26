@@ -149,4 +149,25 @@ class CapabilitySystemTest {
             ModelInstallPlanner.plan(model, ModelTrust.VERIFIED, 0L, null, 0L).reason,
         )
     }
+    @Test
+    fun negativeStorageSnapshotIsRejected() {
+        val model = ModelArtifactManifest(
+            schemaVersion = 1,
+            modelId = "sqrec/model-storage-check",
+            version = SemanticVersion(1, 0, 0),
+            artifactBytes = 10L,
+            sha256Hex = "d".repeat(64),
+            licenseId = "test",
+            provenance = "test-fixture",
+            runtimeApi = SemanticVersion(1, 0, 0),
+            minimumEngineVersion = SemanticVersion(1, 0, 0),
+            publisherKeyId = "publisher-key",
+            signatureBase64 = "AA==",
+        )
+        assertEquals(
+            ModelInstallReason.INVALID_STORAGE_SNAPSHOT,
+            ModelInstallPlanner.plan(model, ModelTrust.VERIFIED, -1L, null, 0L).reason,
+        )
+    }
+
 }
