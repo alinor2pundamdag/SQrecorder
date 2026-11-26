@@ -8,7 +8,7 @@
 - Rust SQVE writer validates declared length/order, serializes the envelope, encrypts chunks, hashes the ciphertext stream, and refuses to seal incomplete input.
 - Rust SQJ v1 append-only hash-chain writer and non-mutating recovery scanner; writer advances only after sink sync, and torn/corrupt tails are reported with verified-prefix offsets.
 - Rust unit tests cover NIST AEAD vector, tamper zeroization, SHA-256, SQVE framing/incomplete files, journal chaining/tamper/torn tail/sync failure.
-- Rust CI run 8 passed format, workspace tests, and Clippy with warnings denied; Cargo generated and committed the lockfile.
+- Rust CI run 8 passed format, workspace tests, and Clippy with warnings denied; Cargo generated and committed the lockfile. Run 9 passed workspace tests including the journal scanner/writer, then Clippy found one unused helper; it is removed for run 10.
 
 ## Remaining security gate
 
