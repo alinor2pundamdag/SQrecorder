@@ -3,7 +3,6 @@ package com.alinor.sqrecorder.domain
 /** Cross-platform Vault format and policy contracts; cryptography is provider-owned. */
 public enum class VaultCipherSuite { AES_256_GCM_CHUNKED_V1 }
 public enum class VaultKeyWrapSuite { RSA_OAEP_SHA256_V1 }
-public enum class VaultAccessMode { AUTHENTICATED, ENCRYPT_ONLY }
 public enum class VaultFileState {
     ENCRYPTING, SEALED, INCOMPLETE, AUTHENTICATION_REQUIRED, KEY_INVALIDATED, CORRUPT,
 }
@@ -195,6 +194,112 @@ public data class JournalAppendResult(
     public val committedDigestHex: String?,
 )
 
+/** Opaque, short-lived platform authentication session; never a password/biometric secret. */
+@JvmInline
+public value class VaultAuthSessionId(public val opaqueId: String)
+
+public data class VaultAuthContext(
+    public val sessionId: VaultAuthSessionId,
+    public val authorizationEpoch: Long,
+    public val expiresAtMonotonicNs: Long,
+) {
+    public fun validate(nowMonotonicNs: Long): Boolean =
+        sessionId.opaqueId.isNotBlank() &&
+            authorizationEpoch >= 0L &&
+            expiresAtMonotonicNs > nowMonotonicNs
+}
+
+public data class JournalSignatureAnchor(
+    public val formatVersion: Int,
+    public val sequence: Long,
+    public val digestHex: String,
+    public val signatureAlgorithmId: String,
+    public val signingKeyId: String,
+    public val signatureBase64: String,
+    public val authenticationEpoch: Long,
+    public val monotonicTimestampNs: Long,
+) {
+    public fun validate(): Boolean =
+        formatVersion == 1 &&
+            sequence > 0L &&
+            digestHex.isLowerHexOfLength(JournalRecord.JOURNAL_DIGEST_HEX_CHARS) &&
+            signatureAlgorithmId.isNotBlank() &&
+            signingKeyId.isSafeKeyId() &&
+            signatureBase64.isStandardBase64() &&
+            authenticationEpoch >= 0L &&
+            monotonicTimestampNs >= 0L
+}
+
+public interface JournalAnchorSigner {
+    /** Platform keystore signs the committed digest; private key material is never exported. */
+    public fun signCommittedDigest(
+        sequence: Long,
+        digestHex: String,
+        authContext: VaultAuthContext,
+    ): JournalSignatureAnchor
+}
+
+public enum class VaultFinalizationStep {
+    ENVELOPE_COMPLETE,
+    STAGING_FILE_SYNCED,
+    ATOMIC_PROMOTION_COMPLETE,
+    PARENT_DIRECTORY_SYNCED,
+    JOURNAL_COMPLETION_DURABLE,
+    AUTHENTICATED_ANCHOR_DURABLE,
+}
+
+public enum class VaultFinalizationStatus {
+    IN_PROGRESS,
+    SEALED_UNANCHORED,
+    AUTHENTICATED,
+    RECOVERY_REQUIRED,
+}
+
+public enum class VaultFinalizationError {
+    OUT_OF_ORDER,
+    TERMINAL_RECOVERY_REQUIRED,
+}
+
+public class VaultFinalizationGuard {
+    private var completedSteps: Int = 0
+    private var recoveryRequired: Boolean = false
+
+    public fun advance(step: VaultFinalizationStep): VaultFinalizationError? {
+        if (recoveryRequired) return VaultFinalizationError.TERMINAL_RECOVERY_REQUIRED
+        val previous = STEPS.getOrNull(completedSteps - 1)
+        if (step == previous) return null // idempotent replay of the last acknowledged step
+        val expected = STEPS.getOrNull(completedSteps) ?: return VaultFinalizationError.OUT_OF_ORDER
+        if (step != expected) return VaultFinalizationError.OUT_OF_ORDER
+        completedSteps++
+        return null
+    }
+
+    public fun markRecoveryRequired() {
+        recoveryRequired = true
+    }
+
+    public fun status(): VaultFinalizationStatus {
+        if (recoveryRequired) return VaultFinalizationStatus.RECOVERY_REQUIRED
+        return when (completedSteps) {
+            STEPS.size -> VaultFinalizationStatus.AUTHENTICATED
+            STEPS.indexOf(VaultFinalizationStep.JOURNAL_COMPLETION_DURABLE) + 1 ->
+                VaultFinalizationStatus.SEALED_UNANCHORED
+            else -> VaultFinalizationStatus.IN_PROGRESS
+        }
+    }
+
+    public companion object {
+        private val STEPS: List<VaultFinalizationStep> = listOf(
+            VaultFinalizationStep.ENVELOPE_COMPLETE,
+            VaultFinalizationStep.STAGING_FILE_SYNCED,
+            VaultFinalizationStep.ATOMIC_PROMOTION_COMPLETE,
+            VaultFinalizationStep.PARENT_DIRECTORY_SYNCED,
+            VaultFinalizationStep.JOURNAL_COMPLETION_DURABLE,
+            VaultFinalizationStep.AUTHENTICATED_ANCHOR_DURABLE,
+        )
+    }
+}
+
 public interface SessionJournal {
     /** Single-writer append; compute digest and fsync before returning DURABLE. No rewrite/truncate API. */
     public fun append(record: JournalRecord): JournalAppendResult
@@ -210,7 +315,7 @@ public interface VaultKeyAccess {
     ): VaultKeyWrap
     public fun unwrapFileKeyWithPrivateKey(
         wrap: VaultKeyWrap,
-        accessMode: VaultAccessMode,
+        authContext: VaultAuthContext,
     ): VaultFileKeyHandle
 }
 
@@ -223,12 +328,12 @@ public interface VaultChunkCipher {
         plaintext: ByteArray,
     ): ByteArray
 
-    /** Must reject ENCRYPT_ONLY; authentication/tag failure must return no plaintext. */
+    /** The provider validates the auth session; authentication/tag failure returns no plaintext. */
     public fun decryptChunk(
         fileKeyHandle: VaultFileKeyHandle,
         nonce: ByteArray,
         associatedData: ByteArray,
         ciphertextAndTag: ByteArray,
-        accessMode: VaultAccessMode,
+        authContext: VaultAuthContext,
     ): ByteArray
 }

@@ -83,4 +83,47 @@ class VaultContractsTest {
         assertEquals(false, record.validate(8L, JournalRecord.GENESIS_DIGEST_HEX))
         assertEquals(false, record.validate(7L, "ab"))
     }
+    @Test
+    fun finalizationGuardEnforcesDurabilityOrderAndAuthenticatedAnchor() {
+        val guard = VaultFinalizationGuard()
+        assertEquals(
+            VaultFinalizationError.OUT_OF_ORDER,
+            guard.advance(VaultFinalizationStep.ATOMIC_PROMOTION_COMPLETE),
+        )
+        val order = listOf(
+            VaultFinalizationStep.ENVELOPE_COMPLETE,
+            VaultFinalizationStep.STAGING_FILE_SYNCED,
+            VaultFinalizationStep.ATOMIC_PROMOTION_COMPLETE,
+            VaultFinalizationStep.PARENT_DIRECTORY_SYNCED,
+            VaultFinalizationStep.JOURNAL_COMPLETION_DURABLE,
+        )
+        order.forEach { assertNull(guard.advance(it)) }
+        assertEquals(VaultFinalizationStatus.SEALED_UNANCHORED, guard.status())
+        assertNull(guard.advance(VaultFinalizationStep.AUTHENTICATED_ANCHOR_DURABLE))
+        assertEquals(VaultFinalizationStatus.AUTHENTICATED, guard.status())
+        assertNull(guard.advance(VaultFinalizationStep.AUTHENTICATED_ANCHOR_DURABLE))
+    }
+
+    @Test
+    fun authContextAndJournalAnchorValidateWithoutExposingSecrets() {
+        val context = VaultAuthContext(
+            sessionId = VaultAuthSessionId("platform-session-handle"),
+            authorizationEpoch = 2L,
+            expiresAtMonotonicNs = 500L,
+        )
+        assertEquals(true, context.validate(nowMonotonicNs = 100L))
+        assertEquals(false, context.validate(nowMonotonicNs = 500L))
+        val anchor = JournalSignatureAnchor(
+            formatVersion = 1,
+            sequence = 8L,
+            digestHex = "a".repeat(64),
+            signatureAlgorithmId = "platform-signature-v1",
+            signingKeyId = "vault-signing-key-v1",
+            signatureBase64 = "AA==",
+            authenticationEpoch = 2L,
+            monotonicTimestampNs = 200L,
+        )
+        assertEquals(true, anchor.validate())
+    }
+
 }
