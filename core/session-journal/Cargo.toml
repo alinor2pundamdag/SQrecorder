@@ -1,0 +1,10 @@
+[package]
+name = "sqrec-session-journal"
+version = "0.1.0"
+description = "Append-only hash-chained session journal for SQRecorder"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+sha2 = { version = "=0.11.2", default-features = false }

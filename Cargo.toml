@@ -5,6 +5,7 @@ members = [
     "core/audio/pcm",
     "core/audio/dsp-graph",
     "core/vault-crypto",
+    "core/session-journal",
 ]
 
 [workspace.package]
