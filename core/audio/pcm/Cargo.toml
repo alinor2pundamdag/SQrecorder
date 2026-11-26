@@ -1,0 +1,7 @@
+[package]
+name = "sqrec-audio-pcm"
+version = "0.1.0"
+description = "Canonical PCM validation and S16LE primitives for SQRecorder"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true

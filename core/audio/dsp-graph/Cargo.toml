@@ -1,0 +1,7 @@
+[package]
+name = "sqrec-audio-dsp-graph"
+version = "0.1.0"
+description = "Preallocated, bounded DSP graph foundation for SQRecorder"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true

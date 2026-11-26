@@ -3,5 +3,13 @@
 version = 4
 
 [[package]]
+name = "sqrec-audio-dsp-graph"
+version = "0.1.0"
+
+[[package]]
+name = "sqrec-audio-pcm"
+version = "0.1.0"
+
+[[package]]
 name = "sqrec-native-abi"
 version = "0.1.0"

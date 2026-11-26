@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "core/native-abi",
+    "core/audio/pcm",
+    "core/audio/dsp-graph",
 ]
 
 [workspace.package]
