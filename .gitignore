@@ -1,0 +1,35 @@
+# Gradle / Kotlin
+.gradle/
+.kotlin/
+build/
+**/build/
+local.properties
+*.iml
+.idea/
+out/
+
+# Rust build output (Cargo.lock is committed for reproducible resolution)
+/target/
+**/target/
+
+# Android local / generated
+captures/
+*.apk
+*.aab
+*.dex
+*.class
+
+# Native build outputs
+cmake-build-*/
+*.so
+*.dll
+*.dylib
+
+# Local secrets and signing material
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pfx

@@ -1,2 +1,37 @@
-# SQrecorder
-SQRecorder — Offline-first audio &amp; voice recorder for Android. Evidence-safe, vault-encrypted, with speaker diarization, live transcription, translation, mic continuity, and a 9-style widget matrix. Built on-device with Kotlin + NDK. No screen recording. No cloud dependency.
+# SQRecorder
+
+**SQRecorder** is an offline-first audio/voice recorder and evidence-preserving audio workflow project. Its scope is audio capture and audio processing—not screen recording. Cloud services are not required for core capture.
+
+## Architecture
+
+- **Kotlin Multiplatform (KMP):** platform-independent domain and workflow contracts.
+- **Rust:** portable, performance-sensitive audio and processing core behind a versioned C ABI.
+- **Platform adapters:** Android, Wear OS, and Windows own OS-specific capture, lifecycle, storage, and UI integration.
+- **Evidence authority:** finalized source WAV, integrity metadata, and append-only session journal; derived media never silently replaces source evidence.
+
+Platform code must not leak into shared domain or Rust core. The core must not depend on UI frameworks or platform services.
+
+## Locked capture baseline
+
+- Primary capture container: WAV.
+- Canonical PCM: 48 kHz, mono, signed 16-bit little-endian; 44.1 kHz is the explicit compatibility fallback.
+- Original capture is finalized and integrity-recorded before optional derived export.
+- No screen capture, no MediaProjection, and no hidden microphone auto-start.
+
+See [architecture boundaries](docs/architecture/system-boundaries.md), [decision record](docs/decisions/0001-stack-and-boundaries.md), and [batch roadmap](docs/implementation/batch-roadmap.md).
+
+## Repository status
+
+This repository is being built in auditable batches. The B1 commit establishes the repository and build baseline only; it does not claim recording, Vault, DSP, platform integration, or runtime acceptance are implemented.
+
+## Build prerequisites
+
+- JDK 17 or newer (the selected Gradle distribution's runtime requirement must be met).
+- Gradle 9.7.0 for the initial Kotlin build baseline.
+- Rust toolchain pinned in `rust-toolchain.toml`.
+
+The Gradle wrapper JAR and launch scripts are not checked in until they can be sourced and checksum-verified from the official distribution. Do not generate or trust wrapper binaries from unverified sources.
+
+## Security
+
+Never commit credentials, signing keys, local configuration, user recordings, or decrypted Vault material. Keep secrets in local environment/secret stores. See [security baseline](docs/security/baseline.md).

@@ -1,0 +1,10 @@
+[package]
+name = "sqrec-native-abi"
+version = "0.1.0"
+description = "SQRecorder native ABI crate; contract is specified and implemented in B2."
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib"]
