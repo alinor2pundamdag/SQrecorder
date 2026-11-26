@@ -96,7 +96,11 @@ mod tests {
         assert_eq!(PcmFormat::CANONICAL.validate(), Ok(()));
         assert_eq!(PcmFormat::FALLBACK_44K1.validate(), Ok(()));
         assert_eq!(
-            PcmFormat { sample_rate_hz: 96_000, ..PcmFormat::CANONICAL }.validate(),
+            PcmFormat {
+                sample_rate_hz: 96_000,
+                ..PcmFormat::CANONICAL
+            }
+            .validate(),
             Err(PcmError::UnsupportedSampleRate),
         );
     }

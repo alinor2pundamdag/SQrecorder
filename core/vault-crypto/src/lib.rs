@@ -80,10 +80,10 @@ pub fn encrypt_chunk_in_place(
     associated_data: &[u8],
     plaintext_buffer: &mut [u8],
 ) -> Result<[u8; GCM_TAG_BYTES], VaultCryptoError> {
-    let cipher = Aes256Gcm::new_from_slice(&key.bytes)
-        .map_err(|_| VaultCryptoError::InvalidKeyLength)?;
-    let nonce = Nonce::try_from(nonce.as_slice())
-        .map_err(|_| VaultCryptoError::InvalidNonceLength)?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key.bytes).map_err(|_| VaultCryptoError::InvalidKeyLength)?;
+    let nonce =
+        Nonce::try_from(nonce.as_slice()).map_err(|_| VaultCryptoError::InvalidNonceLength)?;
     let tag = cipher
         .encrypt_inout_detached(&nonce, associated_data, (&mut *plaintext_buffer).into())
         .map_err(|_| VaultCryptoError::EncryptionFailed)?;
@@ -105,13 +105,18 @@ pub fn decrypt_chunk_in_place(
         ciphertext_buffer.zeroize();
         return Err(VaultCryptoError::InvalidTagLength);
     }
-    let cipher = Aes256Gcm::new_from_slice(&key.bytes)
-        .map_err(|_| VaultCryptoError::InvalidKeyLength)?;
-    let nonce = Nonce::try_from(nonce.as_slice())
-        .map_err(|_| VaultCryptoError::InvalidNonceLength)?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key.bytes).map_err(|_| VaultCryptoError::InvalidKeyLength)?;
+    let nonce =
+        Nonce::try_from(nonce.as_slice()).map_err(|_| VaultCryptoError::InvalidNonceLength)?;
     let tag = Tag::try_from(tag_bytes).map_err(|_| VaultCryptoError::InvalidTagLength)?;
     if cipher
-        .decrypt_inout_detached(&nonce, associated_data, (&mut *ciphertext_buffer).into(), &tag)
+        .decrypt_inout_detached(
+            &nonce,
+            associated_data,
+            (&mut *ciphertext_buffer).into(),
+            &tag,
+        )
         .is_err()
     {
         ciphertext_buffer.zeroize();
@@ -133,22 +138,26 @@ mod tests {
 
     #[test]
     fn aes_256_gcm_matches_nist_empty_message_vector() {
-        let key = VaultFileKey { bytes: [0u8; DEK_BYTES] };
+        let key = VaultFileKey {
+            bytes: [0u8; DEK_BYTES],
+        };
         let nonce = [0u8; GCM_NONCE_BYTES];
         let mut empty = [];
         let tag = encrypt_chunk_in_place(&key, nonce, &[], &mut empty).unwrap();
         assert_eq!(
             tag,
             [
-                0x53, 0x0f, 0x8a, 0xfb, 0xc7, 0x45, 0x36, 0xb9,
-                0xa9, 0x63, 0xb4, 0xf1, 0xc4, 0xcb, 0x73, 0x8b,
+                0x53, 0x0f, 0x8a, 0xfb, 0xc7, 0x45, 0x36, 0xb9, 0xa9, 0x63, 0xb4, 0xf1, 0xc4, 0xcb,
+                0x73, 0x8b,
             ],
         );
     }
 
     #[test]
     fn chunk_round_trip_binds_associated_data() {
-        let key = VaultFileKey { bytes: [0x42u8; DEK_BYTES] };
+        let key = VaultFileKey {
+            bytes: [0x42u8; DEK_BYTES],
+        };
         let nonce = nonce_for_chunk([1, 2, 3, 4], 9);
         let aad = b"file-id|chunk-index=9|len=5";
         let original = b"SQREC";
@@ -161,7 +170,9 @@ mod tests {
 
     #[test]
     fn authentication_failure_zeroizes_buffer() {
-        let key = VaultFileKey { bytes: [0x11u8; DEK_BYTES] };
+        let key = VaultFileKey {
+            bytes: [0x11u8; DEK_BYTES],
+        };
         let nonce = nonce_for_chunk([5, 6, 7, 8], 0);
         let mut buffer = b"tamper".to_vec();
         let tag = encrypt_chunk_in_place(&key, nonce, b"aad", &mut buffer).unwrap();
@@ -179,10 +190,9 @@ mod tests {
         assert_eq!(
             sha256(b"abc"),
             [
-                0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea,
-                0x41, 0x41, 0x40, 0xde, 0x5d, 0xae, 0x22, 0x23,
-                0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c,
-                0xb4, 0x10, 0xff, 0x61, 0xf2, 0x00, 0x15, 0xad,
+                0xba, 0x78, 0x16, 0xbf, 0x8f, 0x01, 0xcf, 0xea, 0x41, 0x41, 0x40, 0xde, 0x5d, 0xae,
+                0x22, 0x23, 0xb0, 0x03, 0x61, 0xa3, 0x96, 0x17, 0x7a, 0x9c, 0xb4, 0x10, 0xff, 0x61,
+                0xf2, 0x00, 0x15, 0xad,
             ],
         );
     }

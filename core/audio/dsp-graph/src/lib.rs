@@ -43,7 +43,11 @@ pub struct DspGraphBuilder {
 
 impl DspGraphBuilder {
     pub fn new() -> Self {
-        Self { nodes: Vec::new(), edges: Vec::new(), output: None }
+        Self {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            output: None,
+        }
     }
 
     pub fn add_node(&mut self, config: NodeConfig) -> Result<NodeId, DspError> {
@@ -55,7 +59,9 @@ impl DspGraphBuilder {
         if self.nodes.len() >= u32::MAX as usize {
             return Err(DspError::InvalidNodeId);
         }
-        self.nodes.try_reserve(1).map_err(|_| DspError::AllocationFailed)?;
+        self.nodes
+            .try_reserve(1)
+            .map_err(|_| DspError::AllocationFailed)?;
         let id = NodeId(self.nodes.len() as u32);
         self.nodes.push(config);
         Ok(id)
@@ -71,7 +77,9 @@ impl DspGraphBuilder {
         if self.edges.iter().any(|(_, target)| *target == destination) {
             return Err(DspError::MultipleInputs);
         }
-        self.edges.try_reserve(1).map_err(|_| DspError::AllocationFailed)?;
+        self.edges
+            .try_reserve(1)
+            .map_err(|_| DspError::AllocationFailed)?;
         self.edges.push((source, destination));
         Ok(())
     }
@@ -95,15 +103,21 @@ impl DspGraphBuilder {
         let output = self.output.ok_or(DspError::MissingOutput)?;
         let edge_count = self.edges.len();
         let mut incoming = Vec::<Option<NodeId>>::new();
-        incoming.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        incoming
+            .try_reserve_exact(count)
+            .map_err(|_| DspError::AllocationFailed)?;
         incoming.resize(count, None);
 
         let mut indegree = Vec::<usize>::new();
-        indegree.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        indegree
+            .try_reserve_exact(count)
+            .map_err(|_| DspError::AllocationFailed)?;
         indegree.resize(count, 0);
 
         let mut outdegree = Vec::<usize>::new();
-        outdegree.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        outdegree
+            .try_reserve_exact(count)
+            .map_err(|_| DspError::AllocationFailed)?;
         outdegree.resize(count, 0);
 
         for (source, destination) in &self.edges {
@@ -118,10 +132,14 @@ impl DspGraphBuilder {
         }
 
         let mut outgoing = Vec::<Vec<usize>>::new();
-        outgoing.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        outgoing
+            .try_reserve_exact(count)
+            .map_err(|_| DspError::AllocationFailed)?;
         for degree in outdegree {
             let mut destinations = Vec::<usize>::new();
-            destinations.try_reserve_exact(degree).map_err(|_| DspError::AllocationFailed)?;
+            destinations
+                .try_reserve_exact(degree)
+                .map_err(|_| DspError::AllocationFailed)?;
             outgoing.push(destinations);
         }
         for (source, destination) in &self.edges {
@@ -136,14 +154,18 @@ impl DspGraphBuilder {
 
         // Kahn topological sort; all allocations happen in prepare, never process.
         let mut ready = Vec::<usize>::new();
-        ready.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        ready
+            .try_reserve_exact(count)
+            .map_err(|_| DspError::AllocationFailed)?;
         for (index, degree) in indegree.iter().enumerate() {
             if *degree == 0 {
                 ready.push(index);
             }
         }
         let mut order = Vec::<NodeId>::new();
-        order.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        order
+            .try_reserve_exact(count)
+            .map_err(|_| DspError::AllocationFailed)?;
         let mut cursor = 0usize;
         while cursor < ready.len() {
             let node = ready[cursor];
@@ -161,10 +183,14 @@ impl DspGraphBuilder {
         }
 
         let mut buffers = Vec::<Vec<f32>>::new();
-        buffers.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        buffers
+            .try_reserve_exact(count)
+            .map_err(|_| DspError::AllocationFailed)?;
         for _ in 0..count {
             let mut buffer = Vec::<f32>::new();
-            buffer.try_reserve_exact(max_frames).map_err(|_| DspError::AllocationFailed)?;
+            buffer
+                .try_reserve_exact(max_frames)
+                .map_err(|_| DspError::AllocationFailed)?;
             buffer.resize(max_frames, 0.0f32);
             buffers.push(buffer);
         }
@@ -223,7 +249,11 @@ impl DspGraph {
             let node_id = ordered_node.0 as usize;
             match input_from[node_id] {
                 None => {
-                    process_node(nodes[node_id], &input[..frame_count], &mut buffers[node_id][..frame_count])?;
+                    process_node(
+                        nodes[node_id],
+                        &input[..frame_count],
+                        &mut buffers[node_id][..frame_count],
+                    )?;
                 }
                 Some(source_id) => {
                     let source = source_id.0 as usize;
@@ -294,7 +324,9 @@ mod tests {
     #[test]
     fn serial_graph_applies_gain_and_reports_metrics() {
         let mut builder = DspGraphBuilder::new();
-        let gain = builder.add_node(NodeConfig::Gain { linear_gain: 2.0 }).unwrap();
+        let gain = builder
+            .add_node(NodeConfig::Gain { linear_gain: 2.0 })
+            .unwrap();
         let meter = builder.add_node(NodeConfig::PeakMeter).unwrap();
         builder.connect(gain, meter).unwrap();
         builder.set_output(meter).unwrap();
@@ -332,7 +364,10 @@ mod tests {
         let node = builder.add_node(NodeConfig::PassThrough).unwrap();
         builder.set_output(node).unwrap();
         let mut graph = builder.prepare(2).unwrap();
-        assert_eq!(graph.process(&[f32::NAN], 1).err(), Some(DspError::NonFiniteInput));
+        assert_eq!(
+            graph.process(&[f32::NAN], 1).err(),
+            Some(DspError::NonFiniteInput)
+        );
         assert_eq!(graph.process(&[0.25], 1).unwrap(), &[0.25]);
     }
 
@@ -340,7 +375,9 @@ mod tests {
     fn invalid_gain_is_rejected_during_build() {
         let mut builder = DspGraphBuilder::new();
         assert_eq!(
-            builder.add_node(NodeConfig::Gain { linear_gain: f32::INFINITY }),
+            builder.add_node(NodeConfig::Gain {
+                linear_gain: f32::INFINITY
+            }),
             Err(DspError::InvalidGain),
         );
     }

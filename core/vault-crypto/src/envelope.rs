@@ -8,8 +8,7 @@ use std::io::Write;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    GCM_TAG_BYTES, VaultCryptoError, VaultFileKey, encrypt_chunk_in_place,
-    nonce_for_chunk,
+    GCM_TAG_BYTES, VaultCryptoError, VaultFileKey, encrypt_chunk_in_place, nonce_for_chunk,
 };
 
 pub const SQVE_HEADER_BYTES: usize = 64;
@@ -90,7 +89,9 @@ impl<W: Write> VaultEnvelopeWriter<W> {
         let header_bytes = serialize_header(&metadata)?;
         let mut stream_hash = Sha256::new();
         stream_hash.update(&header_bytes);
-        writer.write_all(&header_bytes).map_err(|_| EnvelopeError::WriteFailed)?;
+        writer
+            .write_all(&header_bytes)
+            .map_err(|_| EnvelopeError::WriteFailed)?;
         let mut fixed_header = [0u8; SQVE_HEADER_BYTES];
         fixed_header.copy_from_slice(&header_bytes[..SQVE_HEADER_BYTES]);
 
@@ -112,10 +113,13 @@ impl<W: Write> VaultEnvelopeWriter<W> {
         if self.next_chunk_index >= self.metadata.chunk_count {
             return Err(EnvelopeError::ChunkOutOfOrder);
         }
-        let offset = self.next_chunk_index
+        let offset = self
+            .next_chunk_index
             .checked_mul(SQVE_CHUNK_BYTES as u64)
             .ok_or(EnvelopeError::LengthOverflow)?;
-        let remaining = self.metadata.plaintext_bytes
+        let remaining = self
+            .metadata
+            .plaintext_bytes
             .checked_sub(offset)
             .ok_or(EnvelopeError::LengthOverflow)?;
         let expected = remaining.min(SQVE_CHUNK_BYTES as u64) as usize;
@@ -144,15 +148,22 @@ impl<W: Write> VaultEnvelopeWriter<W> {
         record_header[8..12].copy_from_slice(&(plaintext_buffer.len() as u32).to_le_bytes());
         record_header[12..16].copy_from_slice(&ciphertext_len.to_le_bytes());
 
-        self.writer.write_all(&record_header).map_err(|_| EnvelopeError::WriteFailed)?;
-        self.writer.write_all(plaintext_buffer).map_err(|_| EnvelopeError::WriteFailed)?;
-        self.writer.write_all(&tag).map_err(|_| EnvelopeError::WriteFailed)?;
+        self.writer
+            .write_all(&record_header)
+            .map_err(|_| EnvelopeError::WriteFailed)?;
+        self.writer
+            .write_all(plaintext_buffer)
+            .map_err(|_| EnvelopeError::WriteFailed)?;
+        self.writer
+            .write_all(&tag)
+            .map_err(|_| EnvelopeError::WriteFailed)?;
 
         let chunk_plaintext_bytes = plaintext_buffer.len() as u64;
         self.stream_hash.update(record_header);
         self.stream_hash.update(&*plaintext_buffer);
         self.stream_hash.update(tag);
-        self.written_plaintext_bytes = self.written_plaintext_bytes
+        self.written_plaintext_bytes = self
+            .written_plaintext_bytes
             .checked_add(chunk_plaintext_bytes)
             .ok_or(EnvelopeError::LengthOverflow)?;
         self.next_chunk_index += 1;
@@ -161,8 +172,8 @@ impl<W: Write> VaultEnvelopeWriter<W> {
 
     /// Writes the footer only after every declared chunk and byte has been accepted.
     pub fn finish(mut self) -> Result<W, EnvelopeError> {
-        if self.next_chunk_index != self.metadata.chunk_count ||
-            self.written_plaintext_bytes != self.metadata.plaintext_bytes
+        if self.next_chunk_index != self.metadata.chunk_count
+            || self.written_plaintext_bytes != self.metadata.plaintext_bytes
         {
             return Err(EnvelopeError::IncompleteFile);
         }
@@ -175,7 +186,9 @@ impl<W: Write> VaultEnvelopeWriter<W> {
         footer[8..16].copy_from_slice(&self.metadata.chunk_count.to_le_bytes());
         footer[16..24].copy_from_slice(&self.metadata.plaintext_bytes.to_le_bytes());
         footer[24..56].copy_from_slice(&digest);
-        self.writer.write_all(&footer).map_err(|_| EnvelopeError::WriteFailed)?;
+        self.writer
+            .write_all(&footer)
+            .map_err(|_| EnvelopeError::WriteFailed)?;
         Ok(self.writer)
     }
 
@@ -185,19 +198,19 @@ impl<W: Write> VaultEnvelopeWriter<W> {
 }
 
 fn validate_metadata(metadata: &EnvelopeMetadata) -> Result<(), EnvelopeError> {
-    if !is_key_id(&metadata.file_key_id, SQVE_FILE_KEY_ID_MAX_BYTES) ||
-        metadata.wraps.is_empty() ||
-        metadata.chunk_count != expected_chunk_count(metadata.plaintext_bytes)
+    if !is_key_id(&metadata.file_key_id, SQVE_FILE_KEY_ID_MAX_BYTES)
+        || metadata.wraps.is_empty()
+        || metadata.chunk_count != expected_chunk_count(metadata.plaintext_bytes)
     {
         return Err(EnvelopeError::InvalidMetadata);
     }
     for (index, wrap) in metadata.wraps.iter().enumerate() {
-        if !is_key_id(&wrap.recipient_key_id, SQVE_RECIPIENT_ID_MAX_BYTES) ||
-            wrap.wrapped_dek.is_empty() ||
-            wrap.wrapped_dek.len() > u32::MAX as usize ||
-            metadata.wraps[..index].iter().any(|prior| {
-                prior.recipient_key_id == wrap.recipient_key_id
-            })
+        if !is_key_id(&wrap.recipient_key_id, SQVE_RECIPIENT_ID_MAX_BYTES)
+            || wrap.wrapped_dek.is_empty()
+            || wrap.wrapped_dek.len() > u32::MAX as usize
+            || metadata.wraps[..index]
+                .iter()
+                .any(|prior| prior.recipient_key_id == wrap.recipient_key_id)
         {
             return Err(EnvelopeError::InvalidMetadata);
         }
@@ -206,10 +219,10 @@ fn validate_metadata(metadata: &EnvelopeMetadata) -> Result<(), EnvelopeError> {
 }
 
 fn serialize_header(metadata: &EnvelopeMetadata) -> Result<Vec<u8>, EnvelopeError> {
-    let key_id_len = u16::try_from(metadata.file_key_id.len())
-        .map_err(|_| EnvelopeError::HeaderTooLarge)?;
-    let wrap_count = u16::try_from(metadata.wraps.len())
-        .map_err(|_| EnvelopeError::HeaderTooLarge)?;
+    let key_id_len =
+        u16::try_from(metadata.file_key_id.len()).map_err(|_| EnvelopeError::HeaderTooLarge)?;
+    let wrap_count =
+        u16::try_from(metadata.wraps.len()).map_err(|_| EnvelopeError::HeaderTooLarge)?;
     let mut total = SQVE_HEADER_BYTES
         .checked_add(metadata.file_key_id.len())
         .ok_or(EnvelopeError::HeaderTooLarge)?;
@@ -241,14 +254,16 @@ fn serialize_header(metadata: &EnvelopeMetadata) -> Result<Vec<u8>, EnvelopeErro
     // 56..64 reserved zero.
 
     let mut header = Vec::<u8>::new();
-    header.try_reserve_exact(total).map_err(|_| EnvelopeError::AllocationFailed)?;
+    header
+        .try_reserve_exact(total)
+        .map_err(|_| EnvelopeError::AllocationFailed)?;
     header.extend_from_slice(&fixed);
     header.extend_from_slice(metadata.file_key_id.as_bytes());
     for wrap in &metadata.wraps {
         let recipient_len = u16::try_from(wrap.recipient_key_id.len())
             .map_err(|_| EnvelopeError::HeaderTooLarge)?;
-        let wrapped_len = u32::try_from(wrap.wrapped_dek.len())
-            .map_err(|_| EnvelopeError::HeaderTooLarge)?;
+        let wrapped_len =
+            u32::try_from(wrap.wrapped_dek.len()).map_err(|_| EnvelopeError::HeaderTooLarge)?;
         header.extend_from_slice(&(wrap.suite as u16).to_le_bytes());
         header.extend_from_slice(&recipient_len.to_le_bytes());
         header.extend_from_slice(&wrapped_len.to_le_bytes());
@@ -289,9 +304,9 @@ fn make_chunk_aad(
 }
 
 fn is_key_id(value: &str, max_bytes: usize) -> bool {
-    !value.is_empty() &&
-        value.len() <= max_bytes &&
-        value.bytes().all(|byte| {
+    !value.is_empty()
+        && value.len() <= max_bytes
+        && value.bytes().all(|byte| {
             byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_' || byte == b'.'
         })
 }
@@ -325,7 +340,10 @@ mod tests {
         let bytes = writer.finish().unwrap();
 
         assert_eq!(&bytes[..4], b"SQVE");
-        assert_eq!(&bytes[header_len + 16 + 3 + 16..header_len + 16 + 3 + 16 + 4], b"SQVF");
+        assert_eq!(
+            &bytes[header_len + 16 + 3 + 16..header_len + 16 + 3 + 16 + 4],
+            b"SQVF"
+        );
         assert_eq!(bytes.len(), header_len + 16 + 3 + 16 + SQVE_FOOTER_BYTES);
     }
 
@@ -334,7 +352,10 @@ mod tests {
         let key = VaultFileKey { bytes: [0x33; 32] };
         let mut writer = VaultEnvelopeWriter::new(Vec::<u8>::new(), metadata(4), key).unwrap();
         let mut wrong = b"abc".to_vec();
-        assert_eq!(writer.write_chunk(&mut wrong), Err(EnvelopeError::ChunkLengthMismatch));
+        assert_eq!(
+            writer.write_chunk(&mut wrong),
+            Err(EnvelopeError::ChunkLengthMismatch)
+        );
         assert_eq!(writer.finish().err(), Some(EnvelopeError::IncompleteFile));
     }
 
