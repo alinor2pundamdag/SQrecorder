@@ -149,7 +149,7 @@ impl<W: Write> VaultEnvelopeWriter<W> {
         self.writer.write_all(&tag).map_err(|_| EnvelopeError::WriteFailed)?;
 
         let chunk_plaintext_bytes = plaintext_buffer.len() as u64;
-        self.stream_hash.update(&record_header);
+        self.stream_hash.update(record_header);
         self.stream_hash.update(&*plaintext_buffer);
         self.stream_hash.update(tag);
         self.written_plaintext_bytes = self.written_plaintext_bytes

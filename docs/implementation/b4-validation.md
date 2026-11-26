@@ -15,7 +15,7 @@
 - Rustfmt was changed to run before tests and commit formatting only after all checks pass.
 - Clippy found and corrected DSP graph issues.
 - CI compiled the Vault crate and SQVE writer; the workspace unit tests **passed** in run 6.
-- Clippy then found a PCM fixed-chunk style lint. It is corrected to `slice::as_chunks::<2>()`; run 7 must confirm the full gate.
+- Clippy found a PCM fixed-chunk style lint and a needless borrow in the SQVE writer. Both are corrected; run 8 must confirm the full gate.
 
 ## Remaining security gate
 
