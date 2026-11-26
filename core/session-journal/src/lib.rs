@@ -45,6 +45,8 @@ impl JournalRecordType {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum JournalError {
     InvalidRecord,
+    InvalidPayloadJson,
+    PayloadSchemaMismatch,
     SequenceMismatch,
     TimestampRegression,
     PreviousDigestMismatch,
@@ -153,6 +155,20 @@ impl<S: JournalSink> JournalWriter<S> {
     }
 }
 
+fn validate_payload(payload: &[u8], expected_event_code: u16) -> Result<(), JournalError> {
+    let value: serde_json::Value =
+        serde_json::from_slice(payload).map_err(|_| JournalError::InvalidPayloadJson)?;
+    let object = value.as_object().ok_or(JournalError::PayloadSchemaMismatch)?;
+    let schema_version = object.get("schemaVersion").and_then(serde_json::Value::as_u64);
+    let event_code = object.get("eventCode").and_then(serde_json::Value::as_u64);
+    if schema_version != Some(u64::from(JOURNAL_VERSION)) ||
+        event_code != Some(u64::from(expected_event_code))
+    {
+        return Err(JournalError::PayloadSchemaMismatch);
+    }
+    Ok(())
+}
+
 fn serialize_record(
     input: &JournalRecordInput<'_>,
 ) -> Result<(Vec<u8>, [u8; JOURNAL_DIGEST_BYTES]), JournalError> {
@@ -171,6 +187,8 @@ fn serialize_record(
     {
         return Err(JournalError::InvalidRecord);
     }
+
+    validate_payload(input.canonical_payload, input.record_type as u16)?;
 
     let payload_len =
         u32::try_from(input.canonical_payload.len()).map_err(|_| JournalError::LengthOverflow)?;
@@ -235,6 +253,7 @@ pub enum JournalVerificationError {
     InvalidRecordType,
     InvalidPayloadLength,
     InvalidUtf8Payload,
+    PayloadSchemaMismatch,
     SequenceMismatch,
     TimestampRegression,
     PreviousDigestMismatch,
@@ -386,6 +405,15 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
                 previous_digest,
             );
         }
+        if validate_payload(&body[76..payload_end], read_u16_le(body, 6)).is_err() {
+            return verification(
+                JournalVerificationStatus::Corrupt,
+                Some(JournalVerificationError::PayloadSchemaMismatch),
+                offset,
+                expected_sequence - 1,
+                previous_digest,
+            );
+        }
         let expected_digest = calculate_record_digest(&previous_digest, &body[..body.len() - 32]);
         let mut stored_digest = [0u8; 32];
         stored_digest.copy_from_slice(&body[body.len() - 32..]);
@@ -474,10 +502,16 @@ mod tests {
         bytes: Vec<u8>,
         sync_count: usize,
         fail_sync: bool,
+        fail_write_after: Option<usize>,
     }
 
     impl JournalSink for MemorySink {
         fn append_bytes(&mut self, record_bytes: &[u8]) -> Result<(), JournalSinkError> {
+            if let Some(limit) = self.fail_write_after {
+                let partial_len = limit.min(record_bytes.len());
+                self.bytes.extend_from_slice(&record_bytes[..partial_len]);
+                return Err(JournalSinkError::WriteFailed);
+            }
             self.bytes.extend_from_slice(record_bytes);
             Ok(())
         }
@@ -498,7 +532,7 @@ mod tests {
             monotonic_timestamp_ns: sequence * 10,
             session_uuid: [0x22; 16],
             record_type: JournalRecordType::CaptureStarted,
-            canonical_payload: br#"{"captureEpoch":"1"}"#,
+            canonical_payload: br#"{"captureEpoch":"1","eventCode":2,"schemaVersion":1}"#,
             previous_digest,
         }
     }
@@ -563,6 +597,60 @@ mod tests {
             Err(JournalError::WriterTerminal)
         );
     }
+    #[test]
+    fn writer_latches_partial_write_and_recovery_detects_torn_tail() {
+        let failing_sink = MemorySink {
+            fail_write_after: Some(17),
+            ..MemorySink::default()
+        };
+        let mut writer = JournalWriter::new(failing_sink);
+        assert_eq!(
+            writer.append(input(1, [0; 32])),
+            Err(JournalError::SinkAppendFailed)
+        );
+        assert_eq!(
+            writer.append(input(1, [0; 32])),
+            Err(JournalError::WriterTerminal)
+        );
+        let sink = writer.into_sink();
+        let verification = verify_journal(&sink.bytes);
+        assert_eq!(verification.status, JournalVerificationStatus::TruncatedTail);
+        assert_eq!(verification.valid_prefix_bytes, 0);
+    }
+
+    #[test]
+    fn writer_rejects_invalid_json_and_wrong_event_schema() {
+        let mut writer = JournalWriter::new(MemorySink::default());
+        let mut invalid_json = input(1, [0; 32]);
+        invalid_json.canonical_payload = br#"{"schemaVersion":1,"eventCode":2"#;
+        assert_eq!(
+            writer.append(invalid_json),
+            Err(JournalError::InvalidPayloadJson)
+        );
+
+        let mut wrong_schema = input(1, [0; 32]);
+        wrong_schema.canonical_payload = br#"{"eventCode":3,"schemaVersion":1}"#;
+        assert_eq!(
+            writer.append(wrong_schema),
+            Err(JournalError::PayloadSchemaMismatch)
+        );
+    }
+
+    #[test]
+    fn verifier_rejects_schema_mismatch_even_with_recomputed_digest() {
+        let mut writer = JournalWriter::new(MemorySink::default());
+        writer.append(input(1, [0; 32])).unwrap();
+        let mut bytes = writer.into_sink().bytes;
+        bytes[4 + 76 + 32] = b'3'; // eventCode changes 2 -> 3, preserving JSON validity
+        let digest_start = bytes.len() - JOURNAL_DIGEST_BYTES;
+        let digest = calculate_record_digest(&[0; 32], &bytes[4..digest_start]);
+        bytes[digest_start..].copy_from_slice(&digest);
+        assert_eq!(
+            verify_journal(&bytes).error,
+            Some(JournalVerificationError::PayloadSchemaMismatch)
+        );
+    }
+
     #[test]
     fn writer_rejects_monotonic_timestamp_regression() {
         let mut writer = JournalWriter::new(MemorySink::default());
