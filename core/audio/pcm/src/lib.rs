@@ -80,8 +80,9 @@ pub fn decode_mono_s16le(block: PcmBlockView<'_>, output: &mut [i16]) -> Result<
     if output.len() != block.frame_count as usize {
         return Err(PcmError::OutputLengthMismatch);
     }
-    for (sample, bytes) in output.iter_mut().zip(block.payload_s16le.chunks_exact(2)) {
-        *sample = i16::from_le_bytes([bytes[0], bytes[1]]);
+    let chunks = block.payload_s16le.as_chunks::<2>().0;
+    for (sample, bytes) in output.iter_mut().zip(chunks) {
+        *sample = i16::from_le_bytes(*bytes);
     }
     Ok(())
 }
