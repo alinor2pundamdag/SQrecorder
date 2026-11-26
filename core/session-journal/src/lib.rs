@@ -471,6 +471,10 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
     )
 }
 
+fn read_u16_le(bytes: &[u8], offset: usize) -> u16 {
+    u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
+}
+
 fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes([
         bytes[offset],

@@ -10,7 +10,7 @@
 - SQJ payload parsing now validates JSON object shape, schema version, and event-code binding; metadata payload is capped at 64 KiB to bound recovery/parser memory. Caller still must provide RFC 8785/JCS canonical bytes; this implementation does not canonicalize JSON itself.
 - Added fault-injection coverage for partial writes, invalid JSON/schema, and a schema-tampered record whose digest was recomputed.
 - Rust unit tests cover NIST AEAD vector, tamper zeroization, SHA-256, SQVE framing/incomplete files, journal chaining/tamper/torn tail/sync failure.
-- Rust CI run 10 passed format, workspace tests, and Clippy with warnings denied on the earlier journal implementation. The new payload-schema, partial-write, and metadata-size-bound tests are pending the next CI run.
+- Rust CI run 10 passed format, workspace tests, and Clippy with warnings denied on the earlier journal implementation. Run 11 failed at compile time: the payload verifier referenced a missing `read_u16_le` helper. The helper is now added; run 12/13 must confirm the fix and tests.
 
 ## Remaining security gate
 
