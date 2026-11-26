@@ -1,20 +1,17 @@
 # B4 validation record
 
-## Contract work committed
+## Implemented
 
-- Defined a versioned chunked Vault envelope model, per-file key-wrap metadata, authenticated chunk descriptors, nonce derivation, access modes, and opaque provider-owned file-key handles.
-- Defined asymmetric key-wrap contract: the public key wraps the per-file DEK; private-key unwrap is authenticated. Encrypt-only capture cannot decrypt or release plaintext.
-- Defined append-only journal record metadata, sequence/previous-digest validation, durable-append semantics, and recovery/security limitations.
-- Added common tests for envelope length/chunk invariants, nonce construction, and journal chain metadata.
+- Defined SQVE v1 binary header, variable wrap table, chunk framing, footer, authenticated-data encoding, nonce uniqueness rules, and migration constraints.
+- Added KMP Vault access/chunk/journal contracts and invariant tests.
+- Added Rust `sqrec-vault-crypto` crate with AES-256-GCM chunk encryption/decryption in place, CSPRNG file-key/nonce-prefix generation, per-chunk nonce derivation, SHA-256, and zeroization of DEK memory on drop.
+- Added NIST AES-256-GCM empty-message vector, round-trip/AAD, authentication-failure zeroization, and SHA-256 known-vector tests.
+- Added a narrowly scoped GitHub Actions Rust validation workflow. It pins Rust 1.100.1, generates the dependency lock, runs format/tests/Clippy, and commits the Cargo-generated lock only after all checks pass.
 
-## Security review and current dependency references
+## Remaining security gate
 
-- AES-GCM is the selected authenticated encryption mode. The current RustCrypto `aes-gcm` crate is 0.11.1 and reports an NCC Group audit with no significant findings; its documented nonce requirement is uniqueness per key. [RustCrypto AES-GCM](https://docs.rs/aes-gcm/0.11.1/aes_gcm/)
-- Current `zeroize` is 1.9.2 (Rust 1.85+ MSRV). [zeroize 1.9.2](https://docs.rs/zeroize/1.9.2)
-- Android Keystore can require user authentication for private-key/secret-key use; authorization and invalidation must be surfaced, not bypassed. [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
+The platform asymmetric public-key wrap/private-key authenticated unwrap, durable encrypted-file writer and atomic promotion, signed journal anchor, crash-recovery implementation, and Android/Windows key lifecycle tests remain unimplemented. B4 is not yet complete.
 
-## BLOCKER — crypto engine not implemented/verified
+## Verification status
 
-The Rust AES-GCM chunk engine, CSPRNG integration, asymmetric wrap adapter, file writer/fsync/rename protocol, authenticated journal seal, crash recovery, and crypto/tamper tests are **not yet implemented**. No dependency was added to the workspace without a generated and verified Cargo lock update. Rust/Cargo and Android build tooling are unavailable in this environment.
-
-B4 remains **BLOCKED** at its critical exit gate. The committed files are contracts, not a completed Vault implementation. Dependent capture/Vault integration must not claim the B4 security gate has passed.
+No Rust tests have run locally; Rust/Cargo are absent. The GitHub Actions run is the next verification gate. Do not mark B4 PASS unless the workflow completes successfully and the remaining key-wrap/storage/recovery paths have implementation and tests.

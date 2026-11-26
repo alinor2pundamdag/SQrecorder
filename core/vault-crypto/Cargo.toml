@@ -1,0 +1,13 @@
+[package]
+name = "sqrec-vault-crypto"
+version = "0.1.0"
+description = "Authenticated Vault chunk primitives for SQRecorder"
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+aes-gcm = { version = "=0.11.1", default-features = false, features = ["aes"] }
+getrandom = "=0.4.3"
+sha2 = { version = "=0.11.0", default-features = false }
+zeroize = { version = "=1.9.1", default-features = false }

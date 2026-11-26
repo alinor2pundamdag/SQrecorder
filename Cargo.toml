@@ -4,9 +4,10 @@ members = [
     "core/native-abi",
     "core/audio/pcm",
     "core/audio/dsp-graph",
+    "core/vault-crypto",
 ]
 
 [workspace.package]
 edition = "2024"
 license = "Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.88"
