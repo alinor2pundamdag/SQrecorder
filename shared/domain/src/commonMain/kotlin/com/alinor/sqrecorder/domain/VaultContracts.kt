@@ -121,13 +121,18 @@ private fun String.isStandardBase64(): Boolean {
         return false
     }
     var padding = 0
+    var sawPadding = false
     for (i in indices) {
         val c = this[i]
         if (c == '=') {
+            sawPadding = true
             padding++
             if (i < length - 2 || padding > 2) return false
-        } else if (!(c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '+' || c == '/')) {
-            return false
+        } else {
+            if (sawPadding) return false
+            if (!(c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c == '+' || c == '/')) {
+                return false
+            }
         }
     }
     return true
