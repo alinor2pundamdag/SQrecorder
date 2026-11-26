@@ -14,6 +14,7 @@ pub enum NodeConfig {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DspError {
     EmptyGraph,
+    AllocationFailed,
     InvalidNodeId,
     SelfConnection,
     MultipleInputs,
@@ -54,6 +55,7 @@ impl DspGraphBuilder {
         if self.nodes.len() >= u32::MAX as usize {
             return Err(DspError::InvalidNodeId);
         }
+        self.nodes.try_reserve(1).map_err(|_| DspError::AllocationFailed)?;
         let id = NodeId(self.nodes.len() as u32);
         self.nodes.push(config);
         Ok(id)
@@ -69,6 +71,7 @@ impl DspGraphBuilder {
         if self.edges.iter().any(|(_, target)| *target == destination) {
             return Err(DspError::MultipleInputs);
         }
+        self.edges.try_reserve(1).map_err(|_| DspError::AllocationFailed)?;
         self.edges.push((source, destination));
         Ok(())
     }
@@ -90,20 +93,41 @@ impl DspGraphBuilder {
             return Err(DspError::InvalidFrameCapacity);
         }
         let output = self.output.ok_or(DspError::MissingOutput)?;
-        let mut incoming = vec![None; count];
-        let mut outgoing = vec![Vec::<usize>::new(); count];
-        let mut indegree = vec![0usize; count];
+        let edge_count = self.edges.len();
+        let mut incoming = Vec::<Option<NodeId>>::new();
+        incoming.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        incoming.resize(count, None);
 
-        for (source, destination) in self.edges {
+        let mut indegree = Vec::<usize>::new();
+        indegree.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        indegree.resize(count, 0);
+
+        let mut outdegree = Vec::<usize>::new();
+        outdegree.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        outdegree.resize(count, 0);
+
+        for (source, destination) in &self.edges {
             let from = source.0 as usize;
             let to = destination.0 as usize;
             if incoming[to].is_some() {
                 return Err(DspError::MultipleInputs);
             }
-            incoming[to] = Some(source);
-            outgoing[from].push(to);
+            incoming[to] = Some(*source);
             indegree[to] += 1;
+            outdegree[from] += 1;
         }
+
+        let mut outgoing = Vec::<Vec<usize>>::new();
+        outgoing.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        for degree in outdegree {
+            let mut destinations = Vec::<usize>::new();
+            destinations.try_reserve_exact(degree).map_err(|_| DspError::AllocationFailed)?;
+            outgoing.push(destinations);
+        }
+        for (source, destination) in &self.edges {
+            outgoing[source.0 as usize].push(destination.0 as usize);
+        }
+        debug_assert_eq!(self.edges.len(), edge_count);
 
         let roots = indegree.iter().filter(|degree| **degree == 0).count();
         if roots != 1 {
@@ -111,13 +135,15 @@ impl DspGraphBuilder {
         }
 
         // Kahn topological sort; all allocations happen in prepare, never process.
-        let mut ready = Vec::<usize>::with_capacity(count);
+        let mut ready = Vec::<usize>::new();
+        ready.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
         for (index, degree) in indegree.iter().enumerate() {
             if *degree == 0 {
                 ready.push(index);
             }
         }
-        let mut order = Vec::<NodeId>::with_capacity(count);
+        let mut order = Vec::<NodeId>::new();
+        order.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
         let mut cursor = 0usize;
         while cursor < ready.len() {
             let node = ready[cursor];
@@ -134,7 +160,14 @@ impl DspGraphBuilder {
             return Err(DspError::CycleDetected);
         }
 
-        let buffers = (0..count).map(|_| vec![0.0f32; max_frames]).collect();
+        let mut buffers = Vec::<Vec<f32>>::new();
+        buffers.try_reserve_exact(count).map_err(|_| DspError::AllocationFailed)?;
+        for _ in 0..count {
+            let mut buffer = Vec::<f32>::new();
+            buffer.try_reserve_exact(max_frames).map_err(|_| DspError::AllocationFailed)?;
+            buffer.resize(max_frames, 0.0f32);
+            buffers.push(buffer);
+        }
         Ok(DspGraph {
             nodes: self.nodes,
             order,
