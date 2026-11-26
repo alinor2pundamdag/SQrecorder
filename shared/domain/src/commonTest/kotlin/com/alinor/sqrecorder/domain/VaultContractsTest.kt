@@ -22,7 +22,7 @@ class VaultContractsTest {
                 VaultKeyWrap(
                     suite = VaultKeyWrapSuite.RSA_OAEP_SHA256_V1,
                     recipientKeyId = "device-wrap-key-v1",
-                    wrappedFileKey = "base64-wrapped-key",
+                    wrappedFileKeyBase64 = "AA==",
                 ),
             ),
         )
@@ -44,6 +44,15 @@ class VaultContractsTest {
         assertEquals(
             VaultContractError.INVALID_NONCE_PREFIX,
             validHeader().copy(noncePrefixHex = "nothex!!").validate(),
+        )
+    }
+
+    @Test
+    fun chunkDescriptorMustMatchExactChunkLength() {
+        val header = validHeader(plaintextBytes = 10L)
+        assertEquals(
+            VaultContractError.CHUNK_PLAINTEXT_LENGTH_MISMATCH,
+            VaultChunkDescriptor(index = 0L, plaintextBytes = 9, ciphertextBytes = 25).validate(header),
         )
     }
 
