@@ -105,7 +105,10 @@ impl<S: JournalSink> JournalWriter<S> {
         }
     }
 
-    pub fn append(&mut self, input: JournalRecordInput<'_>) -> Result<JournalAppendReceipt, JournalError> {
+    pub fn append(
+        &mut self,
+        input: JournalRecordInput<'_>,
+    ) -> Result<JournalAppendReceipt, JournalError> {
         if self.terminal {
             return Err(JournalError::WriterTerminal);
         }
@@ -116,12 +119,16 @@ impl<S: JournalSink> JournalWriter<S> {
         if input.previous_digest != self.previous_digest {
             return Err(JournalError::PreviousDigestMismatch);
         }
-        if self.last_monotonic_timestamp_ns.is_some_and(|last| input.monotonic_timestamp_ns < last) {
+        if self
+            .last_monotonic_timestamp_ns
+            .is_some_and(|last| input.monotonic_timestamp_ns < last)
+        {
             return Err(JournalError::TimestampRegression);
         }
 
         let (serialized, digest) = serialize_record(&input)?;
-        let serialized_bytes = u32::try_from(serialized.len()).map_err(|_| JournalError::LengthOverflow)?;
+        let serialized_bytes =
+            u32::try_from(serialized.len()).map_err(|_| JournalError::LengthOverflow)?;
         if self.sink.append_bytes(&serialized).is_err() {
             self.terminal = true; // A partial append must be recovered; never retry in-place.
             return Err(JournalError::SinkAppendFailed);
@@ -149,27 +156,37 @@ impl<S: JournalSink> JournalWriter<S> {
 fn serialize_record(
     input: &JournalRecordInput<'_>,
 ) -> Result<(Vec<u8>, [u8; JOURNAL_DIGEST_BYTES]), JournalError> {
-    if input.sequence == 0 ||
-        input.session_uuid.iter().all(|byte| *byte == 0) ||
-        input.canonical_payload.is_empty() ||
-        core::str::from_utf8(input.canonical_payload).is_err() ||
-        input.canonical_payload.first().is_some_and(u8::is_ascii_whitespace) ||
-        input.canonical_payload.last().is_some_and(u8::is_ascii_whitespace)
+    if input.sequence == 0
+        || input.session_uuid.iter().all(|byte| *byte == 0)
+        || input.canonical_payload.is_empty()
+        || core::str::from_utf8(input.canonical_payload).is_err()
+        || input
+            .canonical_payload
+            .first()
+            .is_some_and(u8::is_ascii_whitespace)
+        || input
+            .canonical_payload
+            .last()
+            .is_some_and(u8::is_ascii_whitespace)
     {
         return Err(JournalError::InvalidRecord);
     }
 
-    let payload_len = u32::try_from(input.canonical_payload.len())
-        .map_err(|_| JournalError::LengthOverflow)?;
+    let payload_len =
+        u32::try_from(input.canonical_payload.len()).map_err(|_| JournalError::LengthOverflow)?;
     let body_len = JOURNAL_MIN_BODY_BYTES
         .checked_add(input.canonical_payload.len())
         .ok_or(JournalError::LengthOverflow)?;
     let body_len_u32 = u32::try_from(body_len).map_err(|_| JournalError::LengthOverflow)?;
-    let total_len = 4usize.checked_add(body_len).ok_or(JournalError::LengthOverflow)?;
+    let total_len = 4usize
+        .checked_add(body_len)
+        .ok_or(JournalError::LengthOverflow)?;
     u32::try_from(total_len).map_err(|_| JournalError::LengthOverflow)?;
 
     let mut bytes = Vec::<u8>::new();
-    bytes.try_reserve_exact(total_len).map_err(|_| JournalError::AllocationFailed)?;
+    bytes
+        .try_reserve_exact(total_len)
+        .map_err(|_| JournalError::AllocationFailed)?;
     bytes.extend_from_slice(&body_len_u32.to_le_bytes());
     bytes.extend_from_slice(JOURNAL_MAGIC);
     bytes.extend_from_slice(&JOURNAL_VERSION.to_le_bytes());
@@ -181,10 +198,7 @@ fn serialize_record(
     bytes.extend_from_slice(&payload_len.to_le_bytes());
     bytes.extend_from_slice(input.canonical_payload);
 
-    let digest = calculate_record_digest(
-        &input.previous_digest,
-        &bytes[4..],
-    );
+    let digest = calculate_record_digest(&input.previous_digest, &bytes[4..]);
     bytes.extend_from_slice(&digest);
     debug_assert_eq!(bytes.len(), total_len);
     Ok((bytes, digest))
@@ -258,7 +272,10 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
             );
         }
         let body_len = u32::from_le_bytes([
-            bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3],
+            bytes[offset],
+            bytes[offset + 1],
+            bytes[offset + 2],
+            bytes[offset + 3],
         ]) as usize;
         if body_len < JOURNAL_MIN_BODY_BYTES {
             return verification(
@@ -271,13 +288,15 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
         }
         let total_len = match body_len.checked_add(4) {
             Some(value) => value,
-            None => return verification(
-                JournalVerificationStatus::Corrupt,
-                Some(JournalVerificationError::InvalidRecordLength),
-                offset,
-                expected_sequence - 1,
-                previous_digest,
-            ),
+            None => {
+                return verification(
+                    JournalVerificationStatus::Corrupt,
+                    Some(JournalVerificationError::InvalidRecordLength),
+                    offset,
+                    expected_sequence - 1,
+                    previous_digest,
+                );
+            }
         };
         if total_len > remaining {
             return verification(
@@ -290,8 +309,7 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
         }
 
         let body = &bytes[offset + 4..offset + total_len];
-        if &body[..4] != JOURNAL_MAGIC ||
-            u16::from_le_bytes([body[4], body[5]]) != JOURNAL_VERSION
+        if &body[..4] != JOURNAL_MAGIC || u16::from_le_bytes([body[4], body[5]]) != JOURNAL_VERSION
         {
             return verification(
                 JournalVerificationStatus::Corrupt,
@@ -411,14 +429,23 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
 
 fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
     u32::from_le_bytes([
-        bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3],
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
     ])
 }
 
 fn read_u64_le(bytes: &[u8], offset: usize) -> u64 {
     u64::from_le_bytes([
-        bytes[offset], bytes[offset + 1], bytes[offset + 2], bytes[offset + 3],
-        bytes[offset + 4], bytes[offset + 5], bytes[offset + 6], bytes[offset + 7],
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+        bytes[offset + 4],
+        bytes[offset + 5],
+        bytes[offset + 6],
+        bytes[offset + 7],
     ])
 }
 
@@ -429,7 +456,13 @@ fn verification(
     last_sequence: u64,
     last_digest: [u8; JOURNAL_DIGEST_BYTES],
 ) -> JournalVerification {
-    JournalVerification { status, error, valid_prefix_bytes, last_sequence, last_digest }
+    JournalVerification {
+        status,
+        error,
+        valid_prefix_bytes,
+        last_sequence,
+        last_digest,
+    }
 }
 
 #[cfg(test)]
@@ -451,7 +484,11 @@ mod tests {
 
         fn sync(&mut self) -> Result<(), JournalSinkError> {
             self.sync_count += 1;
-            if self.fail_sync { Err(JournalSinkError::SyncFailed) } else { Ok(()) }
+            if self.fail_sync {
+                Err(JournalSinkError::SyncFailed)
+            } else {
+                Ok(())
+            }
         }
     }
 
@@ -498,18 +535,33 @@ mod tests {
         writer.append(input(1, [0; 32])).unwrap();
         let mut bytes = writer.into_sink().bytes;
         bytes[4 + 76] ^= 1;
-        assert_eq!(verify_journal(&bytes).error, Some(JournalVerificationError::DigestMismatch));
+        assert_eq!(
+            verify_journal(&bytes).error,
+            Some(JournalVerificationError::DigestMismatch)
+        );
     }
 
     #[test]
     fn writer_rejects_wrong_sequence_and_stops_after_sync_failure() {
         let mut writer = JournalWriter::new(MemorySink::default());
-        assert_eq!(writer.append(input(2, [0; 32])), Err(JournalError::SequenceMismatch));
+        assert_eq!(
+            writer.append(input(2, [0; 32])),
+            Err(JournalError::SequenceMismatch)
+        );
 
-        let failed_sink = MemorySink { fail_sync: true, ..MemorySink::default() };
+        let failed_sink = MemorySink {
+            fail_sync: true,
+            ..MemorySink::default()
+        };
         let mut failed_writer = JournalWriter::new(failed_sink);
-        assert_eq!(failed_writer.append(input(1, [0; 32])), Err(JournalError::SinkSyncFailed));
-        assert_eq!(failed_writer.append(input(1, [0; 32])), Err(JournalError::WriterTerminal));
+        assert_eq!(
+            failed_writer.append(input(1, [0; 32])),
+            Err(JournalError::SinkSyncFailed)
+        );
+        assert_eq!(
+            failed_writer.append(input(1, [0; 32])),
+            Err(JournalError::WriterTerminal)
+        );
     }
     #[test]
     fn writer_rejects_monotonic_timestamp_regression() {
@@ -517,7 +569,9 @@ mod tests {
         let first = writer.append(input(1, [0; 32])).unwrap();
         let mut second = input(2, first.digest);
         second.monotonic_timestamp_ns = 5;
-        assert_eq!(writer.append(second), Err(JournalError::TimestampRegression));
+        assert_eq!(
+            writer.append(second),
+            Err(JournalError::TimestampRegression)
+        );
     }
-
 }

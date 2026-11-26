@@ -207,6 +207,13 @@ name = "sqrec-native-abi"
 version = "0.1.0"
 
 [[package]]
+name = "sqrec-session-journal"
+version = "0.1.0"
+dependencies = [
+ "sha2",
+]
+
+[[package]]
 name = "sqrec-vault-crypto"
 version = "0.1.0"
 dependencies = [
