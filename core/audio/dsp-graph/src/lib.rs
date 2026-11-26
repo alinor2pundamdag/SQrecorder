@@ -47,10 +47,10 @@ impl DspGraphBuilder {
     }
 
     pub fn add_node(&mut self, config: NodeConfig) -> Result<NodeId, DspError> {
-        if let NodeConfig::Gain { linear_gain } = config {
-            if !linear_gain.is_finite() || !(0.0..=16.0).contains(&linear_gain) {
-                return Err(DspError::InvalidGain);
-            }
+        if let NodeConfig::Gain { linear_gain } = config
+            && (!linear_gain.is_finite() || !(0.0..=16.0).contains(&linear_gain))
+        {
+            return Err(DspError::InvalidGain);
         }
         if self.nodes.len() >= u32::MAX as usize {
             return Err(DspError::InvalidNodeId);
@@ -219,8 +219,8 @@ impl DspGraph {
         let input_from = &self.input_from;
         let buffers = &mut self.buffers;
 
-        for position in 0..order.len() {
-            let node_id = order[position].0 as usize;
+        for ordered_node in order.iter() {
+            let node_id = ordered_node.0 as usize;
             match input_from[node_id] {
                 None => {
                     process_node(nodes[node_id], &input[..frame_count], &mut buffers[node_id][..frame_count])?;
