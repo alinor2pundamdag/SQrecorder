@@ -148,11 +148,12 @@ impl<W: Write> VaultEnvelopeWriter<W> {
         self.writer.write_all(plaintext_buffer).map_err(|_| EnvelopeError::WriteFailed)?;
         self.writer.write_all(&tag).map_err(|_| EnvelopeError::WriteFailed)?;
 
+        let chunk_plaintext_bytes = plaintext_buffer.len() as u64;
         self.stream_hash.update(&record_header);
-        self.stream_hash.update(plaintext_buffer);
+        self.stream_hash.update(&*plaintext_buffer);
         self.stream_hash.update(tag);
         self.written_plaintext_bytes = self.written_plaintext_bytes
-            .checked_add(plaintext_buffer.len() as u64)
+            .checked_add(chunk_plaintext_bytes)
             .ok_or(EnvelopeError::LengthOverflow)?;
         self.next_chunk_index += 1;
         Ok(())

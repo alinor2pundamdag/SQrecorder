@@ -9,7 +9,7 @@ pub mod envelope;
 
 use aes_gcm::{
     Aes256Gcm, Nonce, Tag,
-    aead::{AeadInPlace, KeyInit},
+    aead::{AeadInOut, KeyInit},
 };
 use sha2::{Digest, Sha256};
 use zeroize::Zeroize;
@@ -23,6 +23,7 @@ pub const NONCE_PREFIX_BYTES: usize = 4;
 pub enum VaultCryptoError {
     RandomSourceUnavailable,
     InvalidKeyLength,
+    InvalidNonceLength,
     InvalidTagLength,
     EncryptionFailed,
     AuthenticationFailed,
@@ -81,8 +82,10 @@ pub fn encrypt_chunk_in_place(
 ) -> Result<[u8; GCM_TAG_BYTES], VaultCryptoError> {
     let cipher = Aes256Gcm::new_from_slice(&key.bytes)
         .map_err(|_| VaultCryptoError::InvalidKeyLength)?;
+    let nonce = Nonce::try_from(nonce.as_slice())
+        .map_err(|_| VaultCryptoError::InvalidNonceLength)?;
     let tag = cipher
-        .encrypt_in_place_detached(Nonce::from_slice(&nonce), associated_data, plaintext_buffer)
+        .encrypt_inout_detached(&nonce, associated_data, (&mut *plaintext_buffer).into())
         .map_err(|_| VaultCryptoError::EncryptionFailed)?;
     let mut tag_bytes = [0u8; GCM_TAG_BYTES];
     tag_bytes.copy_from_slice(tag.as_ref());
@@ -104,13 +107,11 @@ pub fn decrypt_chunk_in_place(
     }
     let cipher = Aes256Gcm::new_from_slice(&key.bytes)
         .map_err(|_| VaultCryptoError::InvalidKeyLength)?;
+    let nonce = Nonce::try_from(nonce.as_slice())
+        .map_err(|_| VaultCryptoError::InvalidNonceLength)?;
+    let tag = Tag::try_from(tag_bytes).map_err(|_| VaultCryptoError::InvalidTagLength)?;
     if cipher
-        .decrypt_in_place_detached(
-            Nonce::from_slice(&nonce),
-            associated_data,
-            ciphertext_buffer,
-            Tag::from_slice(tag_bytes),
-        )
+        .decrypt_inout_detached(&nonce, associated_data, (&mut *ciphertext_buffer).into(), &tag)
         .is_err()
     {
         ciphertext_buffer.zeroize();
