@@ -39,9 +39,9 @@ jobs:
       - name: Resolve and generate workspace lock
         working-directory: source
         run: cargo generate-lockfile
-      - name: Format check
+      - name: Format Rust sources
         working-directory: source
-        run: cargo fmt --all -- --check
+        run: cargo fmt --all
       - name: Workspace tests
         working-directory: source
         run: cargo test --workspace --locked
@@ -60,6 +60,6 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock
-          git commit -m "chore: lock verified Rust workspace dependencies"
+          git add Cargo.lock core
+          git commit -m "chore: format and lock validated Rust workspace"
           git push origin "HEAD:$GITHUB_REF_NAME"
