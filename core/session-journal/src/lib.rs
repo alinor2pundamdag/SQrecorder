@@ -8,6 +8,8 @@ pub const JOURNAL_DIGEST_DOMAIN: &[u8; 4] = b"SQJ1";
 pub const JOURNAL_VERSION: u16 = 1;
 pub const JOURNAL_DIGEST_BYTES: usize = 32;
 pub const JOURNAL_MIN_BODY_BYTES: usize = 108;
+/// SQJ stores metadata only; bounding payloads limits parser and recovery memory use.
+pub const JOURNAL_MAX_PAYLOAD_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[repr(u16)]
@@ -46,6 +48,7 @@ impl JournalRecordType {
 pub enum JournalError {
     InvalidRecord,
     InvalidPayloadJson,
+    PayloadTooLarge,
     PayloadSchemaMismatch,
     SequenceMismatch,
     TimestampRegression,
@@ -156,6 +159,9 @@ impl<S: JournalSink> JournalWriter<S> {
 }
 
 fn validate_payload(payload: &[u8], expected_event_code: u16) -> Result<(), JournalError> {
+    if payload.len() > JOURNAL_MAX_PAYLOAD_BYTES {
+        return Err(JournalError::PayloadTooLarge);
+    }
     let value: serde_json::Value =
         serde_json::from_slice(payload).map_err(|_| JournalError::InvalidPayloadJson)?;
     let object = value.as_object().ok_or(JournalError::PayloadSchemaMismatch)?;
@@ -253,6 +259,7 @@ pub enum JournalVerificationError {
     InvalidRecordType,
     InvalidPayloadLength,
     InvalidUtf8Payload,
+    PayloadTooLarge,
     PayloadSchemaMismatch,
     SequenceMismatch,
     TimestampRegression,
@@ -386,6 +393,15 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
             );
         }
         let payload_len = read_u32_le(body, 72) as usize;
+        if payload_len > JOURNAL_MAX_PAYLOAD_BYTES {
+            return verification(
+                JournalVerificationStatus::Corrupt,
+                Some(JournalVerificationError::PayloadTooLarge),
+                offset,
+                expected_sequence - 1,
+                previous_digest,
+            );
+        }
         if JOURNAL_MIN_BODY_BYTES.checked_add(payload_len) != Some(body.len()) {
             return verification(
                 JournalVerificationStatus::Corrupt,
@@ -649,6 +665,18 @@ mod tests {
             verify_journal(&bytes).error,
             Some(JournalVerificationError::PayloadSchemaMismatch)
         );
+    }
+
+    #[test]
+    fn writer_rejects_oversized_metadata_before_serialization() {
+        let oversized = format!(
+            "{{\"eventCode\":2,\"schemaVersion\":1,\"padding\":\"{}\"}}",
+            "x".repeat(JOURNAL_MAX_PAYLOAD_BYTES)
+        );
+        let mut record = input(1, [0; 32]);
+        record.canonical_payload = oversized.as_bytes();
+        let mut writer = JournalWriter::new(MemorySink::default());
+        assert_eq!(writer.append(record), Err(JournalError::PayloadTooLarge));
     }
 
     #[test]
