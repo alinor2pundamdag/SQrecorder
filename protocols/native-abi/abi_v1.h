@@ -101,6 +101,7 @@ sq_status_v1 sq_get_abi_info_v1(sq_abi_info_v1 *out_info);
 sq_status_v1 sq_capture_create_v1(
     const sq_capture_config_v1 *config,
     sq_capture_engine **out_engine);
+sq_status_v1 sq_capture_start_v1(sq_capture_engine *engine);
 sq_status_v1 sq_capture_submit_pcm_v1(
     sq_capture_engine *engine,
     const sq_pcm_block_v1 *block,
