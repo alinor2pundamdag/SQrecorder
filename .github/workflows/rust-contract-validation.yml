@@ -18,7 +18,7 @@ jobs:
   rust-contracts:
     runs-on: ubuntu-latest
     env:
-      RUST_TOOLCHAIN: "1.100.1"
+      RUST_TOOLCHAIN: "1.100.0"
       CARGO_TERM_COLOR: always
     steps:
       - name: Clone exact pushed branch
