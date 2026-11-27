@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - batch-1-foundation
+      - b4-hardening-approved-foundation
     paths:
       - Cargo.toml
       - Cargo.lock
