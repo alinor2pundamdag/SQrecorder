@@ -6,6 +6,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use sha2::{Digest, Sha256};
+use zeroize::Zeroize;
 
 use crate::{
     GCM_TAG_BYTES, VaultCryptoError, VaultFileKey, encrypt_chunk_in_place, nonce_for_chunk,
@@ -57,6 +58,7 @@ pub enum EnvelopeError {
     MalformedFooter,
     DigestMismatch,
     TrailingData,
+    InputLengthMismatch,
     Crypto(VaultCryptoError),
 }
 
@@ -201,6 +203,53 @@ impl<W: Write> VaultEnvelopeWriter<W> {
     pub fn serialized_header_bytes(&self) -> &[u8] {
         &self.header_bytes
     }
+}
+
+/// Encrypts a fixed-length PCM byte stream into an SQVE v1 envelope using one
+/// reusable 1 MiB plaintext/ciphertext buffer. The returned writer is finished
+/// but not synced/promoted; the caller must perform durable staging and verify.
+/// Input must contain exactly metadata.plaintext_bytes bytes.
+pub fn encrypt_pcm_stream<R: Read, W: Write>(
+    reader: &mut R,
+    writer: W,
+    metadata: EnvelopeMetadata,
+    key: VaultFileKey,
+) -> Result<W, EnvelopeError> {
+    validate_metadata(&metadata)?;
+    let mut envelope = VaultEnvelopeWriter::new(writer, metadata, key)?;
+    let plaintext_bytes = envelope.metadata.plaintext_bytes;
+    let chunk_count = envelope.metadata.chunk_count;
+
+    let mut chunk = Vec::new();
+    chunk
+        .try_reserve_exact(SQVE_CHUNK_BYTES)
+        .map_err(|_| EnvelopeError::AllocationFailed)?;
+    chunk.resize(SQVE_CHUNK_BYTES, 0);
+
+    for index in 0..chunk_count {
+        let offset = index
+            .checked_mul(SQVE_CHUNK_BYTES as u64)
+            .ok_or(EnvelopeError::LengthOverflow)?;
+        let remaining = plaintext_bytes
+            .checked_sub(offset)
+            .ok_or(EnvelopeError::LengthOverflow)?;
+        let chunk_len = remaining.min(SQVE_CHUNK_BYTES as u64) as usize;
+        if reader.read_exact(&mut chunk[..chunk_len]).is_err() {
+            chunk[..chunk_len].zeroize();
+            return Err(EnvelopeError::InputLengthMismatch);
+        }
+        let result = envelope.write_chunk(&mut chunk[..chunk_len]);
+        chunk[..chunk_len].zeroize();
+        result?;
+    }
+
+    let mut trailing = [0u8; 1];
+    if reader.read(&mut trailing).map_err(|_| EnvelopeError::ReadFailed)? != 0 {
+        trailing.zeroize();
+        return Err(EnvelopeError::InputLengthMismatch);
+    }
+    trailing.zeroize();
+    envelope.finish()
 }
 
 /// Result of a structural SQVE v1 verification. This verifies the serialized
@@ -618,4 +667,35 @@ mod tests {
             Err(EnvelopeError::TrailingData)
         ));
     }
+    #[test]
+    fn pcm_stream_encrypts_multiple_chunks_with_bounded_buffer_and_verifies() {
+        let plaintext = vec![0x5Au8; SQVE_CHUNK_BYTES + 17];
+        let expected_len = plaintext.len() as u64;
+        let key = VaultFileKey { bytes: [0x37; 32] };
+        let metadata = metadata(expected_len);
+        let mut input = std::io::Cursor::new(plaintext);
+        let output = encrypt_pcm_stream(&mut input, Vec::<u8>::new(), metadata, key).unwrap();
+        let mut envelope = std::io::Cursor::new(output);
+        let verified = verify_envelope(&mut envelope).unwrap();
+        assert_eq!(verified.metadata.plaintext_bytes, expected_len);
+        assert_eq!(verified.metadata.chunk_count, 2);
+    }
+
+    #[test]
+    fn pcm_stream_rejects_truncated_and_extra_input() {
+        let key = VaultFileKey { bytes: [0x29; 32] };
+        let mut truncated = std::io::Cursor::new(b"ab".to_vec());
+        assert!(matches!(
+            encrypt_pcm_stream(&mut truncated, Vec::<u8>::new(), metadata(3), key),
+            Err(EnvelopeError::InputLengthMismatch)
+        ));
+
+        let key = VaultFileKey { bytes: [0x29; 32] };
+        let mut extra = std::io::Cursor::new(b"abcd".to_vec());
+        assert!(matches!(
+            encrypt_pcm_stream(&mut extra, Vec::<u8>::new(), metadata(3), key),
+            Err(EnvelopeError::InputLengthMismatch)
+        ));
+    }
+
 }
