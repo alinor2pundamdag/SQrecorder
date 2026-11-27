@@ -862,6 +862,29 @@ mod tests {
     }
 
     #[test]
+    fn verifier_rejects_non_jcs_payload_even_with_valid_record_digest() {
+        let mut writer = JournalWriter::new(MemorySink::default());
+        writer.append(input(1, [0; 32])).unwrap();
+        let mut bytes = writer.into_sink().bytes;
+
+        let noncanonical =
+            br#"{"eventCode":2,"captureEpoch":"1","schemaVersion":1}"#;
+        let payload_start = 4 + 76;
+        let payload_end = payload_start + noncanonical.len();
+        assert_eq!(bytes[payload_start..payload_end].len(), noncanonical.len());
+        bytes[payload_start..payload_end].copy_from_slice(noncanonical);
+
+        let digest_start = bytes.len() - JOURNAL_DIGEST_BYTES;
+        let digest = calculate_record_digest(&[0; 32], &bytes[4..digest_start]);
+        bytes[digest_start..].copy_from_slice(&digest);
+
+        assert_eq!(
+            verify_journal(&bytes).error,
+            Some(JournalVerificationError::NonCanonicalPayload)
+        );
+    }
+
+    #[test]
     fn writer_rejects_non_jcs_payload_bytes() {
         let mut writer = JournalWriter::new(MemorySink::default());
         let mut reordered = input(1, [0; 32]);
