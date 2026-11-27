@@ -15,6 +15,9 @@ on:
       - "rust-toolchain.toml"
       - "scripts/build-android-vault-native.sh"
       - ".github/workflows/android-vault-contract.yml"
+      - "docs/architecture/**"
+      - "docs/decisions/**"
+      - "docs/security/**"
   pull_request:
     paths:
       - "build.gradle.kts"
