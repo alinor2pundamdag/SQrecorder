@@ -1,7 +1,8 @@
 //! Capture-engine C ABI v1. Caller owns handle lifetime and must not destroy it
 //! concurrently with another operation. Input pointers must reference valid ranges.
 use crate::{
-    ABI_MAJOR_V1, ABI_MINOR_V1, BoundedPcmQueue, CaptureStatus, PCM_S16_LE_V1, PcmMetadata,
+    ABI_MAJOR_V1, ABI_MINOR_V1, BoundedPcmQueue, CaptureEventMetadata, CaptureStatus,
+    PCM_S16_LE_V1, PcmMetadata,
     SqAbiInfoV1, SqCaptureConfigV1, SqCaptureEventV1, SqPcmBlockV1, SqStatusV1,
 };
 use std::{
@@ -182,12 +183,57 @@ pub unsafe extern "C" fn sq_capture_push_event_v1(
     event: *const SqCaptureEventV1,
 ) -> SqStatusV1 {
     guarded(|| {
-        let _ = unsafe { engine(raw)? };
-        if event.is_null() {
+        let e = unsafe { engine(raw)? };
+        if event.is_null() || !e.started.load(Ordering::Acquire) {
             return Err(SqStatusV1::InvalidArgument);
         }
-        // Event persistence/dispatch is not implemented in this ABI slice.
-        Err(SqStatusV1::Unsupported)
+        // SAFETY: caller provides a readable event descriptor.
+        let event = unsafe { &*event };
+        if event.struct_size as usize != core::mem::size_of::<SqCaptureEventV1>()
+            || event.reserved0 != 0 || event.reserved1 != 0
+        {
+            return Err(SqStatusV1::InvalidArgument);
+        }
+        let metadata = CaptureEventMetadata {
+            event_type: event.event_type, flags: event.flags,
+            event_sequence: event.event_sequence,
+            monotonic_timestamp_ns: event.monotonic_timestamp_ns,
+            capture_epoch: event.capture_epoch, detail_code: event.detail_code,
+        };
+        e.queue.push_event(metadata).map_err(|error| match error {
+            crate::CaptureError::QueueOverflow | crate::CaptureError::QueueContention
+            | crate::CaptureError::ResourcePoisoned => SqStatusV1::Resource,
+            crate::CaptureError::InvalidState => SqStatusV1::InvalidState,
+            _ => SqStatusV1::InvalidArgument,
+        })
+    })
+}
+
+
+#[unsafe(no_mangle)]
+/// # Safety
+/// `raw` must be a live engine handle and `out_event` must be writable for one ABI event struct.
+pub unsafe extern "C" fn sq_capture_read_event_v1(
+    raw: *mut SqCaptureEngine,
+    out_event: *mut SqCaptureEventV1,
+) -> SqStatusV1 {
+    guarded(|| {
+        let e = unsafe { engine(raw)? };
+        if out_event.is_null() || !e.started.load(Ordering::Acquire) {
+            return Err(SqStatusV1::InvalidArgument);
+        }
+        let event = e.queue.pop_event().map_err(|_| SqStatusV1::Resource)?
+            .ok_or(SqStatusV1::WouldBlock)?;
+        let value = SqCaptureEventV1 {
+            struct_size: core::mem::size_of::<SqCaptureEventV1>() as u32,
+            event_type: event.event_type, flags: event.flags, reserved0: 0,
+            event_sequence: event.event_sequence,
+            monotonic_timestamp_ns: event.monotonic_timestamp_ns,
+            capture_epoch: event.capture_epoch, detail_code: event.detail_code,
+            reserved1: 0,
+        };
+        unsafe { ptr::write(out_event, value); }
+        Ok(())
     })
 }
 
