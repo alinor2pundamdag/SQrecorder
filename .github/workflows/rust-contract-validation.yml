@@ -13,8 +13,7 @@ on:
       - .github/workflows/rust-contract-validation.yml
   pull_request:
     branches:
-      - batch-1-foundation
-      - b4-hardening-approved-foundation
+      - main
     paths:
       - Cargo.toml
       - Cargo.lock
