@@ -326,7 +326,7 @@ pub fn verify_envelope<R: Read + Seek>(
         return Err(EnvelopeError::MalformedChunk);
     }
 
-    let mut metadata = EnvelopeMetadata {
+    let metadata = EnvelopeMetadata {
         file_uuid: fixed[32..48].try_into().unwrap(),
         file_key_id,
         nonce_prefix: fixed[48..52].try_into().unwrap(),
@@ -587,7 +587,10 @@ mod tests {
         let last = tampered.len() - 1;
         tampered[last] ^= 1;
         let mut cursor = std::io::Cursor::new(tampered);
-        assert_eq!(verify_envelope(&mut cursor), Err(EnvelopeError::DigestMismatch));
+        assert!(matches!(
+            verify_envelope(&mut cursor),
+            Err(EnvelopeError::DigestMismatch)
+        ));
     }
 
     #[test]
@@ -597,7 +600,10 @@ mod tests {
         let mut bytes = writer.finish().unwrap();
         bytes.push(0);
         let mut cursor = std::io::Cursor::new(bytes);
-        assert_eq!(verify_envelope(&mut cursor), Err(EnvelopeError::TrailingData));
+        assert!(matches!(
+            verify_envelope(&mut cursor),
+            Err(EnvelopeError::TrailingData)
+        ));
     }
 
 }
