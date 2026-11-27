@@ -730,6 +730,19 @@ mod tests {
     }
 
     #[test]
+    fn duplicate_key_scanner_decodes_escaped_keys_and_checks_nested_objects() {
+        assert!(has_duplicate_json_keys(
+            br#"{"outer":{"key":1,"\\u006Bey":2},"eventCode":2,"schemaVersion":1}"#
+        ));
+        assert!(has_duplicate_json_keys(
+            br#"{"eventCode":2,"schemaVersion":1,"items":[{"x":1,"x":2}]}"#
+        ));
+        assert!(!has_duplicate_json_keys(
+            br#"{"eventCode":2,"schemaVersion":1,"key":1,"keys":2}"#
+        ));
+    }
+
+    #[test]
     fn durable_append_verifies_and_chains_records() {
         let mut writer = JournalWriter::new(MemorySink::default());
         let first = writer.append(input(1, [0; 32])).unwrap();
