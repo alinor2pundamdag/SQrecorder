@@ -1,17 +1,28 @@
 # B4 validation record
 
-## Implemented
+## Implemented and CI verified
 
-- SQVE v1 binary header, wrap table, chunk framing, footer, exact AAD, nonce rules, and migration constraints.
-- KMP Vault access/chunk/journal contracts, explicit expiring authentication context, signature-anchor metadata, and ordered finalization guard.
-- Rust CSPRNG DEK/prefix generation, AES-256-GCM chunk operations, SHA-256, and DEK zeroization.
-- Rust SQVE writer validates declared length/order, serializes the envelope, encrypts chunks, hashes the ciphertext stream, and refuses to seal incomplete input.
-- Rust SQJ v1 append-only hash-chain writer and non-mutating recovery scanner; writer advances only after sink sync, and torn/corrupt tails are reported with verified-prefix offsets. Sink write/sync failures terminalize the writer to prevent unsafe retries.
-- SQJ payload parsing now validates JSON object shape, schema version, and event-code binding; metadata payload is capped at 64 KiB to bound recovery/parser memory. Caller still must provide RFC 8785/JCS canonical bytes; this implementation does not canonicalize JSON itself.
-- Added fault-injection coverage for partial writes, invalid JSON/schema, and a schema-tampered record whose digest was recomputed.
-- Rust unit tests cover NIST AEAD vector, tamper zeroization, SHA-256, SQVE framing/incomplete files, journal chaining/tamper/torn tail/sync failure.
-- Rust CI run 10 passed format, workspace tests, and Clippy with warnings denied on the earlier journal implementation. Run 11 failed at compile time: the payload verifier referenced a missing `read_u16_le` helper. The helper is now added; run 12/13 must confirm the fix and tests.
+- Approved B1 foundation retained: SQVE v1 chunked AES-256-GCM, RSA-OAEP SHA-256 wrap contract, KMP Vault/session/journal contracts.
+- Rust vault writer, random DEK/nonce prefix, AEAD/AAD, ciphertext hash, zeroization, incomplete-file refusal.
+- Rust SQJ append/hash chain and non-mutating recovery scanner; terminal writer after sink write/sync failure.
+- JCS canonical payload enforcement (RFC 8785), escaped/nested duplicate-key detection, canonical recovery verification.
+- Verified-only journal resume restores sequence/digest/timestamp; rejects damaged tails before append.
+- Rust durable-store: staged write/sync/verify/rename/parent sync/journal callback, explicit ambiguous/pending outcomes, non-destructive recovery candidate discovery, fault injection.
+- Rust CI **Run #19 PASS** at source SHA `edfb70005d5dedd400025416ec1bcad541306fd9`: strict format, workspace tests, Clippy with warnings denied.
+- Android KMP adapter + host cryptographic tests compile/pass in Gradle validation **Run #12**. A common safe-key-ID predicate compile error was fixed.
 
-## Remaining security gate
+## Locked-contract compatibility blocker
 
-Platform asymmetric public-key wrap/private-key authenticated unwrap, durable file promotion (fsync/atomic rename/directory fsync), signed journal anchor implementation, Android/Windows key lifecycle tests, and full crash-recovery integration remain incomplete. B4 is **BLOCKED** until these paths are implemented and tested.
+SQVE v1 specifies a **non-empty OAEP label** `SQREC-VAULT-DEK-v1` and MGF1-SHA256. Android Keystore exposes configurable MGF1 digest from API 35, but its RSA-OAEP private-key provider rejects non-empty `PSource.PSpecified` labels. The adapter gates key generation, wrap, unwrap and rotation and returns `UNSUPPORTED_PLATFORM`; it does not silently change the locked envelope or create keys that cannot decrypt.
+
+This is a platform/format incompatibility requiring explicit change control before production Android Vault acceptance. No fallback or envelope mutation was implemented.
+
+## Remaining B4 acceptance
+
+- Resolve the locked SQVE v1 OAEP-label incompatibility through an approved versioned contract change or an independently verified Android Keystore-compatible design.
+- Implement and test the concrete Rust/JNI native bridge for opaque DEK handles and chunk operations.
+- Finish authenticated Android journal-anchor signing + public-key verification/registry integration.
+- Wire platform journal and durable file promotion to the Rust recovery contract.
+- Device tests: auth-bound unwrap, locked encrypt-only capture, key invalidation/rotation/recovery, crash-cut/ENOSPC, 16 KB page and security review.
+
+B4 remains **BLOCKED / NOT 100% accepted** until those gates pass.

@@ -85,13 +85,16 @@ public class AndroidVaultKeyAccess(
     override fun createRandomFileKeyHandle(): VaultFileKeyHandle =
         native.generateFileKeyHandle()
 
-    override fun currentPublicWrappingKeyId(): String =
-        vaultWrappingKeyId(publicKeyForAlias(currentAlias(createIfMissing = true)))
+    override fun currentPublicWrappingKeyId(): String {
+        requireSqveV1AndroidKeystoreSupport()
+        return vaultWrappingKeyId(publicKeyForAlias(currentAlias(createIfMissing = true)))
+    }
 
     override fun wrapFileKeyWithPublicKey(
         fileKeyHandle: VaultFileKeyHandle,
         recipientKeyId: String,
     ): VaultKeyWrap {
+        requireSqveV1AndroidKeystoreSupport()
         val publicKey = publicKeyForAlias(aliasForKeyId(recipientKeyId))
         val dek = native.copyFileKeyForWrapping(fileKeyHandle)
         try {
@@ -122,6 +125,7 @@ public class AndroidVaultKeyAccess(
         if (wrap.suite != VaultKeyWrapSuite.RSA_OAEP_SHA256_V1) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
         }
+        requireSqveV1AndroidKeystoreSupport()
         val now = SystemClock.elapsedRealtimeNanos()
         if (!authContext.validate(now) || !authVerifier.isCurrent(authContext) ||
             authContext.expiresAtMonotonicNs - now > AUTH_WINDOW_NANOS
@@ -166,12 +170,19 @@ public class AndroidVaultKeyAccess(
 
     /** Explicit rotation. Old aliases remain available for historical files. */
     public fun rotateWrappingKey(): String {
+        requireSqveV1AndroidKeystoreSupport()
         val aliases = keyStore().aliases().toList().filter { it.startsWith(ALIAS_PREFIX) }
         val current = aliases.mapNotNull { it.removePrefix(ALIAS_PREFIX).toLongOrNull() }.maxOrNull() ?: 0L
         val next = Math.addExact(current, 1L)
         val alias = ALIAS_PREFIX + next
         generateWrappingKey(alias)
         return vaultWrappingKeyId(publicKeyForAlias(alias))
+    }
+
+    private fun requireSqveV1AndroidKeystoreSupport() {
+        if (!androidKeystoreSupportsSqveV1Oaep(Build.VERSION.SDK_INT)) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.UNSUPPORTED_PLATFORM)
+        }
     }
 
     private fun currentAlias(createIfMissing: Boolean): String {
