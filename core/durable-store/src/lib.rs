@@ -185,18 +185,18 @@ mod tests {
     use super::*;
     use std::{
         fs,
-        time::{SystemTime, UNIX_EPOCH},
     };
+    static TEST_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
     fn td() -> PathBuf {
+        let sequence = TEST_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let p = std::env::temp_dir().join(format!(
-            "sqstage-{}-{}",
+            "sqstage-test-{}-{sequence}",
             std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
         ));
-        fs::create_dir_all(&p).unwrap();
+        // create_dir (not create_dir_all) makes any collision visible instead
+        // of silently sharing a directory between parallel tests.
+        fs::create_dir(&p).unwrap();
         p
     }
     #[test]
