@@ -49,8 +49,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-vault-${{ github.ref }}
-  cancel-in-progress: true
+  group: android-vault-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
 
 jobs:
   android-vault:
