@@ -165,6 +165,7 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
     struct Scanner<'a> {
         bytes: &'a [u8],
         pos: usize,
+        duplicate: bool,
     }
 
     impl Scanner<'_> {
@@ -203,13 +204,14 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
                     true
                 }
                 Some(_) => {
+                    let start = self.pos;
                     while self.pos < self.bytes.len()
                         && !matches!(self.bytes[self.pos], b',' | b']' | b'}')
                         && !self.bytes[self.pos].is_ascii_whitespace()
                     {
                         self.pos += 1;
                     }
-                    true
+                    self.pos > start
                 }
                 None => false,
             }
@@ -220,7 +222,7 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
             self.ws();
             if self.bytes.get(self.pos) == Some(&b'}') {
                 self.pos += 1;
-                return false;
+                return true;
             }
             let mut keys = std::collections::HashSet::<String>::new();
             loop {
@@ -233,7 +235,7 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
                     return false;
                 };
                 if !keys.insert(key) {
-                    return true;
+                    self.duplicate = true;
                 }
                 self.pos = end;
                 self.ws();
@@ -249,7 +251,7 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
                     Some(b',') => self.pos += 1,
                     Some(b'}') => {
                         self.pos += 1;
-                        return false;
+                        return true;
                     }
                     _ => return false,
                 }
@@ -261,7 +263,7 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
             self.ws();
             if self.bytes.get(self.pos) == Some(&b']') {
                 self.pos += 1;
-                return false;
+                return true;
             }
             loop {
                 if !self.value() {
@@ -272,7 +274,7 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
                     Some(b',') => self.pos += 1,
                     Some(b']') => {
                         self.pos += 1;
-                        return false;
+                        return true;
                     }
                     _ => return false,
                 }
@@ -280,7 +282,13 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
         }
     }
 
-    Scanner { bytes, pos: 0 }.value()
+    let mut scanner = Scanner {
+        bytes,
+        pos: 0,
+        duplicate: false,
+    };
+    let _ = scanner.value();
+    scanner.duplicate
 }
 
 fn validate_payload(payload: &[u8], expected_event_code: u16) -> Result<(), JournalError> {
