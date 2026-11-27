@@ -14,14 +14,14 @@
 
 - Generate a cryptographically random 32-byte DEK for each file.
 - Chunk encryption: AES-256-GCM, 12-byte nonce, 16-byte authentication tag.
-- Nonce construction: a random per-file prefix plus a monotonic chunk counter, with a precisely specified width/byte order; reject before counter wrap. Persist the counter/recovery state so crash recovery cannot reuse a nonce under the same DEK.
+- Nonce construction: a 4-byte random per-file prefix followed by the 8-byte chunk counter in big-endian order (12 bytes total); reject before counter wrap. The counter starts at zero and is strictly monotonic. Persist the counter/recovery state so crash recovery cannot reuse a nonce under the same DEK.
 - Chunk AAD binds version, suite, file identity, chunk index, plaintext/ciphertext lengths, and immutable file metadata.
 - On tag failure, return an integrity error; do not expose unauthenticated plaintext or continue as if the chunk were valid.
 
 ## DEK wrapping and metadata binding
 
 - Wrap suite is explicit per recipient record. SQVE v2 may define platform-specific, named provider suites; never assume a single primitive is natively hardware-backed on every OS.
-- Android-compatible RSA suite candidate: RSA-OAEP with SHA-256, MGF1-SHA256, **empty OAEP label**. This is not a silent v1 change.
+- Android RSA-OAEP suites must have distinct immutable IDs for their exact parameters. The SHA-256/MGF1-SHA256/empty-label profile is a candidate for API 35+ where MGF1 digest selection is supported. Android Keystore defaults MGF1 to SHA-1 when not explicitly configured; API 23–34 therefore require a separately identified, reviewed provider profile or another key-agreement/wrapping suite. No runtime parameter substitution or silent suite downgrade is allowed. The empty label fixes only the label incompatibility; it does not by itself resolve MGF1 interoperability.
 - Other providers may use their supported hardware-backed key-agreement/wrapping mechanism only under a separately identified suite with exact parameters and test vectors.
 - Each recipient record carries a stable key identifier/fingerprint, suite ID, and bounded wrapped-key bytes. Hardware private keys remain inside their provider.
 - Derive a distinct header-authentication key from the DEK using HKDF-SHA256 with a fixed, versioned domain-separation info string and the file salt. Authenticate the canonical header and recipient records with HMAC-SHA256. Verify the header MAC in constant time before accepting metadata or decrypting chunks.
