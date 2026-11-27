@@ -30,3 +30,10 @@ Platform adapters and app shells depend inward on shared contracts and native in
 ## Scope exclusions
 
 No screen recording or MediaProjection. No hidden microphone activation. No cloud dependency for core recording. These exclusions are architectural, not optional feature flags.
+
+
+## Cross-platform target extension
+
+The architecture covers Android/phone/tablet, Wear OS, iOS/iPadOS, watchOS, Windows, macOS, Linux, and Java/JVM integration. Shared KMP contracts and Rust portable logic do not replace native audio, permissions, lifecycle, key-storage, accessibility, or packaging adapters. Refer to [platform compatibility](platform-compatibility.md) and [SQVE v2 ADR](../decisions/0002-cross-platform-sqve-v2.md).
+
+Vault bytes and journals are designed for portable formats; hardware-bound wrapping keys remain provider/device-bound. Explicit authenticated recipient rewrap is required for device transfer. Feature/security capability gaps must be reported rather than silently downgraded.
