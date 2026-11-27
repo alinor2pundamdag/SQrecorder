@@ -14,6 +14,15 @@ import android.os.Build
 import android.os.IBinder
 import android.os.Process
 import android.os.StatFs
+import android.os.SystemClock
+import com.alinor.sqrecorder.domain.SessionId
+import com.alinor.sqrecorder.domain.SessionLifecycle
+import com.alinor.sqrecorder.domain.SessionPhase
+import com.alinor.sqrecorder.domain.SessionSnapshot
+import com.alinor.sqrecorder.domain.SessionEvent
+import com.alinor.sqrecorder.domain.StopReason
+import com.alinor.sqrecorder.domain.SessionFailureCode
+import com.alinor.sqrecorder.domain.TransitionOutcome
 import java.io.File
 import java.io.RandomAccessFile
 import java.util.concurrent.atomic.AtomicBoolean
@@ -25,6 +34,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 public class CaptureForegroundService : Service() {
  private val stopping = AtomicBoolean(false)
+ @Volatile private var stopReason = StopReason.USER_REQUEST
  @Volatile private var captureThread: Thread? = null
  @Volatile private var recorder: AudioRecord? = null
  @Volatile private var output: RandomAccessFile? = null
@@ -33,11 +43,12 @@ public class CaptureForegroundService : Service() {
 
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   when (intent?.action) {
-   ACTION_STOP -> stopping.set(true)
+   ACTION_STOP -> { stopReason = StopReason.USER_REQUEST; stopping.set(true) }
    ACTION_START -> if (captureThread == null) {
     if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     else startForeground(NOTIFICATION_ID, notification())
     stopping.set(false)
+    stopReason = StopReason.USER_REQUEST
     captureThread = Thread({ captureLoop() }, "sqrec-audio-capture").apply {
      priority = Process.THREAD_PRIORITY_AUDIO
      start()
@@ -52,7 +63,15 @@ public class CaptureForegroundService : Service() {
   var active: AudioRecord? = null
   var partial: File? = null
   var success = false
+  var session = SessionSnapshot.create(SessionId(java.util.UUID.randomUUID().toString()), SystemClock.elapsedRealtimeNanos())
+  fun reduce(event: SessionEvent) {
+   when (val result = SessionLifecycle.reduce(session, event)) {
+    is TransitionOutcome.Applied -> session = result.snapshot
+    is TransitionOutcome.Rejected -> error("Session lifecycle rejected event: ${result.error}")
+   }
+  }
   try {
+   reduce(SessionEvent.PreparationSucceeded(SystemClock.elapsedRealtimeNanos()))
    var rate = 0
    var bufferSize = 0
    for (candidate in intArrayOf(48_000, 44_100)) {
@@ -80,12 +99,14 @@ public class CaptureForegroundService : Service() {
    output!!.write(PcmWavHeader.create(rate, 0L))
    active.startRecording()
    check(active.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord start failed" }
+   reduce(SessionEvent.CaptureStarted(SystemClock.elapsedRealtimeNanos(), 1L))
 
    val pcm = ByteArray(bufferSize)
    var bytes = 0L
    while (!stopping.get()) {
     if (StatFs(filesDir.absolutePath).availableBytes < MIN_FREE_BYTES) {
      stopping.set(true) // deterministic low-storage stop
+     stopReason = StopReason.STORAGE_LIMIT
      break
     }
     val count = active.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
@@ -94,7 +115,10 @@ public class CaptureForegroundService : Service() {
     output!!.write(pcm, 0, count)
     bytes = Math.addExact(bytes, count.toLong())
    }
+   reduce(SessionEvent.StopRequested(SystemClock.elapsedRealtimeNanos(), stopReason))
    active.stop()
+   reduce(SessionEvent.CaptureStopped(SystemClock.elapsedRealtimeNanos()))
+   check(bytes > 0L && bytes % 2L == 0L) { "No complete PCM frames captured; partial retained" }
    output!!.seek(0)
    output!!.write(PcmWavHeader.create(rate, bytes))
    output!!.fd.sync()
@@ -102,8 +126,13 @@ public class CaptureForegroundService : Service() {
    output = null
    val destination = File(partial.parentFile, partial.name.removeSuffix(".part"))
    check(partial.renameTo(destination)) { "Finalize rename failed; partial file retained" }
+   reduce(SessionEvent.FinalizationSucceeded(SystemClock.elapsedRealtimeNanos(), bytes + 44L))
    success = true
   } catch (failure: Exception) {
+   try {
+    if (session.phase == SessionPhase.FINALIZING) reduce(SessionEvent.FinalizationFailed(SystemClock.elapsedRealtimeNanos(), SessionFailureCode.FINALIZATION_FAILED))
+    else if (session.phase !in setOf(SessionPhase.FINALIZED, SessionPhase.FAILED, SessionPhase.RECOVERED)) reduce(SessionEvent.Failed(SystemClock.elapsedRealtimeNanos(), SessionFailureCode.CAPTURE_PIPELINE_FAILED))
+   } catch (_: Exception) { }
    android.util.Log.e(TAG, "Capture/finalization failed; preserve partial artifact", failure)
   } finally {
    try { if (active?.recordingState == AudioRecord.RECORDSTATE_RECORDING) active.stop() } catch (_: Exception) {}
