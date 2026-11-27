@@ -14,6 +14,7 @@ use std::{
 const MAX_FFI_PCM_BYTES: usize = 256 * 1024;
 
 pub struct SqCaptureEngine {
+    sample_rate_hz: u32,
     queue: BoundedPcmQueue,
     started: AtomicBool,
 }
@@ -87,7 +88,9 @@ pub unsafe extern "C" fn sq_capture_create_v1(
         }
         let queue = BoundedPcmQueue::new(c.queue_block_capacity, c.max_block_frames)
             .map_err(|_| SqStatusV1::InvalidArgument)?;
+        unsafe { ptr::write(out, ptr::null_mut()); }
         let boxed = Box::new(SqCaptureEngine {
+            sample_rate_hz: c.sample_rate_hz,
             queue,
             started: AtomicBool::new(false),
         });
@@ -134,6 +137,7 @@ pub unsafe extern "C" fn sq_capture_submit_pcm_v1(
         // SAFETY: caller guarantees readable block and PCM range of pcm_bytes.
         let b = unsafe { &*block };
         if b.struct_size as usize != core::mem::size_of::<SqPcmBlockV1>()
+            || b.sample_rate_hz != e.sample_rate_hz
             || b.flags != 0
             || b.reserved0 != 0
             || b.reserved1 != 0
