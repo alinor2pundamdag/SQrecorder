@@ -244,7 +244,11 @@ pub fn encrypt_pcm_stream<R: Read, W: Write>(
     }
 
     let mut trailing = [0u8; 1];
-    if reader.read(&mut trailing).map_err(|_| EnvelopeError::ReadFailed)? != 0 {
+    if reader
+        .read(&mut trailing)
+        .map_err(|_| EnvelopeError::ReadFailed)?
+        != 0
+    {
         trailing.zeroize();
         return Err(EnvelopeError::InputLengthMismatch);
     }
@@ -697,5 +701,4 @@ mod tests {
             Err(EnvelopeError::InputLengthMismatch)
         ));
     }
-
 }
