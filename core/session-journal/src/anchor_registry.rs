@@ -389,6 +389,7 @@ fn read_u64_le(bytes: &[u8], offset: usize) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::JournalSinkError;
     use std::io::Write;
 
     #[derive(Default)]
