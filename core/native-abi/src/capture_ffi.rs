@@ -13,6 +13,9 @@ use std::{
 
 const MAX_FFI_PCM_BYTES: usize = 256 * 1024;
 
+pub const ABI_FEATURE_BOUNDED_PCM_QUEUE_V1: u64 = 1 << 0;
+pub const ABI_FEATURE_CAPTURE_EVENT_RING_V1: u64 = 1 << 1;
+
 pub struct SqCaptureEngine {
     sample_rate_hz: u32,
     queue: BoundedPcmQueue,
@@ -54,7 +57,7 @@ pub unsafe extern "C" fn sq_get_abi_info_v1(out: *mut SqAbiInfoV1) -> SqStatusV1
                     struct_size: core::mem::size_of::<SqAbiInfoV1>() as u32,
                     abi_major: ABI_MAJOR_V1,
                     abi_minor: ABI_MINOR_V1,
-                    feature_bits: 0,
+                    feature_bits: ABI_FEATURE_BOUNDED_PCM_QUEUE_V1 | ABI_FEATURE_CAPTURE_EVENT_RING_V1,
                     reserved: [0; 4],
                 },
             )
