@@ -216,6 +216,7 @@ mod tests {
     #[derive(Clone, Copy)]
     enum FaultPoint {
         PartialStageWrite,
+        NoSpace,
         FileSync,
         Rename,
         ParentSync,
@@ -233,6 +234,17 @@ mod tests {
                     Err(StoreError::Io(io::Error::new(
                         io::ErrorKind::WriteZero,
                         "injected partial write",
+                    )))
+                }
+                FaultPoint::NoSpace => {
+                    let mut f = OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(stage)?;
+                    f.write_all(&bytes[..bytes.len().min(2)])?;
+                    Err(StoreError::Io(io::Error::new(
+                        io::ErrorKind::StorageFull,
+                        "injected ENOSPC",
                     )))
                 }
                 FaultPoint::FileSync => {
@@ -272,6 +284,7 @@ mod tests {
     fn fault_injection_preserves_old_final_before_rename() {
         for point in [
             FaultPoint::PartialStageWrite,
+            FaultPoint::NoSpace,
             FaultPoint::FileSync,
             FaultPoint::Rename,
         ] {
