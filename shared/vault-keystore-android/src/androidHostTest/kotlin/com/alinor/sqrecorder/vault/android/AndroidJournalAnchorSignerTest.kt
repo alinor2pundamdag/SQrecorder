@@ -4,6 +4,7 @@ import java.security.KeyPairGenerator
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
@@ -18,7 +19,8 @@ class AndroidJournalAnchorSignerTest {
 
         assertNotEquals(original.toList(), changedSequence.toList())
         assertNotEquals(original.toList(), changedEpoch.toList())
-        assertTrue(original.startsWith("SQREC-JOURNAL-ANCHOR-V1".toByteArray(Charsets.US_ASCII)))
+        val domain = "SQREC-JOURNAL-ANCHOR-V1".toByteArray(Charsets.US_ASCII)
+        assertContentEquals(domain, original.copyOfRange(0, domain.size))
     }
 
     @Test
