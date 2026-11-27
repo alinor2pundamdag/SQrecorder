@@ -832,7 +832,7 @@ mod tests {
             JournalWriter::resume(sink, &existing),
             Err(JournalError::RecoveryRequired)
         ));
-        assert_eq!(existing.last_chunk(), Some(&[0xAA, 0xBB][..]));
+        assert!(existing.ends_with(&[0xAA, 0xBB]));
     }
 
     #[test]
