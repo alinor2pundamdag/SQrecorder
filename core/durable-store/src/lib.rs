@@ -1,6 +1,5 @@
 //! Crash-conscious atomic file promotion and recovery inspection.
 #![forbid(unsafe_code)]
-#[cfg(not(windows))]
 use std::fs::File;
 use std::{
     fs::{self, OpenOptions},
@@ -81,6 +80,52 @@ where
     J: FnOnce() -> Result<(), StoreError>,
 {
     durable_promote_with_ops(&OsPromotionOps, dest, bytes, verify, commit)
+}
+
+/// Streaming promotion for large encrypted artifacts. The caller writes directly
+/// to a private stage file; memory usage is controlled by the caller's buffer.
+/// The stage is synced and verified before rename, and journal commit is last.
+/// A failed writer/verification leaves the stage candidate for non-destructive
+/// recovery inspection instead of silently deleting evidence.
+pub fn durable_promote_streaming<W, V, J>(
+    dest: &Path,
+    write_stage: W,
+    verify: V,
+    commit: J,
+) -> Result<(), StoreError>
+where
+    W: FnOnce(&mut File) -> Result<(), StoreError>,
+    V: Fn(&Path) -> Result<(), StoreError>,
+    J: FnOnce() -> Result<(), StoreError>,
+{
+    let parent = dest.parent().ok_or(StoreError::InvalidPath)?;
+    if !parent.is_dir() {
+        return Err(StoreError::InvalidPath);
+    }
+    let name = dest
+        .file_name()
+        .ok_or(StoreError::InvalidPath)?
+        .to_string_lossy();
+    let stage = parent.join(format!(
+        ".{name}.sqstage-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+
+    let mut stage_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&stage)?;
+    write_stage(&mut stage_file)?;
+    stage_file.sync_all()?;
+    drop(stage_file);
+
+    verify(&stage)?;
+    OsPromotionOps.rename_stage(&stage, dest)?;
+    OsPromotionOps
+        .sync_parent(parent)
+        .map_err(|_| StoreError::PromotionDurabilityUnknown)?;
+    commit().map_err(|_| StoreError::JournalCommitPending)
 }
 fn durable_promote_with_ops<O, V, J>(
     ops: &O,
@@ -439,4 +484,60 @@ mod tests {
         assert!(s.exists());
         fs::remove_dir_all(d).unwrap()
     }
+    #[test]
+    fn streaming_promotion_uses_file_sink_and_commits_after_verification() {
+        let d = td();
+        let final_path = d.join("large-sealed");
+        let mut journal_committed = false;
+        let expected_len = 256 * 8 * 1024;
+        durable_promote_streaming(
+            &final_path,
+            |file| {
+                let block = [0xA5u8; 8 * 1024];
+                for _ in 0..256 {
+                    file.write_all(&block)?;
+                }
+                Ok(())
+            },
+            |stage| {
+                assert_eq!(fs::metadata(stage)?.len(), expected_len as u64);
+                Ok(())
+            },
+            || {
+                journal_committed = true;
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(journal_committed);
+        assert_eq!(fs::metadata(&final_path).unwrap().len(), expected_len as u64);
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn streaming_writer_failure_preserves_stage_and_never_commits() {
+        let d = td();
+        let final_path = d.join("failed-sealed");
+        let mut journal_committed = false;
+        let result = durable_promote_streaming(
+            &final_path,
+            |file| {
+                file.write_all(b"partial encrypted stream")?;
+                Err(StoreError::Io(io::Error::other("injected stream failure")))
+            },
+            |_| panic!("verification must not run after writer failure"),
+            || {
+                journal_committed = true;
+                Ok(())
+            },
+        );
+        assert!(matches!(result, Err(StoreError::Io(_))));
+        assert!(!final_path.exists());
+        assert!(!journal_committed);
+        let stages = discover_staged_files(&final_path).unwrap();
+        assert_eq!(stages.len(), 1);
+        assert_eq!(fs::read(&stages[0]).unwrap(), b"partial encrypted stream");
+        fs::remove_dir_all(d).unwrap();
+    }
+
 }
