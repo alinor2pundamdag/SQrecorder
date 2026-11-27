@@ -87,6 +87,7 @@ public data class VaultV2EnvelopeContract(
                 VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM -> {
                     if (recipient.wrappedDekBase64.length != ECDH_WRAPPED_DEK_BASE64_LENGTH ||
                         recipient.ephemeralPublicKeyBase64.isNullOrEmpty() ||
+                        recipient.ephemeralPublicKeyBase64.length > MAX_EPHEMERAL_KEY_BASE64_CHARS ||
                         !recipient.ephemeralPublicKeyBase64.isCanonicalBase64() ||
                         recipient.wrapNonceHex?.isLowerHex(24) != true
                     ) return VaultV2ContractError.INVALID_ECDH_WRAP
@@ -106,6 +107,7 @@ public data class VaultV2EnvelopeContract(
         public const val ECDH_WRAPPED_DEK_BASE64_LENGTH: Int = 64
         public const val MAX_WRAPPED_DEK_BASE64_BYTES: Int = 16_384
         public const val MAX_RECIPIENTS: Int = 16
+        public const val MAX_EPHEMERAL_KEY_BASE64_CHARS: Int = 512
     }
 }
 
