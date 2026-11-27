@@ -10,6 +10,8 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - core/**
+      - shared/domain/**
+      - shared/capability-system/**
       - .github/workflows/rust-contract-validation.yml
       - docs/architecture/**
       - docs/decisions/**
