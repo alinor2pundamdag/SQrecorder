@@ -5,6 +5,14 @@ plugins {
 
 kotlin {
     jvm()
+    // Native targets compile the shared domain contract; platform shells/adapters remain separate.
+    iosArm64()
+    iosSimulatorArm64()
+    macosArm64()
+    watchosDeviceArm64()
+    watchosSimulatorArm64()
+    mingwX64()
+    linuxX64()
     android {
         namespace = "com.alinor.sqrecorder.domain"
         compileSdk = 36
