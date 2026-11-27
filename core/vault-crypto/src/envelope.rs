@@ -244,7 +244,9 @@ pub fn verify_envelope<R: Read + Seek>(
     if !(SQVE_HEADER_BYTES..=SQVE_MAX_HEADER_BYTES).contains(&header_len)
         || key_id_len == 0
         || key_id_len > SQVE_FILE_KEY_ID_MAX_BYTES
+        || key_id_len > header_len - SQVE_HEADER_BYTES
         || wrap_count == 0
+        || wrap_count > (header_len - SQVE_HEADER_BYTES - key_id_len) / 8
     {
         return Err(EnvelopeError::MalformedHeader);
     }
