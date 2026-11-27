@@ -47,7 +47,7 @@ class AndroidVaultKeyAccessTest {
             ),
         )
         assertEquals(false, isCurrentVaultAuthContext(context, now, VaultAuthContextVerifier { false }))
-        assertEquals(false, isCurrentVaultAuthContext(context, now + 1, current))
+        // Expiry is an absolute monotonic deadline: one nanosecond after issuance\n        // remains valid; exactly at the deadline it must be rejected.\n        assertTrue(isCurrentVaultAuthContext(context, now + 1, current))\n        assertEquals(\n            false,\n            isCurrentVaultAuthContext(\n                context.copy(expiresAtMonotonicNs = now + 1),\n                now + 1,\n                current,\n            ),\n        )
     }
 
     @Test
