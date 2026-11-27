@@ -379,6 +379,13 @@ mod tests {
         fs::write(&s2, b"candidate-b").unwrap();
         fs::write(d.join(".other.sqstage-1-2"), b"unrelated").unwrap();
         fs::write(d.join("session.sqv.sqstage-1-2"), b"wrong-prefix").unwrap();
+        #[cfg(unix)]
+        {
+            let target = d.join("symlink-target");
+            let link = d.join(".session.sqv.sqstage-symlink");
+            fs::write(&target, b"not a stage candidate").unwrap();
+            std::os::unix::fs::symlink(&target, &link).unwrap();
+        }
 
         let found = discover_staged_files(&final_path).unwrap();
         assert_eq!(found, vec![s1.clone(), s2.clone()]);
