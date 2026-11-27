@@ -465,7 +465,7 @@ mod tests {
     }
 
     #[test]
-    fn ffi_rejects_invalid_configuration_and_event_api_is_explicitly_unsupported() {
+    fn ffi_rejects_invalid_configuration_and_event_round_trip() {
         let mut handle = ptr::null_mut();
         let mut cfg = config();
         cfg.reserved[0] = 1;
@@ -478,21 +478,21 @@ mod tests {
             unsafe { sq_capture_create_v1(&cfg, &mut handle) },
             SqStatusV1::Ok
         );
+        assert_eq!(unsafe { sq_capture_start_v1(handle) }, SqStatusV1::Ok);
         let event = SqCaptureEventV1 {
-            struct_size: 48,
-            event_type: 1,
-            flags: 0,
-            reserved0: 0,
-            event_sequence: 1,
-            monotonic_timestamp_ns: 1,
-            capture_epoch: 1,
-            detail_code: 0,
+            struct_size: core::mem::size_of::<SqCaptureEventV1>() as u32,
+            event_type: 1, flags: 0, reserved0: 0, event_sequence: 1,
+            monotonic_timestamp_ns: 1, capture_epoch: 1, detail_code: 7,
             reserved1: 0,
         };
-        assert_eq!(
-            unsafe { sq_capture_push_event_v1(handle, &event) },
-            SqStatusV1::Unsupported
-        );
+        assert_eq!(unsafe { sq_capture_push_event_v1(handle, &event) }, SqStatusV1::Ok);
+        let mut out = event;
+        out.event_type = 0;
+        assert_eq!(unsafe { sq_capture_read_event_v1(handle, &mut out) }, SqStatusV1::Ok);
+        assert_eq!(out.event_type, event.event_type);
+        assert_eq!(out.detail_code, event.detail_code);
+        assert_eq!(unsafe { sq_capture_request_stop_v1(handle) }, SqStatusV1::Ok);
+        assert_eq!(unsafe { sq_capture_finish_v1(handle) }, SqStatusV1::Ok);
         unsafe { sq_capture_destroy_v1(handle) };
     }
 }
