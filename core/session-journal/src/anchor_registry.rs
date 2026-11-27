@@ -120,7 +120,9 @@ impl<S: JournalSink> AnchorKeyRegistryWriter<S> {
         if self.terminal {
             return Err(AnchorKeyRegistryError::WriterTerminal);
         }
-        let sequence = self.next_sequence.ok_or(AnchorKeyRegistryError::SequenceExhausted)?;
+        let sequence = self
+            .next_sequence
+            .ok_or(AnchorKeyRegistryError::SequenceExhausted)?;
         if self.key_ids.len() >= ANCHOR_KEY_REGISTRY_MAX_RECORDS {
             return Err(AnchorKeyRegistryError::RecordLimitReached);
         }
@@ -143,7 +145,11 @@ impl<S: JournalSink> AnchorKeyRegistryWriter<S> {
             encoded_public_key,
             &self.previous_digest,
         )?;
-        if self.bytes_written.checked_add(bytes.len()).is_none_or(|n| n > ANCHOR_KEY_REGISTRY_MAX_BYTES) {
+        if self
+            .bytes_written
+            .checked_add(bytes.len())
+            .is_none_or(|n| n > ANCHOR_KEY_REGISTRY_MAX_BYTES)
+        {
             return Err(AnchorKeyRegistryError::RegistryTooLarge);
         }
         let record_digest = bytes[bytes.len() - RECORD_DIGEST_BYTES..]
@@ -214,7 +220,10 @@ pub fn verify_anchor_key_registry(bytes: &[u8]) -> AnchorKeyRegistryVerification
             result.error = Some(AnchorKeyRegistryError::LengthOverflow);
             break;
         };
-        if body_len < 84 || body_len > 4 + 2 + 8 + 2 + 4 + 32 + ANCHOR_KEY_ID_BYTES + ANCHOR_KEY_MAX_DER_BYTES + 32 {
+        if body_len < 84
+            || body_len
+                > 4 + 2 + 8 + 2 + 4 + 32 + ANCHOR_KEY_ID_BYTES + ANCHOR_KEY_MAX_DER_BYTES + 32
+        {
             result.status = AnchorKeyRegistryStatus::Corrupt;
             result.error = Some(AnchorKeyRegistryError::InvalidRecord);
             break;
@@ -260,12 +269,18 @@ fn serialize_registry_record(
     previous_digest: &[u8; 32],
 ) -> Result<Vec<u8>, AnchorKeyRegistryError> {
     let id_len = u16::try_from(key_id.len()).map_err(|_| AnchorKeyRegistryError::LengthOverflow)?;
-    let key_len = u32::try_from(public_key.len()).map_err(|_| AnchorKeyRegistryError::LengthOverflow)?;
+    let key_len =
+        u32::try_from(public_key.len()).map_err(|_| AnchorKeyRegistryError::LengthOverflow)?;
     let body_without_digest = 4usize + 2 + 8 + 2 + 4 + 32 + key_id.len() + public_key.len();
-    let body_len = body_without_digest.checked_add(32).ok_or(AnchorKeyRegistryError::LengthOverflow)?;
-    let body_len_u32 = u32::try_from(body_len).map_err(|_| AnchorKeyRegistryError::LengthOverflow)?;
+    let body_len = body_without_digest
+        .checked_add(32)
+        .ok_or(AnchorKeyRegistryError::LengthOverflow)?;
+    let body_len_u32 =
+        u32::try_from(body_len).map_err(|_| AnchorKeyRegistryError::LengthOverflow)?;
     let mut bytes = Vec::new();
-    bytes.try_reserve(body_len + 4).map_err(|_| AnchorKeyRegistryError::AllocationFailed)?;
+    bytes
+        .try_reserve(body_len + 4)
+        .map_err(|_| AnchorKeyRegistryError::AllocationFailed)?;
     bytes.extend_from_slice(&body_len_u32.to_le_bytes());
     bytes.extend_from_slice(ANCHOR_KEY_REGISTRY_MAGIC);
     bytes.extend_from_slice(&ANCHOR_KEY_REGISTRY_VERSION.to_le_bytes());
@@ -292,7 +307,11 @@ fn parse_registry_record(
         return Err(AnchorKeyRegistryError::UnsupportedVersion);
     }
     let sequence = read_u64_le(record, 6);
-    if sequence != previous_sequence.checked_add(1).ok_or(AnchorKeyRegistryError::SequenceExhausted)? {
+    if sequence
+        != previous_sequence
+            .checked_add(1)
+            .ok_or(AnchorKeyRegistryError::SequenceExhausted)?
+    {
         return Err(AnchorKeyRegistryError::SequenceMismatch);
     }
     let id_len = read_u16_le(record, 14) as usize;
@@ -300,8 +319,11 @@ fn parse_registry_record(
     if id_len != ANCHOR_KEY_ID_BYTES || key_len == 0 || key_len > ANCHOR_KEY_MAX_DER_BYTES {
         return Err(AnchorKeyRegistryError::InvalidRecord);
     }
-    let expected_len = 52usize.checked_add(id_len).and_then(|n| n.checked_add(key_len))
-        .and_then(|n| n.checked_add(32)).ok_or(AnchorKeyRegistryError::LengthOverflow)?;
+    let expected_len = 52usize
+        .checked_add(id_len)
+        .and_then(|n| n.checked_add(key_len))
+        .and_then(|n| n.checked_add(32))
+        .ok_or(AnchorKeyRegistryError::LengthOverflow)?;
     if record.len() != expected_len {
         return Err(AnchorKeyRegistryError::InvalidRecord);
     }
@@ -311,7 +333,8 @@ fn parse_registry_record(
     let id_end = 52 + id_len;
     let key_end = id_end + key_len;
     let key_id = std::str::from_utf8(&record[52..id_end])
-        .map_err(|_| AnchorKeyRegistryError::InvalidKeyId)?.to_owned();
+       .map_err(|_| AnchorKeyRegistryError::InvalidKeyId)?
+        .to_owned();
     let public_key = record[id_end..key_end].to_vec();
     if public_key.first() != Some(&0x30) || anchor_public_key_id(&public_key) != key_id {
         return Err(AnchorKeyRegistryError::InvalidPublicKeyEncoding);
@@ -342,17 +365,26 @@ fn is_anchor_key_id(id: &str) -> bool {
     id.len() == ANCHOR_KEY_ID_BYTES
         && id.starts_with(ANCHOR_KEY_ID_PREFIX)
         && id[ANCHOR_KEY_ID_PREFIX.len()..]
-            .bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
 }
 
 fn read_u16_le(bytes: &[u8], offset: usize) -> u16 {
     u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
 }
 fn read_u32_le(bytes: &[u8], offset: usize) -> u32 {
-    u32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("bounded record"))
+    u32::from_le_bytes(
+        bytes[offset..offset + 4]
+            .try_into()
+            .expect("bounded record"),
+    )
 }
 fn read_u64_le(bytes: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes(bytes[offset..offset + 8].try_into().expect("bounded record"))
+    u64::from_le_bytes(
+        bytes[offset..offset + 8]
+            .try_into()
+            .expect("bounded record"),
+    )
 }
 
 #[cfg(test)]
@@ -364,12 +396,18 @@ mod tests {
     struct MemorySink(Vec<u8>);
     impl JournalSink for MemorySink {
         fn append_bytes(&mut self, bytes: &[u8]) -> Result<(), JournalSinkError> {
-            self.0.write_all(bytes).map_err(|_| JournalSinkError::WriteFailed)
+            self.0
+                .write_all(bytes)
+                .map_err(|_| JournalSinkError::WriteFailed)
         }
-        fn sync(&mut self) -> Result<(), JournalSinkError> { Ok(()) }
+        fn sync(&mut self) -> Result<(), JournalSinkError> {
+            Ok(())
+        }
     }
 
-    fn der(seed: u8) -> Vec<u8> { vec![0x30, 0x04, 0x02, 0x02, seed, seed] }
+    fn der(seed: u8) -> Vec<u8> {
+        vec![0x30, 0x04, 0x02, 0x02, seed, seed]
+    }
 
     #[test]
     fn append_verify_resume_and_retain_historical_keys() {
@@ -383,7 +421,8 @@ mod tests {
         assert_eq!(verified.status, AnchorKeyRegistryStatus::Valid);
         assert_eq!(verified.retained_keys.len(), 2);
         assert_eq!(verified.last_sequence, 2);
-        let mut resumed = AnchorKeyRegistryWriter::resume(MemorySink(bytes.clone()), &bytes).unwrap();
+        let mut resumed =
+            AnchorKeyRegistryWriter::resume(MemorySink(bytes.clone()), &bytes).unwrap();
         assert_eq!(resumed.append_key(&der(3)).unwrap().sequence, 3);
     }
 
@@ -393,10 +432,19 @@ mod tests {
         writer.append_key(&der(4)).unwrap();
         let bytes = writer.into_sink().0;
         let mut resumed = AnchorKeyRegistryWriter::resume(MemorySink(bytes.clone()), &bytes).unwrap();
-        assert_eq!(resumed.append_key(&der(4)), Err(AnchorKeyRegistryError::DuplicateKeyId));
+        assert_eq!(
+            resumed.append_key(&der(4)),
+            Err(AnchorKeyRegistryError::DuplicateKeyId)
+        );
         let mut tampered = bytes.clone();
         tampered[60] ^= 0x01;
-        assert_eq!(verify_anchor_key_registry(&tampered).status, AnchorKeyRegistryStatus::Corrupt);
-        assert_eq!(verify_anchor_key_registry(&bytes[..bytes.len()-1]).status, AnchorKeyRegistryStatus::TruncatedTail);
+        assert_eq!(
+            verify_anchor_key_registry(&tampered).status,
+            AnchorKeyRegistryStatus::Corrupt
+        );
+        assert_eq!(
+            verify_anchor_key_registry(&bytes[..bytes.len() - 1]).status,
+            AnchorKeyRegistryStatus::TruncatedTail
+        );
     }
 }
