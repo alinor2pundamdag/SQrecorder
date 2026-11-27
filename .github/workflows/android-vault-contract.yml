@@ -20,6 +20,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: android-vault-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   android-vault:
     runs-on: ubuntu-latest
