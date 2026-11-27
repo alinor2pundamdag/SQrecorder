@@ -211,11 +211,12 @@ impl BoundedPcmQueue {
         Ok(Some((metadata, len)))
     }
 
-
     /// Adds a fixed-size capture event; no heap allocation occurs in this path.
     pub fn push_event(&self, event: CaptureEventMetadata) -> Result<(), CaptureError> {
-        if event.event_type == 0 || event.event_sequence == 0
-            || event.capture_epoch == 0 || event.monotonic_timestamp_ns == 0
+        if event.event_type == 0
+            || event.event_sequence == 0
+            || event.capture_epoch == 0
+            || event.monotonic_timestamp_ns == 0
         {
             return Err(CaptureError::InvalidBlock);
         }
@@ -225,14 +226,18 @@ impl BoundedPcmQueue {
                 self.producer_fault.store(true, Ordering::Release);
                 return Err(CaptureError::QueueContention);
             }
-            Err(std::sync::TryLockError::Poisoned(_)) => return Err(CaptureError::ResourcePoisoned),
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(CaptureError::ResourcePoisoned);
+            }
         };
         if self.producer_fault.load(Ordering::Acquire) {
             inner.status = CaptureStatus::Failed;
             inner.integrity_overflow = true;
             return Err(CaptureError::QueueContention);
         }
-        if inner.status != CaptureStatus::Running { return Err(CaptureError::InvalidState); }
+        if inner.status != CaptureStatus::Running {
+            return Err(CaptureError::InvalidState);
+        }
         if inner.event_count == MAX_CAPTURE_EVENTS {
             inner.status = CaptureStatus::Failed;
             inner.integrity_overflow = true;
@@ -246,10 +251,17 @@ impl BoundedPcmQueue {
     }
 
     pub fn pop_event(&self) -> Result<Option<CaptureEventMetadata>, CaptureError> {
-        let mut inner = self.inner.lock().map_err(|_| CaptureError::ResourcePoisoned)?;
-        if inner.event_count == 0 { return Ok(None); }
+        let mut inner = self
+            .inner
+            .lock()
+            .map_err(|_| CaptureError::ResourcePoisoned)?;
+        if inner.event_count == 0 {
+            return Ok(None);
+        }
         let head = inner.event_head;
-        let event = inner.events[head].take().ok_or(CaptureError::InvalidBlock)?;
+        let event = inner.events[head]
+            .take()
+            .ok_or(CaptureError::InvalidBlock)?;
         inner.event_head = (head + 1) % MAX_CAPTURE_EVENTS;
         inner.event_count -= 1;
         Ok(Some(event))
@@ -415,8 +427,14 @@ mod tests {
     #[test]
     fn capture_events_are_bounded_ordered_and_must_be_drained_before_finish() {
         let queue = BoundedPcmQueue::new(1, 8).unwrap();
-        let event = CaptureEventMetadata { event_type: 1, flags: 0, event_sequence: 1,
-            monotonic_timestamp_ns: 2, capture_epoch: 3, detail_code: 4 };
+        let event = CaptureEventMetadata {
+            event_type: 1,
+            flags: 0,
+            event_sequence: 1,
+            monotonic_timestamp_ns: 2,
+            capture_epoch: 3,
+            detail_code: 4,
+        };
         queue.push_event(event).unwrap();
         queue.request_stop().unwrap();
         assert_eq!(queue.mark_stopped(), Err(CaptureError::InvalidState));
@@ -428,15 +446,29 @@ mod tests {
     fn event_overflow_fails_closed_and_preserves_queue_integrity_signal() {
         let queue = BoundedPcmQueue::new(1, 8).unwrap();
         for sequence in 1..=MAX_CAPTURE_EVENTS as u64 {
-            queue.push_event(CaptureEventMetadata { event_type: 1, flags: 0,
-                event_sequence: sequence, monotonic_timestamp_ns: sequence,
-                capture_epoch: 1, detail_code: 0 }).unwrap();
+            queue
+                .push_event(CaptureEventMetadata {
+                    event_type: 1,
+                    flags: 0,
+                    event_sequence: sequence,
+                    monotonic_timestamp_ns: sequence,
+                    capture_epoch: 1,
+                    detail_code: 0,
+                })
+                .unwrap();
         }
-        assert_eq!(queue.push_event(CaptureEventMetadata { event_type: 1, flags: 0,
-            event_sequence: 65, monotonic_timestamp_ns: 65, capture_epoch: 1,
-            detail_code: 0 }), Err(CaptureError::QueueOverflow));
+        assert_eq!(
+            queue.push_event(CaptureEventMetadata {
+                event_type: 1,
+                flags: 0,
+                event_sequence: 65,
+                monotonic_timestamp_ns: 65,
+                capture_epoch: 1,
+                detail_code: 0
+            }),
+            Err(CaptureError::QueueOverflow)
+        );
         assert_eq!(queue.status().unwrap(), CaptureStatus::Failed);
         assert!(queue.integrity_overflow().unwrap());
     }
-
 }
