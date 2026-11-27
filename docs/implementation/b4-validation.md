@@ -113,3 +113,34 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - **Execution status:** The GitHub Actions connector returned an empty workflow-run list and no combined commit statuses for the exact PR #2 head above. CI was not observed to start for this latest branch update; do not mark those new checks as passed. No local Rust/Kotlin toolchain is available in the current execution container, and outbound GitHub cloning is blocked, so local build execution was unavailable.
 - Android Run #36 PASS remains verified on PR #3 commit `5a11193d2dc17d56af2edd4c35bb11bab20eb232`, not this newer PR #2 head.
 - Physical Android/iOS/watchOS/Windows device acceptance was not performed in this session. B4 remains **NOT 100% accepted**.
+
+
+## Verification and integration checkpoint — 2026-11-27 10:45 UTC
+
+### Exact source
+- B4 PR #2 head before this evidence update: `fc4950b3ce80125ec6a9183df37454d36212ee8b` (branch `b4-hardening-approved-foundation`).
+- PR #2: draft/open/unmerged. PR #3: draft/open/unmerged. Merge is intentionally prohibited pending all gates.
+
+### Fixes completed in this continuation
+- Corrected both CI pull-request path filters so changes under `shared/capability-system/**` trigger Android and cross-platform contract workflows; Android workflow checkout now uses `persist-credentials: false`.
+- Enabled Android-KMP host test compilations in both `:shared:domain` and `:shared:capability-system`. Official Android-KMP docs state host/device tests are disabled by default unless explicitly enabled; previously the domain build emitted that warning. This fixes test-source activation, not yet a CI pass.
+- Integrated PR #3's anchor verifier and tests into the B4 branch without merging either PR. The Android Run #36 PASS was executed on PR #3's merge ref `7053602107e085990209d33d577d9c60516d2d22` (PR3 head `5a11193d2dc17d56af2edd4c35bb11bab20eb232` + old base `2c42593cb040d5a36a92a718997258ebcbf7d799`); it did **not** validate the latest B4 branch head.
+- Added Android Keystore retained-alias resolver: enumerates numbered historical signer aliases and matches key IDs by public-key SHA-256 fingerprint; missing/malformed records fail closed, and returned key bytes are defensive copies. Added host tests. This is an Android Keystore retained-key lookup implementation, not yet an OS-independent append-only public-key registry or signed registry export/restore mechanism.
+
+### Verified CI / not verified
+- Android Run #36: PASS for the PR #3 merge-ref source above; host verifier, native ARM64/x86_64 build, 16 KB ELF LOAD alignment, and API 36 emulator Vault bridge all succeeded.
+- Android Run #32: FAIL before verifier repair; host tests failed on mocked `android.util.Base64` portability at the verifier tests. Run #36 passed the repaired merge ref.
+- Latest B4 branch commits after Run #36 include new target/test wiring and retained-key resolver. The GitHub connector returns only PR-triggered workflow runs for a commit and reports no run/status for the current branch head. These newest changes are **NOT CI VERIFIED**; do not transfer Run #36 PASS to them.
+
+### Remaining acceptance blockers — no gate waived
+1. Exact latest B4 head: Rust fmt/metadata/workspace/Clippy, Android native/ELF/AAR + host tests, API 36 emulator bridge, and new cross-platform matrix must all execute and pass.
+2. Anchor key registry: Android retained Keystore alias resolver added; cross-platform durable append-only registry semantics, export/restore/history integrity, and rotation/invalidation/recovery integration remain.
+3. Cross-platform Rust anchor verifier and Android↔Rust golden vectors remain.
+4. Journal anchor creation/verification integrated with durable journal recovery and signed checkpoint policy remains.
+5. Crash-cut + ENOSPC/storage fault matrix and recovery evidence remain.
+6. SQVE v2: common metadata contract exists; canonical binary parser/writer, provider crypto implementations, authenticated header, ECDH/RSA suite test vectors, v1→v2 migration/recovery, fuzz/tamper vectors, and independent security review remain. SQVE v1 is unchanged.
+7. Declared KMP targets are not installable product builds yet: Android/Wear app shell, iOS/iPadOS/watchOS shell, Windows/macOS/Linux/JVM packaging/adapters, permissions/background capture, auth/key providers, audio I/O, and target-specific tests need implementation. Target declarations alone do not mean universal device compatibility.
+8. Physical acceptance required: hardware-backed Android Keystore/auth/invalidation/rotation, locked encrypt-only, authenticated unwrap/playback/export, real crash/reboot/storage exhaustion, and physical 16 KB page evidence. Add iOS/watchOS/Windows device/provider tests as those platforms reach their supported implementation tier.
+9. Final checklist and evidence must be regenerated against one exact integrated commit after all required gates pass.
+
+**B4 acceptance remains IN PROGRESS / NOT 100%.**
