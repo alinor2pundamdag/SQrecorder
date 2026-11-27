@@ -7,6 +7,7 @@ members = [
     "core/vault-crypto",
     "core/session-journal",
     "core/durable-store",
+    "core/windows-durable-rename",
 ]
 
 [workspace.package]
