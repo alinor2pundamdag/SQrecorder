@@ -127,7 +127,13 @@ mod tests {
             VaultError::AuthenticationFailed
         );
         assert_eq!(
-            decrypt_file(&w, &encrypted.envelope, &encrypted.wrapped_dek, b"session-8/file-2").unwrap_err(),
+            decrypt_file(
+                &w,
+                &encrypted.envelope,
+                &encrypted.wrapped_dek,
+                b"session-8/file-2"
+            )
+            .unwrap_err(),
             VaultError::AuthenticationFailed
         );
     }
@@ -138,7 +144,13 @@ mod tests {
         for payload in [&[][..], &[0, 0xFF, 0x80, 1][..]] {
             let encrypted = encrypt_file(&w, payload, b"nonempty-context").unwrap();
             assert_eq!(
-                decrypt_file(&w, &encrypted.envelope, &encrypted.wrapped_dek, b"nonempty-context").unwrap(),
+                decrypt_file(
+                    &w,
+                    &encrypted.envelope,
+                    &encrypted.wrapped_dek,
+                    b"nonempty-context"
+                )
+                .unwrap(),
                 payload
             );
         }
