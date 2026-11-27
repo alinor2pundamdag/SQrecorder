@@ -431,7 +431,8 @@ mod tests {
         let mut writer = AnchorKeyRegistryWriter::new(MemorySink::default());
         writer.append_key(&der(4)).unwrap();
         let bytes = writer.into_sink().0;
-        let mut resumed = AnchorKeyRegistryWriter::resume(MemorySink(bytes.clone()), &bytes).unwrap();
+        let mut resumed =
+            AnchorKeyRegistryWriter::resume(MemorySink(bytes.clone()), &bytes).unwrap();
         assert_eq!(
             resumed.append_key(&der(4)),
             Err(AnchorKeyRegistryError::DuplicateKeyId)
