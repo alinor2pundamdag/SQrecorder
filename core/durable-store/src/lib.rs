@@ -332,7 +332,11 @@ mod tests {
                 || Ok(()),
             );
             assert!(result.is_err());
-            assert_eq!(fs::read(&final_path).unwrap(), b"old", "fault point: {point:?}");
+            assert_eq!(
+                fs::read(&final_path).unwrap(),
+                b"old",
+                "fault point: {point:?}"
+            );
             fs::remove_dir_all(d).unwrap();
         }
     }
