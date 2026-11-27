@@ -582,9 +582,7 @@ mod jni_vault {
             }
         };
         let mut handle = 0u64;
-        let status = unsafe {
-            sq_vault_key_import_v1(dek.as_ptr(), dek.len() as u32, &mut handle)
-        };
+        let status = unsafe { sq_vault_key_import_v1(dek.as_ptr(), dek.len() as u32, &mut handle) };
         dek.zeroize();
         if !status_ok(status) {
             throw_state(&mut env, "native Vault DEK import failed");
@@ -714,7 +712,10 @@ mod jni_vault {
         tag.zeroize();
         if !status_ok(status) {
             data.zeroize();
-            throw_state(&mut env, "native Vault chunk authentication/decryption failed");
+            throw_state(
+                &mut env,
+                "native Vault chunk authentication/decryption failed",
+            );
             return ptr::null_mut();
         }
         let result = env.byte_array_from_slice(&data);
