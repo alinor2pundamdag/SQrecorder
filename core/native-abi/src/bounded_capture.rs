@@ -43,7 +43,9 @@ struct Slot {
 }
 
 impl Drop for Slot {
-    fn drop(&mut self) { self.bytes.zeroize(); }
+    fn drop(&mut self) {
+        self.bytes.zeroize();
+    }
 }
 
 struct Inner {
