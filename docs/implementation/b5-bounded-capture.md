@@ -47,3 +47,19 @@
 - Android Run #145 (`46011462549`) was executing against earlier head `d2f3ae9d6fc3c34cc03537b3df338149e4889891`; it includes the first metadata tests that exposed native-library eager loading. The load-on-instance correction is at `935a3bbea544b5eef55f15b9889dd36e71b90a8f`.
 - Android exact-head Run #146 (`46011685760`) is pending/queued at this checkpoint. Its result is required before claiming the Kotlin metadata fix passes.
 - Cross-platform Run #80 (`46011685808`) is in progress on the exact pre-evidence head; Rust jobs passed, macOS/Windows KMP jobs remain active.
+
+
+## Authoritative latest re-verification — 2026-11-27 22:08 +08:00
+
+This section supersedes earlier "JNI not yet implemented" statements above.
+
+- PR #5 latest inspected head: `316b1d2ebf713f3951eeae784ba24317ca414171`; still draft/open/unmerged.
+- Kotlin `JniCaptureQueue`, native Rust JNI bridge `capture_jni.rs`, metadata decoders/tests, C/C++ ABI layout contract tests, and the bounded 64-event ring are now present in PR #5. Rust JNI bridge exposes PCM submit/read, event push/read, stop/drain, state, and destroy. The previous documentation claim that no JNI/Kotlin adapter exists is stale.
+- Rust contract Run #128 (`46013102032`) **PASS on the exact latest head**: lockfile, rustfmt, C/C++ ABI layout compile+execute, workspace tests, and Clippy.
+- Cross-platform Run #87 (`46013102042`) is not complete: Linux KMP/Rust jobs passed; Windows KMP was in progress; macOS KMP and Rust jobs were queued; Windows Rust job passed compile/tests (Clippy skipped by workflow condition). Do not call the matrix green yet.
+- Android Vault Run #153 (`46013102060`) is pending and has no provisioned job in latest poll. Earlier Android run results are not an exact-head pass.
+- **Integration remains incomplete:** `CaptureForegroundService.kt` on PR #4 still reads from Android `AudioRecord` and writes plaintext PCM directly to a `.wav.part` file. It does not instantiate/use `JniCaptureQueue`; consequently the bounded native queue is not on the actual capture path. This must be fixed before release.
+- Durable-store source exists and has promotion/recovery primitives, but the complete recording pipeline does not yet connect capture → bounded queue → canonical WAV → Vault-encrypted chunks/file → SQJ signed journal/checkpoint → durable promotion → startup recovery. Existing stage/promote code alone does not prove end-to-end crash safety.
+- The event ring is implemented at the native ABI slice; event persistence into SQJ and durable recovery is still outstanding.
+- Release-critical remaining work: integrate actual AudioRecord producer/consumer and backpressure/overflow stop; remove plaintext recording path; canonical WAV writer and encrypted Vault integration; journal event/finalization/hash and idempotency; durable store promotion/reconciliation with encrypted artifact; crash-cut/ENOSPC/force-stop/recovery tests; UI recovery/integrity reporting; complete exact-head Android + cross-platform CI and review.
+- Physical-device testing is intentionally deferred until these software and security gates are complete. CI/emulator is not a substitute for the eventual physical-device matrix.
