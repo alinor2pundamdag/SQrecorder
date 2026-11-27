@@ -49,6 +49,7 @@ pub enum JournalError {
     InvalidRecord,
     InvalidPayloadJson,
     DuplicateJsonKey,
+    NonCanonicalPayload,
     PayloadTooLarge,
     PayloadSchemaMismatch,
     SequenceMismatch,
@@ -300,6 +301,11 @@ fn validate_payload(payload: &[u8], expected_event_code: u16) -> Result<(), Jour
     if has_duplicate_json_keys(payload) {
         return Err(JournalError::DuplicateJsonKey);
     }
+    let canonical =
+        serde_json_canonicalizer::to_vec(&value).map_err(|_| JournalError::InvalidPayloadJson)?;
+    if canonical != payload {
+        return Err(JournalError::NonCanonicalPayload);
+    }
     let object = value
         .as_object()
         .ok_or(JournalError::PayloadSchemaMismatch)?;
@@ -400,6 +406,7 @@ pub enum JournalVerificationError {
     InvalidPayloadLength,
     InvalidUtf8Payload,
     DuplicateJsonKey,
+    NonCanonicalPayload,
     PayloadTooLarge,
     PayloadSchemaMismatch,
     SequenceMismatch,
@@ -567,6 +574,15 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
             return verification(
                 JournalVerificationStatus::Corrupt,
                 Some(JournalVerificationError::DuplicateJsonKey),
+                offset,
+                expected_sequence - 1,
+                previous_digest,
+            );
+        }
+        if payload_validation == Err(JournalError::NonCanonicalPayload) {
+            return verification(
+                JournalVerificationStatus::Corrupt,
+                Some(JournalVerificationError::NonCanonicalPayload),
                 offset,
                 expected_sequence - 1,
                 previous_digest,
@@ -843,6 +859,25 @@ mod tests {
             JournalVerificationStatus::TruncatedTail
         );
         assert_eq!(verification.valid_prefix_bytes, 0);
+    }
+
+    #[test]
+    fn writer_rejects_non_jcs_payload_bytes() {
+        let mut writer = JournalWriter::new(MemorySink::default());
+        let mut reordered = input(1, [0; 32]);
+        reordered.canonical_payload = br#"{"schemaVersion":1,"eventCode":2}"#;
+        assert_eq!(
+            writer.append(reordered),
+            Err(JournalError::NonCanonicalPayload)
+        );
+
+        let mut noncanonical_number = input(1, [0; 32]);
+        noncanonical_number.canonical_payload =
+            br#"{"eventCode":2,"rate":1.0,"schemaVersion":1}"#;
+        assert_eq!(
+            writer.append(noncanonical_number),
+            Err(JournalError::NonCanonicalPayload)
+        );
     }
 
     #[test]
