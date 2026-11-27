@@ -66,6 +66,7 @@ public class CaptureForegroundService : Service() {
   var active: AudioRecord? = null
   var partial: File? = null
   var success = false
+  var pump: CaptureQueuePump? = null
   var session = SessionSnapshot.create(SessionId(java.util.UUID.randomUUID().toString()), SystemClock.elapsedRealtimeNanos())
   fun reduce(event: SessionEvent) {
    when (val result = SessionLifecycle.reduce(session, event)) {
