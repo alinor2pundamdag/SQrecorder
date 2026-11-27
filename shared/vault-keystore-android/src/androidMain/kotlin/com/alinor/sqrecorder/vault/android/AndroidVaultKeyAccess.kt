@@ -27,6 +27,7 @@ import javax.security.auth.x500.X500Principal
 /** The native bridge retains the DEK in Rust-owned zeroizing memory. */
 public interface VaultNativeKeyBridge {
     public fun generateFileKeyHandle(): VaultFileKeyHandle
+    public fun destroyFileKeyHandle(handle: VaultFileKeyHandle)
     /** A transient 32-byte copy, zeroized by the caller immediately after wrap. */
     public fun copyFileKeyForWrapping(handle: VaultFileKeyHandle): ByteArray
     /** Copies the authenticated DEK into Rust-owned memory; caller clears its input. */
