@@ -20,3 +20,9 @@
 - C ABI is implemented and CI-tested, but there is no JNI capture bridge or Kotlin adapter wired into Android `AudioRecord` yet. The Android PR #4 service still writes plaintext app-private WAV directly and does not use this queue; this is a release-blocking security/integration gap.
 - Canonical Rust WAV writing, authenticated Vault chunk encryption, SQJ event/checkpoint writes, durable-store promotion/reconciliation, capture-recovery UX, and crash/ENOSPC end-to-end tests remain open.
 - Queue producer contention is explicitly fail-closed; this is not a measured real-time audio certification. Event ABI returns unsupported rather than pretending to persist events.
+
+## Latest Android workflow status
+
+- Android Vault contract Run #117 (`46008909415`) was cancelled before a job was provisioned on source head `9b5507ebf5da893741ad1207365cbfeea602b4a0`; it is **not a pass**.
+- The earlier Android Run #97 passed on the earlier bounded-queue-only SHA, before the operational C ABI and contention/zeroization hardening. It is historical and does not validate this integrated source revision.
+- Triggering a fresh Android contract run on the updated evidence/source commit is required before this B5 slice has a current Android CI attestation.
