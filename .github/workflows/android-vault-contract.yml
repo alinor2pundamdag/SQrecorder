@@ -69,7 +69,7 @@ jobs:
         shell: bash
         run: |
           for attempt in 1 2 3; do
-            if gradle :shared:capability-system:allTests :shared:vault-keystore-android:build --no-daemon --max-workers=2 2>&1 | tee "$RUNNER_TEMP/gradle-vault-build.log"; then
+            if gradle :shared:domain:allTests :shared:capability-system:allTests :shared:vault-keystore-android:build --no-daemon --max-workers=2 2>&1 | tee "$RUNNER_TEMP/gradle-vault-build.log"; then
               break
             fi
             if ! grep -Eq "Could not find|Could not GET|HTTP (429|5[0-9][0-9])|status code (429|5[0-9][0-9])" "$RUNNER_TEMP/gradle-vault-build.log"; then
