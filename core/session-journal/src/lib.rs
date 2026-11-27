@@ -588,7 +588,9 @@ mod tests {
         let mut writer = JournalWriter::new(MemorySink::default());
         writer.append(input(1, [0; 32])).unwrap();
         let mut bytes = writer.into_sink().bytes;
-        bytes[4 + 76] ^= 1;
+        // Mutate a schema-neutral JSON value while keeping the payload valid.
+        // The verifier should reach the hash check, not fail schema validation.
+        bytes[4 + 76 + 16] ^= 1; // captureEpoch: "1" -> "0"
         assert_eq!(
             verify_journal(&bytes).error,
             Some(JournalVerificationError::DigestMismatch)
