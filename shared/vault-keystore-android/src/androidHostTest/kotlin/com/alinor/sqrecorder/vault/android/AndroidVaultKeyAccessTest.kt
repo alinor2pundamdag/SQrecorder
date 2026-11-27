@@ -22,7 +22,7 @@ class AndroidVaultKeyAccessTest {
 
         assertEquals(first, second)
         assertEquals(32, first.substringAfterLast('-').length)
-        assertNotEquals(publicKey.encoded.toString(), first)
+        assertEquals(true, first.matches(Regex("rsa-oaep-sha256-v1-[0-9a-f]{32}")))
     }
 
     @Test
