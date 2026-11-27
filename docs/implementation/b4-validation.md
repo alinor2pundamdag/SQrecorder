@@ -189,3 +189,12 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 8. Final B4 acceptance checklist and PR #2 status remain blocked until all applicable CI + physical gates pass. Keep both PRs draft/open/unmerged.
 
 **Final verdict at this checkpoint: B4 = IN PROGRESS / NOT 100% accepted.**
+
+
+## Current repository re-verification checkpoint — 2026-11-27
+
+- PR #2 remains open/draft/unmerged at source head `6759dce49c2bd13ee4665560833e5d5d6492e23a`.
+- PR #3 remains open/draft/unmerged and tracking-only; the anchor verifier source is already integrated in B4. No duplicate cherry-pick/merge action is needed.
+- Historical GitHub Actions jobs inspected during this checkpoint were green: Rust run `45987953578`, Android Vault run `45987953623`, and six-job cross-platform run `45987953672`. Their job conclusions were success; however, the commit-run lookup did **not** associate a fresh run with the exact current B4 source SHA. Therefore these are historical green evidence, not a fresh exact-head attestation.
+- No new B4 source defect was established from the present repository read. The release blockers listed above remain real implementation/security gates—not checklist-only items.
+- This evidence revision requires its own exact-commit CI association before it can be treated as final evidence. Do not mark B4 complete or release-ready based on historical green jobs.
