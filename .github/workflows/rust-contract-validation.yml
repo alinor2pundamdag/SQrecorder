@@ -10,6 +10,8 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - core/**
+      - protocols/native-abi/**
+      - tests/contract/**
       - shared/domain/**
       - shared/capability-system/**
       - .github/workflows/rust-contract-validation.yml
@@ -27,6 +29,8 @@ on:
       - Cargo.lock
       - rust-toolchain.toml
       - core/**
+      - protocols/native-abi/**
+      - tests/contract/**
       - .github/workflows/rust-contract-validation.yml
       - docs/architecture/**
       - docs/decisions/**
