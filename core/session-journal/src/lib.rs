@@ -955,8 +955,7 @@ mod tests {
         writer.append(input(1, [0; 32])).unwrap();
         let mut bytes = writer.into_sink().bytes;
 
-        let noncanonical =
-            br#"{"eventCode":2,"captureEpoch":"1","schemaVersion":1}"#;
+        let noncanonical = br#"{"eventCode":2,"captureEpoch":"1","schemaVersion":1}"#;
         let payload_start = 4 + 76;
         let payload_end = payload_start + noncanonical.len();
         assert_eq!(bytes[payload_start..payload_end].len(), noncanonical.len());
