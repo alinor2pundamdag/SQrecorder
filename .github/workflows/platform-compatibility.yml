@@ -35,7 +35,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: platform-contracts-${{ github.ref }}
+  group: platform-contracts-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
