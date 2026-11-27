@@ -11,6 +11,11 @@
 - Android KMP adapter source, auth-epoch validation, explicit key rotation/invalidation handling, P-256 journal-anchor signing, domain-separated signed preimage, host crypto tests.
 - Android native build script now cross-compiles arm64-v8a + x86_64 and verifies 16 KB LOAD alignment before packaging.
 
+## Latest hardening delta
+
+- Android Vault unwrap and chunk decrypt now share the same monotonic auth-context verifier: expiry, revocation/epoch, and the maximum 30-second authorization window are enforced on both paths.
+- Added host tests for exact-window acceptance, overlong authorization rejection, revoked epochs, and expired contexts. Commit: `91b89fa7ab3bb5ab40dc7d146f47ae4ff3db7017` (implementation), `b017a778f0653dc7934a6d797d5cf91b9810045f` (tests).
+
 ## Verification
 
 - Rust **Run #26 PASS**: workspace tests and Clippy `-D warnings`; JNI/C ABI compile + opaque-handle/chunk roundtrip/tamper tests. Exact Rust source SHA: `b6ca43124ec1ed9cf2a49e1090dc051a73ad9e06`.
