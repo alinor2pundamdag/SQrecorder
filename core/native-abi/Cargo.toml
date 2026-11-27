@@ -7,8 +7,9 @@ license.workspace = true
 rust-version.workspace = true
 
 [lib]
-crate-type = ["rlib", "staticlib"]
+crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
 sqrec-vault-crypto = { path = "../vault-crypto" }
 zeroize = { version = "=1.9.2", default-features = false }
+jni = { version = "=0.21.1", default-features = false }

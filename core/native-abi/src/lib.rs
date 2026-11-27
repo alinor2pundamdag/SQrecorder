@@ -491,3 +491,239 @@ mod vault_ffi {
         }
     }
 }
+
+/// JNI entry points used by the Android KMP Vault adapter. The Java/Kotlin
+/// arrays are copied to native memory, consumed by the C ABI, then zeroized.
+mod jni_vault {
+    use super::vault_ffi::*;
+    use jni::{
+        JNIEnv,
+        objects::{JByteArray, JObject},
+        sys::{jbyteArray, jint, jlong},
+    };
+    use std::ptr;
+    use zeroize::Zeroize;
+
+    fn throw_state(env: &mut JNIEnv, message: &str) {
+        let _ = env.throw_new("java/lang/IllegalStateException", message);
+    }
+
+    fn status_ok(status: super::SqStatusV1) -> bool {
+        status == super::SqStatusV1::Ok
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_com_alinor_sqrecorder_vault_android_JniVaultNativeKeyBridge_nativeCreateFileKeyHandle(
+        mut env: JNIEnv,
+        _this: JObject,
+    ) -> jlong {
+        let mut handle = 0u64;
+        let status = unsafe { sq_vault_key_create_v1(&mut handle) };
+        if !status_ok(status) {
+            throw_state(&mut env, "native Vault key creation failed");
+            return 0;
+        }
+        handle as jlong
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_com_alinor_sqrecorder_vault_android_JniVaultNativeKeyBridge_nativeDestroyFileKeyHandle(
+        _env: JNIEnv,
+        _this: JObject,
+        handle: jlong,
+    ) -> jint {
+        unsafe { sq_vault_key_destroy_v1(handle as u64) as jint }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_com_alinor_sqrecorder_vault_android_JniVaultNativeKeyBridge_nativeCopyFileKeyForWrapping(
+        mut env: JNIEnv,
+        _this: JObject,
+        handle: jlong,
+    ) -> jbyteArray {
+        let mut dek = [0u8; DEK_BYTES];
+        let mut written = 0u32;
+        let status = unsafe {
+            sq_vault_key_copy_for_wrap_v1(
+                handle as u64,
+                dek.as_mut_ptr(),
+                dek.len() as u32,
+                &mut written,
+            )
+        };
+        if !status_ok(status) || written as usize != DEK_BYTES {
+            dek.zeroize();
+            throw_state(&mut env, "native Vault DEK wrap-copy failed");
+            return ptr::null_mut();
+        }
+        let result = env.byte_array_from_slice(&dek);
+        dek.zeroize();
+        match result {
+            Ok(array) => array.into_raw(),
+            Err(_) => {
+                throw_state(&mut env, "JNI DEK byte-array allocation failed");
+                ptr::null_mut()
+            }
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_com_alinor_sqrecorder_vault_android_JniVaultNativeKeyBridge_nativeImportUnwrappedFileKey(
+        mut env: JNIEnv,
+        _this: JObject,
+        input: JByteArray<'_>,
+    ) -> jlong {
+        let mut dek = match env.convert_byte_array(input) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                throw_state(&mut env, "JNI DEK input conversion failed");
+                return 0;
+            }
+        };
+        let mut handle = 0u64;
+        let status = unsafe {
+            sq_vault_key_import_v1(dek.as_ptr(), dek.len() as u32, &mut handle)
+        };
+        dek.zeroize();
+        if !status_ok(status) {
+            throw_state(&mut env, "native Vault DEK import failed");
+            return 0;
+        }
+        handle as jlong
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_com_alinor_sqrecorder_vault_android_JniVaultNativeKeyBridge_nativeEncryptChunk(
+        mut env: JNIEnv,
+        _this: JObject,
+        handle: jlong,
+        nonce_array: JByteArray<'_>,
+        aad_array: JByteArray<'_>,
+        plaintext_array: JByteArray<'_>,
+    ) -> jbyteArray {
+        let nonce = match env.convert_byte_array(nonce_array) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                throw_state(&mut env, "JNI nonce conversion failed");
+                return ptr::null_mut();
+            }
+        };
+        let aad = match env.convert_byte_array(aad_array) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                throw_state(&mut env, "JNI AAD conversion failed");
+                return ptr::null_mut();
+            }
+        };
+        let mut data = match env.convert_byte_array(plaintext_array) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                throw_state(&mut env, "JNI plaintext conversion failed");
+                return ptr::null_mut();
+            }
+        };
+        if nonce.len() != GCM_NONCE_BYTES {
+            data.zeroize();
+            throw_state(&mut env, "invalid Vault chunk nonce length");
+            return ptr::null_mut();
+        }
+        let mut tag = [0u8; GCM_TAG_BYTES];
+        let status = unsafe {
+            sq_vault_encrypt_chunk_v1(
+                handle as u64,
+                nonce.as_ptr(),
+                nonce.len() as u32,
+                aad.as_ptr(),
+                aad.len() as u32,
+                data.as_mut_ptr(),
+                data.len() as u32,
+                tag.as_mut_ptr(),
+                tag.len() as u32,
+            )
+        };
+        if !status_ok(status) {
+            data.zeroize();
+            tag.zeroize();
+            throw_state(&mut env, "native Vault chunk encryption failed");
+            return ptr::null_mut();
+        }
+        data.extend_from_slice(&tag);
+        tag.zeroize();
+        let result = env.byte_array_from_slice(&data);
+        data.zeroize();
+        match result {
+            Ok(array) => array.into_raw(),
+            Err(_) => {
+                throw_state(&mut env, "JNI ciphertext allocation failed");
+                ptr::null_mut()
+            }
+        }
+    }
+
+    #[unsafe(no_mangle)]
+    pub extern "system" fn Java_com_alinor_sqrecorder_vault_android_JniVaultNativeKeyBridge_nativeDecryptChunk(
+        mut env: JNIEnv,
+        _this: JObject,
+        handle: jlong,
+        nonce_array: JByteArray<'_>,
+        aad_array: JByteArray<'_>,
+        ciphertext_array: JByteArray<'_>,
+    ) -> jbyteArray {
+        let nonce = match env.convert_byte_array(nonce_array) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                throw_state(&mut env, "JNI nonce conversion failed");
+                return ptr::null_mut();
+            }
+        };
+        let aad = match env.convert_byte_array(aad_array) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                throw_state(&mut env, "JNI AAD conversion failed");
+                return ptr::null_mut();
+            }
+        };
+        let mut combined = match env.convert_byte_array(ciphertext_array) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                throw_state(&mut env, "JNI ciphertext conversion failed");
+                return ptr::null_mut();
+            }
+        };
+        if nonce.len() != GCM_NONCE_BYTES || combined.len() < GCM_TAG_BYTES {
+            combined.zeroize();
+            throw_state(&mut env, "invalid Vault ciphertext or nonce length");
+            return ptr::null_mut();
+        }
+        let mut tag = combined.split_off(combined.len() - GCM_TAG_BYTES);
+        let mut data = combined;
+        let status = unsafe {
+            sq_vault_decrypt_chunk_v1(
+                handle as u64,
+                nonce.as_ptr(),
+                nonce.len() as u32,
+                aad.as_ptr(),
+                aad.len() as u32,
+                data.as_mut_ptr(),
+                data.len() as u32,
+                tag.as_ptr(),
+                tag.len() as u32,
+            )
+        };
+        tag.zeroize();
+        if !status_ok(status) {
+            data.zeroize();
+            throw_state(&mut env, "native Vault chunk authentication/decryption failed");
+            return ptr::null_mut();
+        }
+        let result = env.byte_array_from_slice(&data);
+        data.zeroize();
+        match result {
+            Ok(array) => array.into_raw(),
+            Err(_) => {
+                throw_state(&mut env, "JNI plaintext allocation failed");
+                ptr::null_mut()
+            }
+        }
+    }
+}
