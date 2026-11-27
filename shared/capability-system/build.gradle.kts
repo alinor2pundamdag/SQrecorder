@@ -13,6 +13,8 @@ kotlin {
     mingwX64()
     linuxX64()
     android {
+        // The Android-KMP plugin disables host tests unless explicitly enabled.
+        withHostTest {}
         namespace = "com.alinor.sqrecorder.capability"
         compileSdk = 36
         minSdk = 23
