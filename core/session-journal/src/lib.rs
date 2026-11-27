@@ -3,6 +3,13 @@
 
 use sha2::{Digest, Sha256};
 
+pub mod anchor_registry;
+pub use anchor_registry::{
+    AnchorKeyRegistryError, AnchorKeyRegistryStatus, AnchorKeyRegistryVerification,
+    AnchorKeyRegistryWriter, RetainedAnchorPublicKey, anchor_public_key_id,
+    verify_anchor_key_registry,
+};
+
 pub const JOURNAL_MAGIC: &[u8; 4] = b"SQJR";
 pub const JOURNAL_DIGEST_DOMAIN: &[u8; 4] = b"SQJ1";
 pub const JOURNAL_VERSION: u16 = 1;
