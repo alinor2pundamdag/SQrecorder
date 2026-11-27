@@ -165,7 +165,9 @@ pub unsafe extern "C" fn sq_capture_submit_pcm_v1(
             .map_err(|error| match error {
                 crate::CaptureError::QueueOverflow => SqStatusV1::Resource,
                 crate::CaptureError::InvalidState => SqStatusV1::InvalidState,
-                crate::CaptureError::ResourcePoisoned | crate::CaptureError::QueueContention => SqStatusV1::Resource,
+                crate::CaptureError::ResourcePoisoned | crate::CaptureError::QueueContention => {
+                    SqStatusV1::Resource
+                }
                 _ => SqStatusV1::InvalidArgument,
             })
     })
