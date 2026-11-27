@@ -98,8 +98,11 @@ public class CaptureForegroundService : Service() {
    recorder = active
    val directory = File(filesDir, "recordings")
    check(directory.exists() || directory.mkdirs()) { "Private recordings directory unavailable" }
-   partial = File(directory, "capture-" + System.currentTimeMillis() + ".wav.part")
+   // UUID plus explicit truncate prevents timestamp collisions from reusing
+   // stale tail bytes in a previous .part file.
+   partial = File(directory, "capture-" + java.util.UUID.randomUUID() + ".wav.part")
    output = RandomAccessFile(partial, "rw")
+   output!!.setLength(0L)
    output!!.write(PcmWavHeader.create(rate, 0L))
    active.startRecording()
    check(active.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord start failed" }
