@@ -58,6 +58,7 @@ public enum class VaultKeyAccessFailure {
     INVALID_WRAP,
     CRYPTO_FAILURE,
     NATIVE_BRIDGE_FAILURE,
+    UNSUPPORTED_PLATFORM,
 }
 
 public class VaultKeyAccessException(
@@ -179,11 +180,17 @@ public class AndroidVaultKeyAccess(
     }
 
     private fun generateWrappingKey(alias: String) {
+        // Android Keystore exposed configurable MGF1 digests in API 35.
+        // SQVE v1 locks MGF1=SHA-256; never downgrade to the historical SHA-1 default.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.UNSUPPORTED_PLATFORM)
+        }
         try {
             val generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, ANDROID_KEYSTORE)
             val builder = KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_DECRYPT)
                 .setKeySize(RSA_KEY_BITS)
                 .setDigests(KeyProperties.DIGEST_SHA256)
+                .setMgf1Digests(KeyProperties.DIGEST_SHA256)
                 .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_RSA_OAEP)
                 .setUserAuthenticationRequired(true)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -249,7 +256,7 @@ public class AndroidVaultKeyAccess(
     private companion object {
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val ALIAS_PREFIX = "sqrec.vault.rsa-oaep-sha256.v1."
-        const val OAEP_TRANSFORMATION = "RSA/ECB/OAEPWithSHA-256AndMGF1Padding"
+        const val OAEP_TRANSFORMATION = "RSA/ECB/OAEPPadding"
         const val RSA_KEY_BITS = 3072
         const val DEK_BYTES = 32
         const val AUTH_WINDOW_SECONDS = 30
