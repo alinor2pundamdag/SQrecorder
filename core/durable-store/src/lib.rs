@@ -213,13 +213,15 @@ mod tests {
         let d = td();
         let f = d.join("final");
         fs::write(&f, b"old").unwrap();
-        assert!(durable_promote(
-            &f,
-            b"bad",
-            |_| Err(StoreError::VerificationFailed),
-            || Ok(())
-        )
-        .is_err());
+        assert!(
+            durable_promote(
+                &f,
+                b"bad",
+                |_| Err(StoreError::VerificationFailed),
+                || Ok(())
+            )
+            .is_err()
+        );
         assert_eq!(fs::read(&f).unwrap(), b"old");
         fs::remove_dir_all(d).unwrap()
     }
@@ -291,7 +293,9 @@ mod tests {
         }
         fn sync_parent(&self, parent: &Path) -> Result<(), StoreError> {
             if matches!(self.0, FaultPoint::ParentSync) {
-                return Err(StoreError::Io(io::Error::other("injected directory sync failure")));
+                return Err(StoreError::Io(io::Error::other(
+                    "injected directory sync failure",
+                )));
             }
             OsPromotionOps.sync_parent(parent)
         }
