@@ -66,7 +66,7 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_nativeSubmit(
     env: JNIEnv, _this: JObject, raw_handle: jlong, pcm: JByteBuffer,
-    bytes: jint, frames: jint, first_frame: jlong, timestamp_ns: jlong,
+    rate: jint, bytes: jint, frames: jint, first_frame: jlong, timestamp_ns: jlong,
     epoch: jlong, sequence: jint,
 ) -> jint {
     let raw = handle(raw_handle);
@@ -84,7 +84,7 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
     };
     let block = SqPcmBlockV1 {
         struct_size: PCM_BLOCK_SIZE as u32, flags: 0,
-        sample_rate_hz: 0, channels: 1, sample_format: PCM_S16_LE_V1,
+        sample_rate_hz: rate as u32, channels: 1, sample_format: PCM_S16_LE_V1,
         frame_count: frames as u32, reserved0: 0,
         first_frame_index: first_frame as u64,
         monotonic_timestamp_ns: timestamp_ns as u64, capture_epoch: epoch as u64,
@@ -96,7 +96,7 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_nativeRead(
-    env: &mut JNIEnv, _this: JObject, raw_handle: jlong, pcm: JByteBuffer,
+    mut env: JNIEnv, _this: JObject, raw_handle: jlong, pcm: JByteBuffer,
     metadata: JByteArray, capacity: jint,
 ) -> jlong {
     let raw = handle(raw_handle);
@@ -123,7 +123,7 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
     if status != SqStatusV1::Ok { return status as jlong; }
     // SAFETY: repr(C) block is initialized and has the declared ABI size.
     let bytes = unsafe { slice::from_raw_parts((&block as *const SqPcmBlockV1).cast::<u8>(), PCM_BLOCK_SIZE) };
-    if !copy_struct_to_java(env, &metadata, bytes) { return SqStatusV1::Internal as jlong; }
+    if !copy_struct_to_java(&mut env, &metadata, bytes) { return SqStatusV1::Internal as jlong; }
     written as jlong
 }
 
@@ -145,7 +145,7 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
 
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_nativeReadEvent(
-    env: &mut JNIEnv, _this: JObject, raw_handle: jlong, metadata: JByteArray,
+    mut env: JNIEnv, _this: JObject, raw_handle: jlong, metadata: JByteArray,
 ) -> jint {
     let raw = handle(raw_handle);
     if raw.is_null() || env.get_array_length(&metadata).map(|len| len as usize).unwrap_or(0) < EVENT_SIZE {
@@ -160,7 +160,7 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
     if status != SqStatusV1::Ok { return status as jint; }
     // SAFETY: repr(C) event is initialized and has the declared ABI size.
     let bytes = unsafe { slice::from_raw_parts((&event as *const SqCaptureEventV1).cast::<u8>(), EVENT_SIZE) };
-    if !copy_struct_to_java(env, &metadata, bytes) { return SqStatusV1::Internal as jint; }
+    if !copy_struct_to_java(&mut env, &metadata, bytes) { return SqStatusV1::Internal as jint; }
     SqStatusV1::Ok as jint
 }
 
