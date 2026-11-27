@@ -56,7 +56,7 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Root cause: Android host-test mocks do not implement `android.util.Base64`; verifier decoding threw a mocked-platform `RuntimeException`, and the test fixture encoder also called the mocked Android API. This is a host-test portability defect.
 - Corrective PR #3 commits: verifier `836afe79b1e71838ae7771737015f879df5ca56c`; test fixture `5a11193d2dc17d56af2edd4c35bb11bab20eb232`.
 - Fix: strict standard Base64 decoder compatible with minSdk 23; JVM Base64 in host-test fixture. Checks alphabet, padding placement, output size and canonical unused padding bits. No signature preimage, fingerprint, suite, SQVE or envelope changed.
-- **Verification:** commits exist; follow-up CI result pending. Do not mark PR #3 tests or B4 accepted until the new run passes.
+- **Verification:** Android Run #36 PASS at repair commit `5a11193d2dc17d56af2edd4c35bb11bab20eb232`. Host contract tests, native arm64-v8a/x86_64 build, ELF 16 KB LOAD alignment, API 36 emulator Vault bridge all completed successfully. Run: https://github.com/alinor2pundamdag/SQrecorder/actions/runs/45978069195. This is CI evidence for PR #3 repair—not physical-device acceptance or final integrated B4 acceptance.
 
 ## B4 acceptance checklist (live status)
 
@@ -64,8 +64,8 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 |---|---|---|
 | Rust format, locked metadata, workspace tests, Clippy | PASS on recorded SHA only | Re-run on final integrated B4 SHA |
 | Android native ABI build + 16 KB ELF LOAD alignment | PASS on prior CI source | Re-run after integration; physical page-size evidence required |
-| Android host anchor verifier tests | FIX COMMITTED; CI PENDING | PR #3 new run must pass |
-| API 36 emulator Vault bridge | Run #34 PASS on prior main B4 SHA | Re-run against integrated candidate head |
+| Android host anchor verifier tests | PASS Run #36 | PR #3 repair SHA `5a11193d2dc17d56af2edd4c35bb11bab20eb232`; API 36 emulator also passed |
+| API 36 emulator Vault bridge | PASS Run #36 on PR #3 repair SHA | Re-run against final integrated B4 candidate SHA |
 | Durable historical anchor-key registry + rotation retention | NOT IMPLEMENTED / BLOCKING | Persist append-only key records; rotation/recovery tests |
 | Rust cross-platform anchor verifier + golden vectors | BLOCKING | Cross-check identical preimage/signature semantics |
 | Android journal + durable-store recovery wiring | BLOCKING | Integrate and test safe recovery/no silent loss |
@@ -76,3 +76,12 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 | PR #2 / PR #3 merge | HOLD | Both stay open/draft until every required CI and physical gate is green |
 
 **B4 verdict: IN PROGRESS — NOT 100%.** No acceptance gate is waived. Historical CI passes are not final-head or physical-device evidence.
+
+
+## Owner-approved cross-platform architecture and latest CI evidence — 2026-11-27
+
+- Owner approved option B: a separately versioned SQVE v2 and broad platform compatibility as an architectural target. The decision is recorded in `docs/decisions/0002-cross-platform-sqve-v2.md`; design and implementation gates are in `docs/security/sqve-v2-envelope-design.md`.
+- Added `docs/architecture/platform-compatibility.md` covering Android, Wear OS, iOS/iPadOS, watchOS, Windows, macOS, Linux, and JVM/Java API integration. It distinguishes planned/build/CI/device/production status and explicitly avoids claiming every OS provides identical background capture or hardware-backed key protection.
+- Android Run #36: **PASS**. Job `android-vault` passed all 21 listed steps, including native arm64-v8a/x86_64 build, ELF 16 KB LOAD alignment, Android host contract tests, KVM setup, and API 36 emulator Vault bridge. Source repair commit: `5a11193d2dc17d56af2edd4c35bb11bab20eb232`. URL: https://github.com/alinor2pundamdag/SQrecorder/actions/runs/45978069195.
+- This is not final B4 acceptance: physical Android tests, cross-platform provider builds, SQVE v2 vectors/security review, durable key registry, recovery/fault matrix, and exact-final-integrated-SHA CI remain open.
+- PR #2 and PR #3 must remain draft/open/unmerged. B4 is **IN PROGRESS / NOT 100%** until all required CI and physical-device gates pass.
