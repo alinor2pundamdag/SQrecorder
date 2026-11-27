@@ -11,5 +11,5 @@ static_assert(offsetof(sq_pcm_block_v1, payload_bytes) == 48, "PCM payload-size 
 static_assert(offsetof(sq_pcm_block_v1, sequence) == 56, "PCM sequence offset");
 
 int main() {
-    return SQ_ABI_MAJOR_V1 != 1u || SQ_ABI_MINOR_V1 != 0u;
+    return SQ_ABI_MAJOR_V1 != 1u || SQ_ABI_MINOR_V1 != 1u;
 }
