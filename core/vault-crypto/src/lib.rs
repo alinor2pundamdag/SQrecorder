@@ -35,6 +35,23 @@ pub struct VaultFileKey {
 }
 
 impl VaultFileKey {
+    /// Import a DEK produced by an authenticated platform unwrap. The caller
+    /// retains responsibility for zeroizing its input buffer after this copy.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VaultCryptoError> {
+        if bytes.len() != DEK_BYTES {
+            return Err(VaultCryptoError::InvalidKeyLength);
+        }
+        let mut key = [0u8; DEK_BYTES];
+        key.copy_from_slice(bytes);
+        Ok(Self { bytes: key })
+    }
+
+    /// Transient copy used only for platform public-key wrapping. Zeroize it
+    /// immediately after the platform operation; never persist or log it.
+    pub fn copy_for_public_wrap(&self) -> [u8; DEK_BYTES] {
+        self.bytes
+    }
+
     pub fn generate() -> Result<Self, VaultCryptoError> {
         let mut bytes = [0u8; DEK_BYTES];
         if getrandom::fill(&mut bytes).is_err() {

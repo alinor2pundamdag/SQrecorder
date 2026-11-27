@@ -8,7 +8,7 @@ extern "C" {
 #endif
 
 #define SQ_ABI_MAJOR_V1 1u
-#define SQ_ABI_MINOR_V1 0u
+#define SQ_ABI_MINOR_V1 1u
 #define SQ_ABI_PCM_BLOCK_V1_SIZE 64u
 
 typedef struct sq_capture_engine sq_capture_engine;
@@ -24,7 +24,8 @@ enum {
     SQ_ERR_CANCELLED = -6,
     SQ_ERR_RESOURCE = -7,
     SQ_ERR_UNSUPPORTED = -8,
-    SQ_ERR_INTERNAL = -9
+    SQ_ERR_INTERNAL = -9,
+    SQ_ERR_AUTHENTICATION_FAILED = -10
 };
 
 typedef struct sq_abi_info_v1 {
@@ -115,6 +116,26 @@ sq_status_v1 sq_capture_get_state_v1(
     const sq_capture_engine *engine,
     uint32_t *out_state);
 void sq_capture_destroy_v1(sq_capture_engine *engine);
+
+/* Vault v1: opaque process-local key handles; no plaintext DEK is returned
+ * to shared/KMP models. copy_for_wrap is restricted to public-key wrapping and
+ * the caller must zeroize its temporary buffer immediately. */
+typedef uint64_t sq_vault_key_handle_v1;
+sq_status_v1 sq_vault_key_create_v1(uint64_t *out_handle);
+sq_status_v1 sq_vault_key_import_v1(
+    const uint8_t *dek, uint32_t dek_bytes, uint64_t *out_handle);
+sq_status_v1 sq_vault_key_copy_for_wrap_v1(
+    uint64_t handle, uint8_t *out_dek, uint32_t capacity, uint32_t *out_written);
+sq_status_v1 sq_vault_key_destroy_v1(uint64_t handle);
+sq_status_v1 sq_vault_encrypt_chunk_v1(
+    uint64_t handle, const uint8_t *nonce, uint32_t nonce_len,
+    const uint8_t *aad, uint32_t aad_len, uint8_t *buffer, uint32_t buffer_len,
+    uint8_t *out_tag, uint32_t tag_capacity);
+sq_status_v1 sq_vault_decrypt_chunk_v1(
+    uint64_t handle, const uint8_t *nonce, uint32_t nonce_len,
+    const uint8_t *aad, uint32_t aad_len, uint8_t *buffer, uint32_t buffer_len,
+    const uint8_t *tag, uint32_t tag_len);
+
 
 #ifdef __cplusplus
 }
