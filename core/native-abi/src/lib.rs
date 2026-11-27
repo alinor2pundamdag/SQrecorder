@@ -256,7 +256,7 @@ mod vault_ffi {
             }
             // SAFETY: validated non-null; caller provides writable u32 storage.
             unsafe { ptr::write(out_written, DEK_BYTES as u32) };
-            if capacity as usize < DEK_BYTES {
+            if (capacity as usize) < DEK_BYTES {
                 return Err(SqStatusV1::BufferTooSmall);
             }
             // SAFETY: validated fixed writable range.
