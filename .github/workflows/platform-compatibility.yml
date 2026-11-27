@@ -2,11 +2,13 @@ name: SQRecorder cross-platform contract matrix
 
 on:
   push:
-    branches: [main, b4-hardening-approved-foundation]
+    branches: [main, b4-hardening-approved-foundation, android-b5-capture]
     paths:
       - "shared/domain/**"
       - "shared/capability-system/**"
       - "core/**"
+      - "protocols/native-abi/**"
+      - "tests/contract/**"
       - "docs/implementation/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -18,7 +20,7 @@ on:
       - ".github/workflows/platform-compatibility.yml"
       - ".github/workflows/rust-contract-validation.yml"
   pull_request:
-    branches: [main]
+    branches: [main, b4-hardening-approved-foundation, android-b5-capture]
     paths:
       - "shared/domain/**"
       - "shared/capability-system/**"
