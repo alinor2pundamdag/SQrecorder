@@ -48,6 +48,8 @@ impl JournalRecordType {
 pub enum JournalError {
     InvalidRecord,
     InvalidPayloadJson,
+    DuplicateJsonKey,
+    NonCanonicalPayload,
     PayloadTooLarge,
     PayloadSchemaMismatch,
     SequenceMismatch,
@@ -58,6 +60,7 @@ pub enum JournalError {
     SinkAppendFailed,
     SinkSyncFailed,
     WriterTerminal,
+    RecoveryRequired,
     SequenceExhausted,
 }
 
@@ -110,6 +113,37 @@ impl<S: JournalSink> JournalWriter<S> {
         }
     }
 
+    /// Resume only from a fully verified, intact journal.
+    ///
+    /// The sink must be positioned to append after exactly `existing_bytes`;
+    /// damaged/truncated journals require recovery and must not be appended in place.
+    pub fn resume(sink: S, existing_bytes: &[u8]) -> Result<Self, JournalError> {
+        let verified = verify_journal(existing_bytes);
+        if verified.status != JournalVerificationStatus::Valid
+            || verified.valid_prefix_bytes != existing_bytes.len()
+        {
+            return Err(JournalError::RecoveryRequired);
+        }
+
+        let mut offset = 0usize;
+        let mut last_timestamp = None;
+        while offset < existing_bytes.len() {
+            let body_len = read_u32_le(existing_bytes, offset) as usize;
+            let total_len = body_len + 4;
+            let body = &existing_bytes[offset + 4..offset + total_len];
+            last_timestamp = Some(read_u64_le(body, 16));
+            offset += total_len;
+        }
+
+        Ok(Self {
+            sink,
+            next_sequence: verified.last_sequence.checked_add(1),
+            previous_digest: verified.last_digest,
+            last_monotonic_timestamp_ns: last_timestamp,
+            terminal: false,
+        })
+    }
+
     pub fn append(
         &mut self,
         input: JournalRecordInput<'_>,
@@ -158,12 +192,152 @@ impl<S: JournalSink> JournalWriter<S> {
     }
 }
 
+/// Reject duplicate JSON object keys before serde_json::Value collapses them.
+/// Escaped spellings are decoded before comparison (e.g. "x" and "\\u0078").
+fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
+    struct Scanner<'a> {
+        bytes: &'a [u8],
+        pos: usize,
+        duplicate: bool,
+    }
+
+    impl Scanner<'_> {
+        fn ws(&mut self) {
+            while self.pos < self.bytes.len() && self.bytes[self.pos].is_ascii_whitespace() {
+                self.pos += 1;
+            }
+        }
+
+        fn string_end(&self, start: usize) -> Option<usize> {
+            if self.bytes.get(start) != Some(&b'"') {
+                return None;
+            }
+            let mut i = start + 1;
+            while i < self.bytes.len() {
+                match self.bytes[i] {
+                    b'"' => return Some(i + 1),
+                    b'\\' => i = i.checked_add(2)?,
+                    byte if byte < 0x20 => return None,
+                    _ => i += 1,
+                }
+            }
+            None
+        }
+
+        fn value(&mut self) -> bool {
+            self.ws();
+            match self.bytes.get(self.pos).copied() {
+                Some(b'{') => self.object(),
+                Some(b'[') => self.array(),
+                Some(b'"') => {
+                    let Some(end) = self.string_end(self.pos) else {
+                        return false;
+                    };
+                    self.pos = end;
+                    true
+                }
+                Some(_) => {
+                    let start = self.pos;
+                    while self.pos < self.bytes.len()
+                        && !matches!(self.bytes[self.pos], b',' | b']' | b'}')
+                        && !self.bytes[self.pos].is_ascii_whitespace()
+                    {
+                        self.pos += 1;
+                    }
+                    self.pos > start
+                }
+                None => false,
+            }
+        }
+
+        fn object(&mut self) -> bool {
+            self.pos += 1;
+            self.ws();
+            if self.bytes.get(self.pos) == Some(&b'}') {
+                self.pos += 1;
+                return true;
+            }
+            let mut keys = std::collections::HashSet::<String>::new();
+            loop {
+                self.ws();
+                let start = self.pos;
+                let Some(end) = self.string_end(start) else {
+                    return false;
+                };
+                let Ok(key) = serde_json::from_slice::<String>(&self.bytes[start..end]) else {
+                    return false;
+                };
+                if !keys.insert(key) {
+                    self.duplicate = true;
+                }
+                self.pos = end;
+                self.ws();
+                if self.bytes.get(self.pos) != Some(&b':') {
+                    return false;
+                }
+                self.pos += 1;
+                if !self.value() {
+                    return false;
+                }
+                self.ws();
+                match self.bytes.get(self.pos) {
+                    Some(b',') => self.pos += 1,
+                    Some(b'}') => {
+                        self.pos += 1;
+                        return true;
+                    }
+                    _ => return false,
+                }
+            }
+        }
+
+        fn array(&mut self) -> bool {
+            self.pos += 1;
+            self.ws();
+            if self.bytes.get(self.pos) == Some(&b']') {
+                self.pos += 1;
+                return true;
+            }
+            loop {
+                if !self.value() {
+                    return false;
+                }
+                self.ws();
+                match self.bytes.get(self.pos) {
+                    Some(b',') => self.pos += 1,
+                    Some(b']') => {
+                        self.pos += 1;
+                        return true;
+                    }
+                    _ => return false,
+                }
+            }
+        }
+    }
+
+    let mut scanner = Scanner {
+        bytes,
+        pos: 0,
+        duplicate: false,
+    };
+    let _ = scanner.value();
+    scanner.duplicate
+}
+
 fn validate_payload(payload: &[u8], expected_event_code: u16) -> Result<(), JournalError> {
     if payload.len() > JOURNAL_MAX_PAYLOAD_BYTES {
         return Err(JournalError::PayloadTooLarge);
     }
     let value: serde_json::Value =
         serde_json::from_slice(payload).map_err(|_| JournalError::InvalidPayloadJson)?;
+    if has_duplicate_json_keys(payload) {
+        return Err(JournalError::DuplicateJsonKey);
+    }
+    let canonical =
+        serde_json_canonicalizer::to_vec(&value).map_err(|_| JournalError::InvalidPayloadJson)?;
+    if canonical != payload {
+        return Err(JournalError::NonCanonicalPayload);
+    }
     let object = value
         .as_object()
         .ok_or(JournalError::PayloadSchemaMismatch)?;
@@ -263,6 +437,8 @@ pub enum JournalVerificationError {
     InvalidRecordType,
     InvalidPayloadLength,
     InvalidUtf8Payload,
+    DuplicateJsonKey,
+    NonCanonicalPayload,
     PayloadTooLarge,
     PayloadSchemaMismatch,
     SequenceMismatch,
@@ -425,7 +601,26 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
                 previous_digest,
             );
         }
-        if validate_payload(&body[76..payload_end], read_u16_le(body, 6)).is_err() {
+        let payload_validation = validate_payload(&body[76..payload_end], read_u16_le(body, 6));
+        if payload_validation == Err(JournalError::DuplicateJsonKey) {
+            return verification(
+                JournalVerificationStatus::Corrupt,
+                Some(JournalVerificationError::DuplicateJsonKey),
+                offset,
+                expected_sequence - 1,
+                previous_digest,
+            );
+        }
+        if payload_validation == Err(JournalError::NonCanonicalPayload) {
+            return verification(
+                JournalVerificationStatus::Corrupt,
+                Some(JournalVerificationError::NonCanonicalPayload),
+                offset,
+                expected_sequence - 1,
+                previous_digest,
+            );
+        }
+        if payload_validation.is_err() {
             return verification(
                 JournalVerificationStatus::Corrupt,
                 Some(JournalVerificationError::PayloadSchemaMismatch),
@@ -562,6 +757,104 @@ mod tests {
     }
 
     #[test]
+    fn writer_and_verifier_reject_duplicate_json_keys() {
+        let duplicate = br#"{"captureEpoch":"1","eventCode":2,"eventCode":2,"schemaVersion":1}"#;
+        let mut record = input(1, [0; 32]);
+        record.canonical_payload = duplicate;
+        let mut writer = JournalWriter::new(MemorySink::default());
+        assert_eq!(writer.append(record), Err(JournalError::DuplicateJsonKey));
+
+        // A validly framed record with a matching digest cannot legitimize
+        // ambiguous JSON metadata.
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&((JOURNAL_MIN_BODY_BYTES + duplicate.len()) as u32).to_le_bytes());
+        bytes.extend_from_slice(JOURNAL_MAGIC);
+        bytes.extend_from_slice(&JOURNAL_VERSION.to_le_bytes());
+        bytes.extend_from_slice(&(JournalRecordType::CaptureStarted as u16).to_le_bytes());
+        bytes.extend_from_slice(&1u64.to_le_bytes());
+        bytes.extend_from_slice(&10u64.to_le_bytes());
+        bytes.extend_from_slice(&[0x22; 16]);
+        bytes.extend_from_slice(&[0; 32]);
+        bytes.extend_from_slice(&(duplicate.len() as u32).to_le_bytes());
+        bytes.extend_from_slice(duplicate);
+        let digest = calculate_record_digest(&[0; 32], &bytes[4..]);
+        bytes.extend_from_slice(&digest);
+        assert_eq!(
+            verify_journal(&bytes).error,
+            Some(JournalVerificationError::DuplicateJsonKey)
+        );
+    }
+
+    #[test]
+    fn duplicate_key_scanner_decodes_escaped_keys_and_checks_nested_objects() {
+        assert!(has_duplicate_json_keys(
+            br#"{"outer":{"key":1,"\u006Bey":2},"eventCode":2,"schemaVersion":1}"#
+        ));
+        assert!(has_duplicate_json_keys(
+            br#"{"eventCode":2,"schemaVersion":1,"items":[{"x":1,"x":2}]}"#
+        ));
+        assert!(!has_duplicate_json_keys(
+            br#"{"eventCode":2,"schemaVersion":1,"key":1,"keys":2}"#
+        ));
+    }
+
+    #[test]
+    fn writer_resumes_verified_chain_and_timestamp_after_restart() {
+        let mut initial = JournalWriter::new(MemorySink::default());
+        let first = initial.append(input(1, [0; 32])).unwrap();
+        let existing = initial.into_sink().bytes;
+
+        let sink = MemorySink {
+            bytes: existing.clone(),
+            ..MemorySink::default()
+        };
+        let mut resumed = JournalWriter::resume(sink, &existing).unwrap();
+        resumed.append(input(2, first.digest)).unwrap();
+
+        let bytes = resumed.into_sink().bytes;
+        let verified = verify_journal(&bytes);
+        assert_eq!(verified.status, JournalVerificationStatus::Valid);
+        assert_eq!(verified.last_sequence, 2);
+    }
+
+    #[test]
+    fn writer_resume_rejects_damaged_tail_without_mutating_sink() {
+        let mut initial = JournalWriter::new(MemorySink::default());
+        initial.append(input(1, [0; 32])).unwrap();
+        let mut existing = initial.into_sink().bytes;
+        existing.extend_from_slice(&[0xAA, 0xBB]);
+
+        let sink = MemorySink {
+            bytes: existing.clone(),
+            ..MemorySink::default()
+        };
+        assert!(matches!(
+            JournalWriter::resume(sink, &existing),
+            Err(JournalError::RecoveryRequired)
+        ));
+        assert!(existing.ends_with(&[0xAA, 0xBB]));
+    }
+
+    #[test]
+    fn resumed_writer_preserves_monotonic_timestamp_guard() {
+        let mut initial = JournalWriter::new(MemorySink::default());
+        let first = initial.append(input(1, [0; 32])).unwrap();
+        let existing = initial.into_sink().bytes;
+        let sink = MemorySink {
+            bytes: existing.clone(),
+            ..MemorySink::default()
+        };
+        let mut resumed = JournalWriter::resume(sink, &existing).unwrap();
+
+        let mut regressed = input(2, first.digest);
+        regressed.monotonic_timestamp_ns = 5;
+        assert_eq!(
+            resumed.append(regressed),
+            Err(JournalError::TimestampRegression)
+        );
+    }
+
+    #[test]
     fn durable_append_verifies_and_chains_records() {
         let mut writer = JournalWriter::new(MemorySink::default());
         let first = writer.append(input(1, [0; 32])).unwrap();
@@ -654,6 +947,46 @@ mod tests {
             JournalVerificationStatus::TruncatedTail
         );
         assert_eq!(verification.valid_prefix_bytes, 0);
+    }
+
+    #[test]
+    fn verifier_rejects_non_jcs_payload_even_with_valid_record_digest() {
+        let mut writer = JournalWriter::new(MemorySink::default());
+        writer.append(input(1, [0; 32])).unwrap();
+        let mut bytes = writer.into_sink().bytes;
+
+        let noncanonical = br#"{"eventCode":2,"captureEpoch":"1","schemaVersion":1}"#;
+        let payload_start = 4 + 76;
+        let payload_end = payload_start + noncanonical.len();
+        assert_eq!(bytes[payload_start..payload_end].len(), noncanonical.len());
+        bytes[payload_start..payload_end].copy_from_slice(noncanonical);
+
+        let digest_start = bytes.len() - JOURNAL_DIGEST_BYTES;
+        let digest = calculate_record_digest(&[0; 32], &bytes[4..digest_start]);
+        bytes[digest_start..].copy_from_slice(&digest);
+
+        assert_eq!(
+            verify_journal(&bytes).error,
+            Some(JournalVerificationError::NonCanonicalPayload)
+        );
+    }
+
+    #[test]
+    fn writer_rejects_non_jcs_payload_bytes() {
+        let mut writer = JournalWriter::new(MemorySink::default());
+        let mut reordered = input(1, [0; 32]);
+        reordered.canonical_payload = br#"{"schemaVersion":1,"eventCode":2}"#;
+        assert_eq!(
+            writer.append(reordered),
+            Err(JournalError::NonCanonicalPayload)
+        );
+
+        let mut noncanonical_number = input(1, [0; 32]);
+        noncanonical_number.canonical_payload = br#"{"eventCode":2,"rate":1.0,"schemaVersion":1}"#;
+        assert_eq!(
+            writer.append(noncanonical_number),
+            Err(JournalError::NonCanonicalPayload)
+        );
     }
 
     #[test]
