@@ -113,7 +113,7 @@ private fun String.isCanonicalUuid(): Boolean =
 
 private fun String.isSafeKeyId(): Boolean =
     isNotEmpty() && length <= VaultEnvelopeHeader.MAX_KEY_ID_CHARS &&
-        all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it in '-' || it in '_' || it in '.' }
+        all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '-' || it == '_' || it == '.' }
 
 private fun String.isStandardBase64(): Boolean {
     if (isEmpty() || length > VaultEnvelopeHeader.MAX_WRAPPED_KEY_BASE64_CHARS || length % 4 != 0) {
