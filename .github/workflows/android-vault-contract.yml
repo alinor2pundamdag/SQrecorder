@@ -24,6 +24,7 @@ on:
       - "build.gradle.kts"
       - "settings.gradle.kts"
       - "shared/domain/**"
+      - "shared/capability-system/**"
       - "shared/vault-keystore-android/**"
       - ".github/workflows/android-vault-contract.yml"
       - "docs/architecture/**"
@@ -42,6 +43,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Set up JDK 17
         uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
         with:
