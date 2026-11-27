@@ -85,3 +85,14 @@ This section supersedes earlier "JNI not yet implemented" statements above.
 - This integration does **not** make the capture path production-secure: the consumer still writes plaintext app-private WAV staging. SQVE Vault encryption, SQJ durable event/checkpoint, durable promotion/recovery, crash/ENOSPC/force-stop tests, and recovery/integrity UI remain release blockers.
 - The queue is fail-closed on producer contention/overflow; no real-time physical-device performance or losslessness claim is made before measurement and device testing.
 - The evidence update creates a new commit, so its exact-head CI must also pass before this slice is accepted.
+
+
+## Exact-head CI closure for AudioRecord→native queue slice — 2026-11-27
+
+- Current integrated Android source head: `77b0a6d452487105472c0f01df5b6124d430fe59`.
+- Rust Run #145 (`46017423473`) **PASS**.
+- Cross-platform Run #104 (`46017427127`) **PASS**; all six Linux/macOS/Windows Rust and KMP jobs succeeded.
+- Android Run #170 (`46017423435`) **PASS**; 16 KB JNI build, Vault adapter host tests, app assembly/unit tests, and API 36 native Vault bridge all succeeded on this exact head.
+- This confirms build/CI integration only. It does not exercise real microphone/audio-route behavior, queue contention/overflow under sustained hardware capture, or physical device acceptance.
+- This head still uses plaintext app-private WAV staging as the consumer sink. Vault finalization, SQJ event durability, atomic encrypted promotion/recovery, crash/ENOSPC/force-stop recovery and UI remain release blockers.
+- Evidence update commit will advance the branch head and requires a fresh exact-head CI run.
