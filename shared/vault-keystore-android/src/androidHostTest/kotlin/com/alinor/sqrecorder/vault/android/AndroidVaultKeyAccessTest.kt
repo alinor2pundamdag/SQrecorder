@@ -26,6 +26,12 @@ class AndroidVaultKeyAccessTest {
     }
 
     @Test
+    fun lockedSqveV1LabelIsExplicitlyRejectedByAndroidKeystoreGate() {
+        assertEquals(false, androidKeystoreSupportsSqveV1Oaep(35))
+        assertEquals(false, androidKeystoreSupportsSqveV1Oaep(36))
+    }
+
+    @Test
     fun oaepContractPinsSha256ForDigestAndMgfAndUsesEnvelopeLabel() {
         val parameters = vaultOaepParameters()
         assertEquals("SHA-256", parameters.digestAlgorithm)
