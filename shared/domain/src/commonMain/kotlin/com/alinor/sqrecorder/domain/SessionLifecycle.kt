@@ -5,8 +5,7 @@ package com.alinor.sqrecorder.domain
  * inferred from a lifecycle state (for example, STOPPED does not mean intact).
  * Durable incident history belongs to the journal; this in-memory snapshot is bounded.
  */
-@JvmInline
-public value class SessionId(public val value: String)
+public data class SessionId(public val value: String)
 
 public enum class SessionPhase {
     PREPARING,
