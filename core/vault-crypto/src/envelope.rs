@@ -234,9 +234,13 @@ pub fn encrypt_pcm_stream<R: Read, W: Write>(
             .checked_sub(offset)
             .ok_or(EnvelopeError::LengthOverflow)?;
         let chunk_len = remaining.min(SQVE_CHUNK_BYTES as u64) as usize;
-        if reader.read_exact(&mut chunk[..chunk_len]).is_err() {
+        if let Err(read_error) = reader.read_exact(&mut chunk[..chunk_len]) {
             chunk[..chunk_len].zeroize();
-            return Err(EnvelopeError::InputLengthMismatch);
+            return Err(if read_error.kind() == std::io::ErrorKind::UnexpectedEof {
+                EnvelopeError::InputLengthMismatch
+            } else {
+                EnvelopeError::ReadFailed
+            });
         }
         let result = envelope.write_chunk(&mut chunk[..chunk_len]);
         chunk[..chunk_len].zeroize();
@@ -683,6 +687,22 @@ mod tests {
         let verified = verify_envelope(&mut envelope).unwrap();
         assert_eq!(verified.metadata.plaintext_bytes, expected_len);
         assert_eq!(verified.metadata.chunk_count, 2);
+    }
+
+    #[test]
+    fn pcm_stream_preserves_non_eof_reader_errors() {
+        struct FailingReader;
+        impl std::io::Read for FailingReader {
+            fn read(&mut self, _buffer: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("injected source read error"))
+            }
+        }
+        let key = VaultFileKey { bytes: [0x18; 32] };
+        let mut input = FailingReader;
+        assert!(matches!(
+            encrypt_pcm_stream(&mut input, Vec::<u8>::new(), metadata(3), key),
+            Err(EnvelopeError::ReadFailed)
+        ));
     }
 
     #[test]
