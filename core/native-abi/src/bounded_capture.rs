@@ -137,7 +137,9 @@ impl BoundedPcmQueue {
                 self.producer_fault.store(true, Ordering::Release);
                 return Err(CaptureError::QueueContention);
             }
-            Err(std::sync::TryLockError::Poisoned(_)) => return Err(CaptureError::ResourcePoisoned),
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                return Err(CaptureError::ResourcePoisoned);
+            }
         };
         if self.producer_fault.load(Ordering::Acquire) {
             inner.status = CaptureStatus::Failed;
@@ -191,7 +193,9 @@ impl BoundedPcmQueue {
     }
 
     pub fn request_stop(&self) -> Result<(), CaptureError> {
-        if self.producer_fault.load(Ordering::Acquire) { return Err(CaptureError::InvalidState); }
+        if self.producer_fault.load(Ordering::Acquire) {
+            return Err(CaptureError::InvalidState);
+        }
         let mut inner = self
             .inner
             .lock()
@@ -204,7 +208,9 @@ impl BoundedPcmQueue {
     }
 
     pub fn mark_stopped(&self) -> Result<(), CaptureError> {
-        if self.producer_fault.load(Ordering::Acquire) { return Err(CaptureError::InvalidState); }
+        if self.producer_fault.load(Ordering::Acquire) {
+            return Err(CaptureError::InvalidState);
+        }
         let mut inner = self
             .inner
             .lock()
@@ -220,7 +226,9 @@ impl BoundedPcmQueue {
     }
 
     pub fn status(&self) -> Result<CaptureStatus, CaptureError> {
-        if self.producer_fault.load(Ordering::Acquire) { return Ok(CaptureStatus::Failed); }
+        if self.producer_fault.load(Ordering::Acquire) {
+            return Ok(CaptureStatus::Failed);
+        }
         Ok(self
             .inner
             .lock()
@@ -229,7 +237,9 @@ impl BoundedPcmQueue {
     }
 
     pub fn integrity_overflow(&self) -> Result<bool, CaptureError> {
-        if self.producer_fault.load(Ordering::Acquire) { return Ok(true); }
+        if self.producer_fault.load(Ordering::Acquire) {
+            return Ok(true);
+        }
         Ok(self
             .inner
             .lock()
@@ -317,7 +327,10 @@ mod tests {
     fn producer_never_waits_on_consumer_lock_and_fault_is_terminal() {
         let queue = BoundedPcmQueue::new(2, 8).unwrap();
         let guard = queue.inner.lock().unwrap();
-        assert_eq!(queue.submit(metadata(1, 2), &[1, 2, 3, 4]), Err(CaptureError::QueueContention));
+        assert_eq!(
+            queue.submit(metadata(1, 2), &[1, 2, 3, 4]),
+            Err(CaptureError::QueueContention)
+        );
         drop(guard);
         assert_eq!(queue.status().unwrap(), CaptureStatus::Failed);
         assert!(queue.integrity_overflow().unwrap());
@@ -327,11 +340,12 @@ mod tests {
     #[test]
     fn dequeue_zeroizes_fixed_slot_before_reuse() {
         let queue = BoundedPcmQueue::new(1, 8).unwrap();
-        queue.submit(metadata(1, 2), &[0x55, 0xaa, 0x55, 0xaa]).unwrap();
+        queue
+            .submit(metadata(1, 2), &[0x55, 0xaa, 0x55, 0xaa])
+            .unwrap();
         let mut output = [0u8; 4];
         queue.pop_into(&mut output).unwrap();
         let inner = queue.inner.lock().unwrap();
         assert!(inner.slots[0].bytes.iter().all(|byte| *byte == 0));
     }
-
 }
