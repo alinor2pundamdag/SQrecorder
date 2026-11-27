@@ -501,6 +501,7 @@ mod jni_vault {
         objects::{JByteArray, JObject},
         sys::{jbyteArray, jint, jlong},
     };
+    use sqrec_vault_crypto::{DEK_BYTES, GCM_NONCE_BYTES, GCM_TAG_BYTES};
     use std::ptr;
     use zeroize::Zeroize;
 
