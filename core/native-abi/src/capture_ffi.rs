@@ -25,6 +25,8 @@ fn guarded(f: impl FnOnce() -> Result<(), SqStatusV1>) -> SqStatusV1 {
     }
 }
 
+/// # Safety
+/// `raw` must be a valid, live engine handle for the duration of this borrow.
 unsafe fn engine<'a>(raw: *mut SqCaptureEngine) -> Result<&'a SqCaptureEngine, SqStatusV1> {
     if raw.is_null() {
         return Err(SqStatusV1::InvalidArgument);
@@ -34,6 +36,9 @@ unsafe fn engine<'a>(raw: *mut SqCaptureEngine) -> Result<&'a SqCaptureEngine, S
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_get_abi_info_v1(out: *mut SqAbiInfoV1) -> SqStatusV1 {
     guarded(|| {
         if out.is_null() {
@@ -57,6 +62,9 @@ pub unsafe extern "C" fn sq_get_abi_info_v1(out: *mut SqAbiInfoV1) -> SqStatusV1
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_create_v1(
     config: *const SqCaptureConfigV1,
     out: *mut *mut SqCaptureEngine,
@@ -91,6 +99,9 @@ pub unsafe extern "C" fn sq_capture_create_v1(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_start_v1(raw: *mut SqCaptureEngine) -> SqStatusV1 {
     guarded(|| {
         let e = unsafe { engine(raw)? };
@@ -102,6 +113,9 @@ pub unsafe extern "C" fn sq_capture_start_v1(raw: *mut SqCaptureEngine) -> SqSta
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_submit_pcm_v1(
     raw: *mut SqCaptureEngine,
     block: *const SqPcmBlockV1,
@@ -158,6 +172,9 @@ pub unsafe extern "C" fn sq_capture_submit_pcm_v1(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_push_event_v1(
     raw: *mut SqCaptureEngine,
     event: *const SqCaptureEventV1,
@@ -173,6 +190,9 @@ pub unsafe extern "C" fn sq_capture_push_event_v1(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_request_stop_v1(raw: *mut SqCaptureEngine) -> SqStatusV1 {
     guarded(|| {
         let e = unsafe { engine(raw)? };
@@ -184,6 +204,9 @@ pub unsafe extern "C" fn sq_capture_request_stop_v1(raw: *mut SqCaptureEngine) -
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_get_state_v1(
     raw: *const SqCaptureEngine,
     out: *mut u32,
@@ -213,6 +236,9 @@ pub unsafe extern "C" fn sq_capture_get_state_v1(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_destroy_v1(raw: *mut SqCaptureEngine) {
     if !raw.is_null() {
         // SAFETY: caller must destroy exactly once and ensure no concurrent use.
@@ -221,6 +247,9 @@ pub unsafe extern "C" fn sq_capture_destroy_v1(raw: *mut SqCaptureEngine) {
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_read_pcm_v1(
     raw: *mut SqCaptureEngine,
     out_block: *mut SqPcmBlockV1,
@@ -280,6 +309,9 @@ pub unsafe extern "C" fn sq_capture_read_pcm_v1(
 }
 
 #[unsafe(no_mangle)]
+/// # Safety
+/// Pointer arguments must reference valid readable/writable memory as required by the ABI.
+/// Engine handles must remain live and must not be concurrently destroyed.
 pub unsafe extern "C" fn sq_capture_finish_v1(raw: *mut SqCaptureEngine) -> SqStatusV1 {
     guarded(|| {
         let e = unsafe { engine(raw)? };
