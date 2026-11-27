@@ -183,17 +183,13 @@ pub fn staging_path(d: &Path, t: &str) -> Result<PathBuf, StoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        fs,
-    };
+    use std::fs;
     static TEST_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
     fn td() -> PathBuf {
         let sequence = TEST_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let p = std::env::temp_dir().join(format!(
-            "sqstage-test-{}-{sequence}",
-            std::process::id(),
-        ));
+        let p =
+            std::env::temp_dir().join(format!("sqstage-test-{}-{sequence}", std::process::id(),));
         // create_dir (not create_dir_all) makes any collision visible instead
         // of silently sharing a directory between parallel tests.
         fs::create_dir(&p).unwrap();
