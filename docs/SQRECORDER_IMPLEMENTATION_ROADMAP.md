@@ -48,6 +48,8 @@ Batch numbering above is a sequencing/traceability view, not permission to alter
 - Non-destructive recovery inspection and filesystem/journal reconciliation decision.
 - Fault-injection coverage includes partial write, simulated ENOSPC, file-sync, rename, and parent-directory-sync failure.
 - Reproducible workspace CI: pinned Rust toolchain, committed Cargo.lock, locked dependencies, strict rustfmt, SHA-pinned actions.
+- Journal payloads are checked against RFC 8785/JCS canonical bytes; duplicate-key detection handles nested objects and escaped-equivalent property names.
+- Verified-only journal writer resume restores sequence, digest, and monotonic timestamp; rejects damaged/truncated tails instead of appending into ambiguity.
 
 ### B4-P — Android/KMP platform integration (required; not yet implemented)
 The repository branch currently has no Android/KMP Gradle project/source set. Restore/create the real project baseline from the approved repository plan before placing Android implementation code. Do not fabricate a minimal replacement app or change package/architecture to make the gate appear green.
@@ -66,7 +68,8 @@ Implement within the approved design:
 - [ ] Android/KMP project baseline and adapter compile.
 - [ ] Keystore auth-bound unwrap tests; locked-state decrypt denial.
 - [ ] Key invalidation/rotation/recovery tests and documented failure behavior.
-- [ ] Journal schema/digest/duplicate-key/continuity tests.
+- [ ] Journal schema/digest/JCS canonical-byte/duplicate-key/continuity tests.
+- [ ] Restart resume from intact journal; reject damaged-tail append and preserve recovery evidence.
 - [ ] Crash-cut tests at stage write, file sync, verification, rename, directory sync, and journal commit.
 - [ ] ENOSPC and storage-pressure test; no silent evidence loss.
 - [ ] Recovery idempotency and preservation of ambiguous artifacts.
