@@ -5,6 +5,7 @@ import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.locks.LockSupport
 
 /**
  * Single-consumer bridge between the native bounded queue and the current WAV
@@ -66,6 +67,7 @@ internal class CaptureQueuePump(
         }
         producerFrameIndex = Math.addExact(producerFrameIndex, frameCount.toLong())
         producerSequence = Math.addExact(producerSequence, 1)
+        LockSupport.unpark(consumer)
     }
 
     /** Stops producers, drains both native rings, and verifies native final state. */
@@ -105,7 +107,7 @@ internal class CaptureQueuePump(
                         consumerDone.set(true)
                         return
                     }
-                    Thread.yield()
+                    LockSupport.parkNanos(this, CONSUMER_IDLE_PARK_NS)
                     continue
                 }
                 check(byteCount > 0L) { "native PCM dequeue failed with sq_status_v1=$byteCount" }
@@ -152,5 +154,6 @@ internal class CaptureQueuePump(
     private companion object {
         const val TAG = "SQRecorderQueuePump"
         const val MAX_BLOCK_BYTES = 256 * 1024
+        const val CONSUMER_IDLE_PARK_NS = 500_000L
     }
 }
