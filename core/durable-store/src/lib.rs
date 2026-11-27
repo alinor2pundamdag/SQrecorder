@@ -101,6 +101,28 @@ where
         .map_err(|_| StoreError::PromotionDurabilityUnknown)?;
     commit().map_err(|_| StoreError::JournalCommitPending)
 }
+/// Enumerate recoverable stage candidates for one destination without modifying them.
+/// Only regular files matching the destination's private stage prefix are returned;
+/// symlinks and unrelated files are ignored. Results are sorted for deterministic recovery.
+pub fn discover_staged_files(dest: &Path) -> Result<Vec<PathBuf>, StoreError> {
+    let parent = dest.parent().ok_or(StoreError::InvalidPath)?;
+    let name = dest.file_name().ok_or(StoreError::InvalidPath)?.to_string_lossy();
+    let prefix = format!(".{name}.sqstage-");
+    let mut candidates = Vec::new();
+    for entry in fs::read_dir(parent)? {
+        let entry = entry?;
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        if !file_name.starts_with(&prefix) {
+            continue;
+        }
+        if entry.file_type()?.is_file() {
+            candidates.push(entry.path());
+        }
+    }
+    candidates.sort();
+    Ok(candidates)
+}
 /// Recovery action combines filesystem evidence with the journal's durable commit marker.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReconciliationAction {
@@ -349,6 +371,23 @@ mod tests {
             ReconciliationAction::ReportMissingArtifact
         );
     }
+    #[test]
+    fn stage_discovery_finds_all_candidates_and_ignores_unrelated_files() {
+        let d = td();
+        let final_path = d.join("session.sqv");
+        let s1 = d.join(".session.sqv.sqstage-101-0");
+        let s2 = d.join(".session.sqv.sqstage-202-1");
+        fs::write(&s1, b"candidate-a").unwrap();
+        fs::write(&s2, b"candidate-b").unwrap();
+        fs::write(d.join(".other.sqstage-1-2"), b"unrelated").unwrap();
+        fs::write(d.join("session.sqv.sqstage-1-2"), b"wrong-prefix").unwrap();
+
+        let found = discover_staged_files(&final_path).unwrap();
+        assert_eq!(found, vec![s1.clone(), s2.clone()]);
+        assert!(s1.exists() && s2.exists(), "recovery discovery is read-only");
+        fs::remove_dir_all(d).unwrap();
+    }
+
     #[test]
     fn staged_recovery_is_not_deleted() {
         let d = td();
