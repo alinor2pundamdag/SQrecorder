@@ -510,7 +510,10 @@ mod tests {
         )
         .unwrap();
         assert!(journal_committed);
-        assert_eq!(fs::metadata(&final_path).unwrap().len(), expected_len as u64);
+        assert_eq!(
+            fs::metadata(&final_path).unwrap().len(),
+            expected_len as u64
+        );
         fs::remove_dir_all(d).unwrap();
     }
 
@@ -539,5 +542,4 @@ mod tests {
         assert_eq!(fs::read(&stages[0]).unwrap(), b"partial encrypted stream");
         fs::remove_dir_all(d).unwrap();
     }
-
 }
