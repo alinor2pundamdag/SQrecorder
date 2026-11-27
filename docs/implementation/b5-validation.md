@@ -17,12 +17,14 @@
 - Physical Android tests are not run in this environment.
 
 ## Verification
+
+- Latest Android app branch head includes shared `SessionLifecycle` reducer integration. Exact-head CI Run #86 was started and Run #87 queued after this implementation commit; verify Run #87 before marking this source compiled.
 - Source branch: `android-b5-capture`, forked from verified B4 SHA `6759dce49c2bd13ee4665560833e5d5d6492e23a`.
 - **CI pending:** PR CI must compile `:android:app:assembleDebug`, pass `:android:app:testDebugUnitTest`, and rerun native 16 KB/JNI + API 36 emulator tests on this exact branch head.
 - No physical-device pass or B5 completion is claimed.
 
 ## Remaining B5/B8 gates
-1. Integrate session lifecycle reducer and capture epoch/monotonic timestamps; emit integrity incidents for input overrun, route changes, permission revocation, and storage pressure.
+1. SessionLifecycle reducer, capture epoch, monotonic timestamps, stop/finalization events are now wired in-memory. Remaining: durable SQJ journal integration and integrity incidents for input overrun, route changes, permission revocation, and storage pressure.
 2. Replace standalone file output with bounded PCM pipeline → Rust canonical WAV writer → durable-store staging/promotion + SQJ journal; prove no silent loss.
 3. Add idempotent stop/finalization, file integrity hash, crash recovery scan, partial artifact recovery UI, and fault-injection tests.
 4. Add device matrix for API 23 minimum, API 34+ foreground permission restrictions, API 36 target behavior, wired/Bluetooth route changes, interruption, reboot/force-stop and ENOSPC.
