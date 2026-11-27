@@ -1,0 +1,67 @@
+package com.alinor.sqrecorder.vault.android
+
+import java.security.KeyPairGenerator
+import java.security.spec.MGF1ParameterSpec
+import javax.crypto.Cipher
+import javax.crypto.spec.OAEPParameterSpec
+import javax.crypto.spec.PSource
+import kotlin.test.Test
+import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
+import kotlin.test.assertNotEquals
+
+class AndroidVaultKeyAccessTest {
+    @Test
+    fun publicWrappingKeyIdIsDeterministicAndNonSecret() {
+        val generator = KeyPairGenerator.getInstance("RSA")
+        generator.initialize(2048)
+        val publicKey = generator.generateKeyPair().public
+
+        val first = vaultWrappingKeyId(publicKey)
+        val second = vaultWrappingKeyId(publicKey)
+
+        assertEquals(first, second)
+        assertEquals(32, first.substringAfterLast('-').length)
+        assertNotEquals(publicKey.encoded.toString(), first)
+    }
+
+    @Test
+    fun oaepContractPinsSha256ForDigestAndMgfAndUsesEnvelopeLabel() {
+        val parameters = vaultOaepParameters()
+        assertEquals("SHA-256", parameters.digestAlgorithm)
+        assertEquals("MGF1", parameters.mgfAlgorithm)
+        assertEquals(
+            MGF1ParameterSpec.SHA256.digestAlgorithm,
+            (parameters.mgfParameters as MGF1ParameterSpec).digestAlgorithm,
+        )
+        assertContentEquals(
+            "SQREC-VAULT-DEK-v1".toByteArray(Charsets.UTF_8),
+            (parameters.pSource as PSource.PSpecified).value,
+        )
+    }
+
+    @Test
+    fun oaepWrapRoundTripUsesExactLabelAndMgfDigest() {
+        val generator = KeyPairGenerator.getInstance("RSA")
+        generator.initialize(2048)
+        val pair = generator.generateKeyPair()
+        val dek = ByteArray(32) { (it * 7).toByte() }
+
+        val encrypt = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
+        encrypt.init(Cipher.ENCRYPT_MODE, pair.public, vaultOaepParameters())
+        val wrapped = encrypt.doFinal(dek)
+
+        val decrypt = Cipher.getInstance("RSA/ECB/OAEPWithSHA-256AndMGF1Padding")
+        decrypt.init(Cipher.DECRYPT_MODE, pair.private, vaultOaepParameters())
+        assertContentEquals(dek, decrypt.doFinal(wrapped))
+
+        val wrongLabel = OAEPParameterSpec(
+            "SHA-256",
+            "MGF1",
+            MGF1ParameterSpec.SHA256,
+            PSource.PSpecified("wrong-label".toByteArray(Charsets.UTF_8)),
+        )
+        decrypt.init(Cipher.DECRYPT_MODE, pair.private, wrongLabel)
+        kotlin.test.assertFails { decrypt.doFinal(wrapped) }
+    }
+}
