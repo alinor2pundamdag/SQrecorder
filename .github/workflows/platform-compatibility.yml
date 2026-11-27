@@ -1,0 +1,99 @@
+name: SQRecorder cross-platform contract matrix
+
+on:
+  push:
+    branches: [main, b4-hardening-approved-foundation]
+    paths:
+      - "shared/domain/**"
+      - "core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "docs/architecture/**"
+      - "docs/decisions/**"
+      - "docs/security/**"
+      - ".github/workflows/platform-compatibility.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "shared/domain/**"
+      - "core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "docs/architecture/**"
+      - "docs/decisions/**"
+      - "docs/security/**"
+      - ".github/workflows/platform-compatibility.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: platform-contracts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  portable-rust:
+    name: Rust portable core / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Install pinned Rust toolchain
+        shell: bash
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt --component clippy
+          rustup default 1.100.0
+          rustc --version
+          cargo --version
+      - name: Verify lockfile and compile/test portable core
+        shell: bash
+        run: |
+          cargo metadata --locked --format-version 1 > /tmp/sqrec-cargo-metadata.json
+          cargo test --workspace --locked
+      - name: Rust format and Clippy
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  shared-domain:
+    name: KMP domain / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinLinuxX64 :shared:domain:allTests"
+          - os: windows-latest
+            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinMingwX64 :shared:domain:allTests"
+          - os: macos-latest
+            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinIosArm64 :shared:domain:compileKotlinIosSimulatorArm64 :shared:domain:compileKotlinMacosArm64 :shared:domain:compileKotlinWatchosDeviceArm64 :shared:domain:compileKotlinWatchosSimulatorArm64 :shared:domain:allTests"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0 platform-tools"
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: "9.7.0"
+          cache-provider: basic
+          cache-read-only: false
+      - name: Compile shared domain and run supported host tests
+        shell: bash
+        run: gradle ${{ matrix.targets }} --no-daemon --max-workers=2
