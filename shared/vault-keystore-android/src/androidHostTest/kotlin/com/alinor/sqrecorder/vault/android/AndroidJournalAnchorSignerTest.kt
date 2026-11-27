@@ -6,6 +6,7 @@ import java.security.spec.ECGenParameterSpec
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class AndroidJournalAnchorSignerTest {

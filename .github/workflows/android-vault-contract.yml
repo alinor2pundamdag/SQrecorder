@@ -44,7 +44,7 @@ jobs:
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: "platforms;android-36 build-tools;36.0.0 platform-tools ndk;28.2.13676358"
-      - name: Set up Gradle 9.5.0
+      - name: Set up Gradle 9.7.0
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           gradle-version: "9.7.0"
@@ -62,12 +62,21 @@ jobs:
         shell: bash
         run: |
           for attempt in 1 2 3; do
-            if gradle :shared:vault-keystore-android:build --no-daemon --max-workers=2; then
-              exit 0
+            if gradle :shared:vault-keystore-android:build --no-daemon --max-workers=2 2>&1 | tee "$RUNNER_TEMP/gradle-vault-build.log"; then
+              break
+            fi
+            if ! grep -Eq "Could not find|Could not GET|HTTP (429|5[0-9][0-9])|status code (429|5[0-9][0-9])" "$RUNNER_TEMP/gradle-vault-build.log"; then
+              exit 1
             fi
             if [ "$attempt" -lt 3 ]; then
-              echo "Gradle dependency/network failure; retrying ($attempt/3) after 25s"
+              echo "Transient Maven/HTTP failure; retrying ($attempt/3) after 25s"
               sleep 25
+            else
+              exit 1
             fi
           done
-          exit 1
+          aar="$(find shared/vault-keystore-android/build/outputs/aar -type f -name '*.aar' | head -n 1)"
+          test -n "$aar"
+          unzip -l "$aar" | grep -q 'jni/arm64-v8a/libsqrec_native_abi.so'
+          unzip -l "$aar" | grep -q 'jni/x86_64/libsqrec_native_abi.so'
+          echo "Verified JNI libraries packaged in Android AAR."
