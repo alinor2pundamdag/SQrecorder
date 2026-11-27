@@ -9,6 +9,9 @@ extern "C" {
 
 #define SQ_ABI_MAJOR_V1 1u
 #define SQ_ABI_MINOR_V1 1u
+
+#define SQ_ABI_FEATURE_BOUNDED_PCM_QUEUE_V1 (1ull << 0)
+#define SQ_ABI_FEATURE_CAPTURE_EVENT_RING_V1 (1ull << 1)
 #define SQ_ABI_PCM_BLOCK_V1_SIZE 64u
 
 typedef struct sq_capture_engine sq_capture_engine;
