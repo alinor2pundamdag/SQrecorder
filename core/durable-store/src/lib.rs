@@ -128,9 +128,7 @@ where
     drop(stage_file);
     verify(&stage)?;
 
-    if let Err(rename_error) =
-        sqrec_windows_durable_rename::rename_write_through_new(&stage, dest)
-    {
+    if let Err(rename_error) = sqrec_windows_durable_rename::rename_write_through_new(&stage, dest) {
         // The no-replace primitive guarantees an existing destination was not
         // overwritten. If both paths exist, preserve both for reconciliation.
         if dest.try_exists()? {
@@ -644,5 +642,4 @@ mod tests {
         assert_eq!(fs::read(&final_path).unwrap(), b"new encrypted bytes");
         fs::remove_dir_all(d).unwrap();
     }
-
 }
