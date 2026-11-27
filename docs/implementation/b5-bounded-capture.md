@@ -7,9 +7,9 @@
 - Queue overflow transitions to terminal `Failed` and records an explicit integrity-overflow flag. Subsequent submission is rejected; no silent overwrite/drop.
 - Stop transition requires draining queued PCM before terminal `Stopped`.
 - Unit tests cover FIFO payload integrity, overflow fail-closed behavior, invalid payload shape, drain-before-stop, and rejection of configurations exceeding the memory budget.
-- Exact-head Rust contract Run #71 passed on `cb208c89c3c6386a5ca1be19d140dff85378e7c5`: lockfile metadata, rustfmt, full workspace tests, and Clippy. Android contract Run #96 is pending; no pass claimed.
+- Exact-head verification on PR head `9200621807e4eb22c0106a8058cfa073e93cc591` (2026-11-27): Rust contract Run #72 (`45996507523`) **PASS** — lockfile metadata, rustfmt, workspace tests, and Clippy. Android Vault contract Run #97 (`45996507513`) **PASS** — JDK/SDK/Gradle setup, pinned Rust Android targets, 16 KB-aligned JNI libraries, Vault adapter/host contracts, app assembly/unit tests, and API 36 emulator native Vault bridge. All reported job steps succeeded.
 
 ## Boundary / not yet complete
 - This is a **safe Rust queue core**, not yet exported as operational C ABI functions nor connected to Android AudioRecord/JNI, Rust canonical WAV, Vault chunk encryption, SQJ journal, durable-store promotion, or crash recovery.
 - The Android PR #4 service remains a plaintext app-private prototype. This queue does not make that service production-secure.
-- CI and exact-head tests must pass before treating this slice as verified. Physical-device gates remain outstanding.
+- CI passed for the code head listed above. This documentation-only evidence update does not alter Rust or Android source; confirm the resulting branch head and its check association before treating it as final evidence. Physical-device gates remain outstanding.
