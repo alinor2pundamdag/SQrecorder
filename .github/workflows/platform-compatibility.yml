@@ -22,6 +22,8 @@ on:
   pull_request:
     branches: [main, b4-hardening-approved-foundation, android-b5-capture]
     paths:
+      - "protocols/native-abi/**"
+      - "tests/contract/**"
       - "shared/domain/**"
       - "shared/capability-system/**"
       - "core/**"
