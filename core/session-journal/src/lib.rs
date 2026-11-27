@@ -182,7 +182,7 @@ fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
             while i < self.bytes.len() {
                 match self.bytes[i] {
                     b'"' => return Some(i + 1),
-                    b'\\\\' => i = i.checked_add(2)?,
+                    b'\\' => i = i.checked_add(2)?,
                     byte if byte < 0x20 => return None,
                     _ => i += 1,
                 }
