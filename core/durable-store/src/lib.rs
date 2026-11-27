@@ -95,6 +95,27 @@ where
         .map_err(|_| StoreError::PromotionDurabilityUnknown)?;
     commit().map_err(|_| StoreError::JournalCommitPending)
 }
+/// Recovery action combines filesystem evidence with the journal's durable commit marker.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReconciliationAction {
+    AlreadyCommitted,
+    AppendMissingJournalCommit,
+    ValidateAndRecoverStage,
+    PreserveAndInvestigateBoth,
+    ReportMissingArtifact,
+}
+pub fn reconciliation_action(
+    filesystem: RecoveryState,
+    journal_commit_present: bool,
+) -> ReconciliationAction {
+    match (filesystem, journal_commit_present) {
+        (RecoveryState::FinalPresent, true) => ReconciliationAction::AlreadyCommitted,
+        (RecoveryState::FinalPresent, false) => ReconciliationAction::AppendMissingJournalCommit,
+        (RecoveryState::StagedOnly, _) => ReconciliationAction::ValidateAndRecoverStage,
+        (RecoveryState::BothPresent, _) => ReconciliationAction::PreserveAndInvestigateBoth,
+        (RecoveryState::NeitherPresent, _) => ReconciliationAction::ReportMissingArtifact,
+    }
+}
 /// Inspection is non-destructive; it never deletes or truncates candidates.
 pub fn inspect_recovery(d: &Path, s: &Path) -> RecoveryState {
     match (d.exists(), s.exists()) {
@@ -245,6 +266,14 @@ mod tests {
         fs::remove_dir_all(d).unwrap();
     }
 
+    #[test]
+    fn recovery_reconciliation_never_silently_discards_evidence() {
+        assert_eq!(reconciliation_action(RecoveryState::FinalPresent, true), ReconciliationAction::AlreadyCommitted);
+        assert_eq!(reconciliation_action(RecoveryState::FinalPresent, false), ReconciliationAction::AppendMissingJournalCommit);
+        assert_eq!(reconciliation_action(RecoveryState::StagedOnly, false), ReconciliationAction::ValidateAndRecoverStage);
+        assert_eq!(reconciliation_action(RecoveryState::BothPresent, true), ReconciliationAction::PreserveAndInvestigateBoth);
+        assert_eq!(reconciliation_action(RecoveryState::NeitherPresent, false), ReconciliationAction::ReportMissingArtifact);
+    }
     #[test]
     fn staged_recovery_is_not_deleted() {
         let d = td();
