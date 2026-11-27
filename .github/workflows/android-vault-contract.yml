@@ -31,6 +31,8 @@ on:
   pull_request:
     paths:
       - "build.gradle.kts"
+      - "protocols/native-abi/**"
+      - "tests/contract/**"
       - "android/**"
       - "settings.gradle.kts"
       - "shared/domain/**"
