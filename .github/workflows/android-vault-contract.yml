@@ -11,6 +11,7 @@ on:
       - "shared/capability-system/**"
       - "shared/vault-keystore-android/**"
       - "core/native-abi/**"
+      - "core/native-abi/**"
       - "core/session-journal/**"
       - "core/durable-store/**"
       - "core/windows-durable-rename/**"
