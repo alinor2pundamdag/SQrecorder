@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
@@ -34,7 +35,8 @@ public class CaptureForegroundService : Service() {
   when (intent?.action) {
    ACTION_STOP -> stopping.set(true)
    ACTION_START -> if (captureThread == null) {
-    startForeground(NOTIFICATION_ID, notification())
+    if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+    else startForeground(NOTIFICATION_ID, notification())
     stopping.set(false)
     captureThread = Thread({ captureLoop() }, "sqrec-audio-capture").apply {
      priority = Process.THREAD_PRIORITY_AUDIO
@@ -51,19 +53,31 @@ public class CaptureForegroundService : Service() {
   var partial: File? = null
   var success = false
   try {
-   val rate = supportedRate()
-   val minBytes = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
-   check(minBytes > 0) { "AudioRecord buffer query failed: $minBytes" }
-   val bufferSize = maxOf(minBytes * 2, rate / 25 * 2)
-   active = AudioRecord(MediaRecorder.AudioSource.MIC, rate, AudioFormat.CHANNEL_IN_MONO,
-    AudioFormat.ENCODING_PCM_16BIT, bufferSize)
-   check(active.state == AudioRecord.STATE_INITIALIZED) { "AudioRecord initialization failed" }
+   var rate = 0
+   var bufferSize = 0
+   for (candidate in intArrayOf(48_000, 44_100)) {
+    val minimum = AudioRecord.getMinBufferSize(candidate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+    if (minimum <= 0) continue
+    val candidateBuffer = maxOf(minimum * 2, candidate / 25 * 2)
+    val candidateRecorder = try {
+     AudioRecord(MediaRecorder.AudioSource.MIC, candidate, AudioFormat.CHANNEL_IN_MONO,
+      AudioFormat.ENCODING_PCM_16BIT, candidateBuffer)
+    } catch (_: Exception) { continue }
+    if (candidateRecorder.state == AudioRecord.STATE_INITIALIZED) {
+     active = candidateRecorder
+     rate = candidate
+     bufferSize = candidateBuffer
+     break
+    }
+    candidateRecorder.release()
+   }
+   check(active != null) { "48 kHz and 44.1 kHz AudioRecord initialization failed" }
    recorder = active
    val directory = File(filesDir, "recordings")
    check(directory.exists() || directory.mkdirs()) { "Private recordings directory unavailable" }
    partial = File(directory, "capture-" + System.currentTimeMillis() + ".wav.part")
    output = RandomAccessFile(partial, "rw")
-   output!!.write(wavHeader(rate, 0L))
+   output!!.write(PcmWavHeader.create(rate, 0L))
    active.startRecording()
    check(active.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord start failed" }
 
@@ -82,7 +96,7 @@ public class CaptureForegroundService : Service() {
    }
    active.stop()
    output!!.seek(0)
-   output!!.write(wavHeader(rate, bytes))
+   output!!.write(PcmWavHeader.create(rate, bytes))
    output!!.fd.sync()
    output!!.close()
    output = null
@@ -103,30 +117,6 @@ public class CaptureForegroundService : Service() {
    if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE) else stopForeground(true)
    stopSelf()
   }
- }
-
- private fun supportedRate(): Int {
-  for (sampleRate in intArrayOf(48_000, 44_100)) {
-   if (AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) > 0) return sampleRate
-  }
-  error("48 kHz and 44.1 kHz mono PCM unavailable")
- }
-
- private fun wavHeader(rate: Int, dataBytes: Long): ByteArray {
-  require(dataBytes >= 0L && dataBytes <= 0xffff_ffffL - 36L)
-  val header = ByteArray(44)
-  fun ascii(offset: Int, value: String) = value.toByteArray(Charsets.US_ASCII).copyInto(header, offset)
-  fun u16(offset: Int, value: Int) {
-   header[offset] = value.toByte(); header[offset + 1] = (value ushr 8).toByte()
-  }
-  fun u32(offset: Int, value: Long) {
-   for (index in 0..3) header[offset + index] = (value ushr (8 * index)).toByte()
-  }
-  ascii(0, "RIFF"); u32(4, dataBytes + 36); ascii(8, "WAVE")
-  ascii(12, "fmt "); u32(16, 16); u16(20, 1); u16(22, 1)
-  u32(24, rate.toLong()); u32(28, rate.toLong() * 2L); u16(32, 2); u16(34, 16)
-  ascii(36, "data"); u32(40, dataBytes)
-  return header
  }
 
  private fun createNotificationChannel() {
