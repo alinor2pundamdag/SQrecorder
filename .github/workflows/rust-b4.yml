@@ -29,8 +29,8 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - run: rustup toolchain install 1.85.1 --profile minimal && rustup default 1.85.1
-      # Generate a lockfile when bootstrapping; acceptance still requires committing it.
-      - run: cargo generate-lockfile
+      - name: Require committed lockfile
+        run: git ls-files --error-unmatch Cargo.lock
       - run: cargo check --workspace --locked
       - run: cargo test --workspace --all-targets --locked
       - name: Export generated Cargo.lock for repository commit
@@ -40,5 +40,3 @@ jobs:
           path: Cargo.lock
           if-no-files-found: error
           retention-days: 3
-      - name: Verify lockfile is tracked in source
-        run: git ls-files --error-unmatch Cargo.lock
