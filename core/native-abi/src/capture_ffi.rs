@@ -529,4 +529,19 @@ mod tests {
         assert_eq!(unsafe { sq_capture_finish_v1(handle) }, SqStatusV1::Ok);
         unsafe { sq_capture_destroy_v1(handle) };
     }
+    #[test]
+    fn abi_info_reports_supported_bounded_capture_features() {
+        let mut info = SqAbiInfoV1 {
+            struct_size: 0, abi_major: 0, abi_minor: 0,
+            feature_bits: 0, reserved: [0; 4],
+        };
+        assert_eq!(unsafe { sq_get_abi_info_v1(&mut info) }, SqStatusV1::Ok);
+        assert_eq!(info.abi_major, ABI_MAJOR_V1);
+        assert_eq!(info.abi_minor, ABI_MINOR_V1);
+        assert_eq!(
+            info.feature_bits,
+            ABI_FEATURE_BOUNDED_PCM_QUEUE_V1 | ABI_FEATURE_CAPTURE_EVENT_RING_V1
+        );
+    }
+
 }
