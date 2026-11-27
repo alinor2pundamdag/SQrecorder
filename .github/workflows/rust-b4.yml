@@ -33,5 +33,12 @@ jobs:
       - run: cargo generate-lockfile
       - run: cargo check --workspace --locked
       - run: cargo test --workspace --all-targets --locked
+      - name: Export generated Cargo.lock for repository commit
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa # v4.6.2
+        with:
+          name: b4-cargo-lockfile
+          path: Cargo.lock
+          if-no-files-found: error
+          retention-days: 3
       - name: Verify lockfile is tracked in source
         run: git ls-files --error-unmatch Cargo.lock
