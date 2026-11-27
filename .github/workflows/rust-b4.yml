@@ -12,7 +12,8 @@ permissions:
   contents: read
 concurrency:
   group: rust-b4-${{ github.ref }}
-  cancel-in-progress: true
+  # Do not cancel verification of an earlier commit; each run records its own SHA.
+  cancel-in-progress: false
 
 jobs:
   format:
@@ -20,13 +21,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
+      - run: rustup toolchain install 1.85.1 --profile minimal --component rustfmt && rustup default 1.85.1
       - run: cargo fmt --all -- --check
   tests:
     name: Workspace compile + journal, Vault, durability tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - run: rustup toolchain install stable --profile minimal && rustup default stable
-      - run: cargo check --workspace
-      - run: cargo test --workspace --all-targets
+      - run: rustup toolchain install 1.85.1 --profile minimal && rustup default 1.85.1
+      # Generate a lockfile when bootstrapping; acceptance still requires committing it.
+      - run: cargo generate-lockfile
+      - run: cargo check --workspace --locked
+      - run: cargo test --workspace --all-targets --locked
+      - name: Verify lockfile is tracked in source
+        run: git ls-files --error-unmatch Cargo.lock
