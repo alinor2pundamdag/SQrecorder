@@ -872,8 +872,7 @@ mod tests {
         );
 
         let mut noncanonical_number = input(1, [0; 32]);
-        noncanonical_number.canonical_payload =
-            br#"{"eventCode":2,"rate":1.0,"schemaVersion":1}"#;
+        noncanonical_number.canonical_payload = br#"{"eventCode":2,"rate":1.0,"schemaVersion":1}"#;
         assert_eq!(
             writer.append(noncanonical_number),
             Err(JournalError::NonCanonicalPayload)
