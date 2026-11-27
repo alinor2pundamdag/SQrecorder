@@ -154,3 +154,38 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Latest PR #2 B4 head before this evidence commit: `74fbb78b7556e3c3368417bc663ba9206b3aee9e`.
 - **Local verification limitation:** no Rust toolchain is installed in the execution container (`rustc: command not found`). GitHub Actions connector returned no PR-triggered workflow run or combined status for the current head. New Rust registry/verifier and Kotlin host tests are **not yet CI-verified**; source commits/tests are not proof of passing.
 - Android Run #36 is still a PASS only for PR #3 merge ref `7053602107e085990209d33d577d9c60516d2d22`; it is not latest B4 branch evidence.
+
+
+## Consolidated B4 verification evidence — 2026-11-27
+
+### Source/evidence SHA
+- Implementation source head before this evidence commit: `31bab8539af221f576a56cd2cfb2f69bb73b790d`.
+- This evidence update is committed separately; CI is configured to trigger for `docs/implementation/**` so the final evidence revision receives its own checks.
+- PR #2 is draft/open/unmerged. PR #3 is draft/open/unmerged and tracking-only; verifier source is integrated once in PR #2's B4 branch.
+
+### Implemented and CI-tested foundations
+- Rust append-only SQAK public-key registry: hash-chained sequence, key fingerprint binding, duplicate rejection, bounded parser, verified-only resume, append+sync sink; unit tests for tamper/tail/rotation history.
+- Portable Rust anchor verifier: metadata/key-ID binding and byte-exact Android signing preimage; ECDSA provider is injected. RustCrypto/provider implementation and true cross-platform ECDSA golden vectors remain unimplemented.
+- Android historical-key resolver scans retained numbered Keystore aliases; unknown/malformed key ID fails closed; defensive-copy and lookup tests added.
+- Windows durable promotion: isolated `MoveFileExW(REPLACE_EXISTING | WRITE_THROUGH)` helper; durable-store crate retains `forbid(unsafe_code)`; Windows Rust test leg passed in Run #52.
+- KMP shared identities changed from JVM-specific inline wrappers to portable data classes after Native compile failures.
+- Missing model install planner implemented: verified trust verdict, 2× storage policy, partial cleanup, overflow/negative storage fail-closed, digest idempotency, version compatibility; common tests added.
+- CI workflow scope fixed: Android job runs JVM contract tests + Android adapter (native target matrix runs separately); workflow/path triggers synchronized; PR #3 source copied to B4 once, branch reset to tracking-only to prevent duplicate cherry-pick.
+
+### Verified CI evidence
+- Rust Run #67 PASS on source `1ce88b75082e62af29580d1357bf4055e3f6ce79`: locked metadata, rustfmt, workspace tests, Clippy.
+- Cross-platform Run #52 PASS on the same source: Rust Linux/macOS/Windows and KMP Linux/Windows/macOS host compile/test tasks all succeeded.
+- Android Run #82 failed due Maven Central HTTP 429 while compiling unnecessary iOS Native test artifacts in Android workflow, not a Kotlin source error. Workflow narrowed to JVM tests + Android adapter; Android Run #83 is in progress on workflow revision `31bab8539af221f576a56cd2cfb2f69bb73b790d`.
+- Earlier true source failures were repaired: Rust format/Clippy, missing test-only sink import, Windows directory-sync behavior, Native `JvmInline`, and absent model install planner. Each fix was driven by actual CI logs.
+
+### Gates still open — do not mark B4 100%
+1. Exact final evidence-SHA CI: Rust, Android JNI/16 KB, Android host tests, API 36 emulator, and cross-platform Rust/KMP matrix must all pass on the evidence commit.
+2. SQVE v2 is only a common metadata contract/design. Canonical serialized parser/writer, cryptographic RSA/ECDH providers, header MAC/AAD, nonces/counter enforcement, cross-platform golden vectors, v1 read/migration, recovery, fuzz/tamper vectors, and independent security review remain. SQVE v1 unchanged.
+3. Rust anchor verifier still lacks a production ECDSA P-256/SHA-256 implementation/provider and real signature vectors; registry/preimage primitive is not the end-to-end signed journal acceptance.
+4. Anchor registry must be wired into signer rotation, durable journal checkpoints/recovery, key invalidation, registry export/restore, and trusted integrity/backup policy on each platform.
+5. Crash-cut + ENOSPC/storage-fault integration tests and recovery evidence remain.
+6. Product-level platform compatibility is incomplete: KMP targets compile shared contracts, but installable Android/Wear OS, iOS/iPadOS/watchOS, Windows/macOS/Linux/JVM app shells, audio/lifecycle/auth/key adapters, packaging/signing, and platform permission/background-capture tests remain.
+7. Physical-device gates not performed here: Android hardware-backed Keystore/auth/invalidation/rotation; locked encrypt-only and authenticated unwrap/playback/export; actual crash/reboot/storage exhaustion; physical 16 KB page-size matrix. Physical Apple/Windows device/provider acceptance remains for those implementations.
+8. Final B4 acceptance checklist and PR #2 status remain blocked until all applicable CI + physical gates pass. Keep both PRs draft/open/unmerged.
+
+**Final verdict at this checkpoint: B4 = IN PROGRESS / NOT 100% accepted.**
