@@ -278,29 +278,20 @@ mod tests {
                         .create_new(true)
                         .open(stage)?;
                     f.write_all(bytes)?;
-                    Err(StoreError::Io(io::Error::new(
-                        io::ErrorKind::Other,
-                        "injected fsync failure",
-                    )))
+                    Err(StoreError::Io(io::Error::other("injected fsync failure")))
                 }
                 _ => OsPromotionOps.write_and_sync_stage(stage, bytes),
             }
         }
         fn rename_stage(&self, stage: &Path, dest: &Path) -> Result<(), StoreError> {
             if matches!(self.0, FaultPoint::Rename) {
-                return Err(StoreError::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    "injected rename failure",
-                )));
+                return Err(StoreError::Io(io::Error::other("injected rename failure")));
             }
             OsPromotionOps.rename_stage(stage, dest)
         }
         fn sync_parent(&self, parent: &Path) -> Result<(), StoreError> {
             if matches!(self.0, FaultPoint::ParentSync) {
-                return Err(StoreError::Io(io::Error::new(
-                    io::ErrorKind::Other,
-                    "injected directory sync failure",
-                )));
+                return Err(StoreError::Io(io::Error::other("injected directory sync failure")));
             }
             OsPromotionOps.sync_parent(parent)
         }
