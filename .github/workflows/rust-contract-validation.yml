@@ -11,9 +11,19 @@ on:
       - rust-toolchain.toml
       - core/**
       - .github/workflows/rust-contract-validation.yml
+  pull_request:
+    branches:
+      - batch-1-foundation
+      - b4-hardening-approved-foundation
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - core/**
+      - .github/workflows/rust-contract-validation.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   rust-contracts:
@@ -40,27 +50,12 @@ jobs:
       - name: Resolve and generate workspace lock
         working-directory: source
         run: cargo generate-lockfile
-      - name: Format Rust sources
+      - name: Check Rust formatting
         working-directory: source
-        run: cargo fmt --all
+        run: cargo fmt --all -- --check
       - name: Workspace tests
         working-directory: source
         run: cargo test --workspace --locked
       - name: Clippy
         working-directory: source
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Commit generated lockfile if changed
-        working-directory: source
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- Cargo.lock; then
-            echo "Cargo.lock already matches the resolved workspace."
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.lock core
-          git commit -m "chore: format and lock validated Rust workspace"
-          git push origin "HEAD:$GITHUB_REF_NAME"
