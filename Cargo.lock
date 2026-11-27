@@ -375,6 +375,9 @@ version = "0.1.0"
 [[package]]
 name = "sqrec-durable-store"
 version = "0.1.0"
+dependencies = [
+ "sqrec-windows-durable-rename",
+]
 
 [[package]]
 name = "sqrec-native-abi"
@@ -402,6 +405,13 @@ dependencies = [
  "getrandom",
  "sha2",
  "zeroize",
+]
+
+[[package]]
+name = "sqrec-windows-durable-rename"
+version = "0.1.0"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
