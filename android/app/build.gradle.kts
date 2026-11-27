@@ -8,4 +8,5 @@ android {
 dependencies {
  implementation(project(":shared:domain"))
  implementation(project(":shared:vault-keystore-android"))
+ testImplementation("junit:junit:4.13.2")
 }
