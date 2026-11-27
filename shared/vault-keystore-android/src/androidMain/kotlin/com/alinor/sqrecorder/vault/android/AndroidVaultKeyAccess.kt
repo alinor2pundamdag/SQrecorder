@@ -51,6 +51,18 @@ public fun interface VaultAuthContextVerifier {
     public fun isCurrent(context: VaultAuthContext): Boolean
 }
 
+/** Enforce both revocation and the short, monotonic authorization window on every decrypt path. */
+internal fun isCurrentVaultAuthContext(
+    context: VaultAuthContext,
+    nowMonotonicNs: Long,
+    verifier: VaultAuthContextVerifier,
+): Boolean =
+    context.validate(nowMonotonicNs) &&
+        verifier.isCurrent(context) &&
+        context.expiresAtMonotonicNs - nowMonotonicNs <= VAULT_AUTH_WINDOW_NANOS
+
+internal const val VAULT_AUTH_WINDOW_NANOS: Long = 30L * 1_000_000_000L
+
 internal val SQVE_V1_OAEP_LABEL = "SQREC-VAULT-DEK-v1".toByteArray(Charsets.UTF_8)
 
 internal fun androidKeystoreSupportsSqveV1Oaep(apiLevel: Int): Boolean =
@@ -127,11 +139,8 @@ public class AndroidVaultKeyAccess(
             throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
         }
         requireSqveV1AndroidKeystoreSupport()
-        requireSqveV1AndroidKeystoreSupport()
         val now = SystemClock.elapsedRealtimeNanos()
-        if (!authContext.validate(now) || !authVerifier.isCurrent(authContext) ||
-            authContext.expiresAtMonotonicNs - now > AUTH_WINDOW_NANOS
-        ) {
+        if (!isCurrentVaultAuthContext(authContext, now, authVerifier)) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.AUTH_CONTEXT_INVALID)
         }
 
@@ -283,7 +292,6 @@ public class AndroidVaultKeyAccess(
         const val RSA_KEY_BITS = 3072
         const val DEK_BYTES = 32
         const val AUTH_WINDOW_SECONDS = 30
-        const val AUTH_WINDOW_NANOS = AUTH_WINDOW_SECONDS * 1_000_000_000L
     }
 }
 
@@ -307,7 +315,7 @@ public class AndroidVaultChunkCipher(
         authContext: VaultAuthContext,
     ): ByteArray {
         val now = SystemClock.elapsedRealtimeNanos()
-        if (!authContext.validate(now) || !authVerifier.isCurrent(authContext)) {
+        if (!isCurrentVaultAuthContext(authContext, now, authVerifier)) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.AUTH_CONTEXT_INVALID)
         }
         return native.decryptChunk(fileKeyHandle, nonce, associatedData, ciphertextAndTag)
