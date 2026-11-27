@@ -588,9 +588,18 @@ mod tests {
         let mut writer = JournalWriter::new(MemorySink::default());
         writer.append(input(1, [0; 32])).unwrap();
         let mut bytes = writer.into_sink().bytes;
-        // Mutate a schema-neutral JSON value while keeping the payload valid.
-        // The verifier should reach the hash check, not fail schema validation.
-        bytes[4 + 76 + 16] ^= 1; // captureEpoch: "1" -> "0"
+        // Find the exact schema-neutral JSON value instead of relying on a
+        // fragile serialized-byte offset. Keep the payload valid so verification
+        // reaches the digest check rather than failing schema validation.
+        let payload = b"\"captureEpoch\":\"1\"";
+        let payload_offset = bytes[4 + 76..]
+            .windows(payload.len())
+            .position(|window| window == payload)
+            .expect("fixture contains captureEpoch value");
+        let value_offset = 4 + 76 + payload_offset + payload.len() - 2;
+        assert_eq!(bytes[value_offset], b'1');
+        bytes[value_offset] = b'0';
+        assert_eq!(bytes[value_offset], b'0');
         assert_eq!(
             verify_journal(&bytes).error,
             Some(JournalVerificationError::DigestMismatch)
