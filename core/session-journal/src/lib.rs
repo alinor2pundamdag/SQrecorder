@@ -11,7 +11,7 @@ pub use anchor_registry::{
     verify_anchor_key_registry,
 };
 pub use anchor_verifier::{
-    AnchorCryptoProviderError, JournalSignatureAnchor, JournalAnchorVerificationResult,
+    AnchorCryptoProviderError, JournalAnchorVerificationResult, JournalSignatureAnchor,
     P256Sha256SignatureProvider, journal_anchor_signing_payload, verify_journal_anchor,
 };
 
