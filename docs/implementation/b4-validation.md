@@ -85,3 +85,12 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Android Run #36: **PASS**. Job `android-vault` passed all 21 listed steps, including native arm64-v8a/x86_64 build, ELF 16 KB LOAD alignment, Android host contract tests, KVM setup, and API 36 emulator Vault bridge. Source repair commit: `5a11193d2dc17d56af2edd4c35bb11bab20eb232`. URL: https://github.com/alinor2pundamdag/SQrecorder/actions/runs/45978069195.
 - This is not final B4 acceptance: physical Android tests, cross-platform provider builds, SQVE v2 vectors/security review, durable key registry, recovery/fault matrix, and exact-final-integrated-SHA CI remain open.
 - PR #2 and PR #3 must remain draft/open/unmerged. B4 is **IN PROGRESS / NOT 100%** until all required CI and physical-device gates pass.
+
+
+## Cross-platform target declaration and CI handoff — 2026-11-27
+
+- Shared KMP domain target declarations added: JVM, Android, Linux x64, Windows MinGW x64, iOS arm64/simulator, macOS arm64, watchOS device/simulator. Commit: `5d080afd6f5de41f714967090a34e9e5ad9cb041`.
+- Added cross-platform CI workflow `.github/workflows/platform-compatibility.yml` (Rust workspace test matrix on Linux/Windows/macOS; KMP domain target compile/test matrix on Linux/Windows/macOS; manual `workflow_dispatch`). Workflow commit: `ef1231680b2ae49dde31bafebc63335ae6f7e926`.
+- Current PR #2 head verified by GitHub: `23c6f467041b51d8321e57cbe249a5ae7bd401df`. GitHub connector did not return a workflow run or combined check status for this exact head at verification time. Therefore the newly declared cross-platform target matrix is **CI NOT YET VERIFIED**, not green.
+- Existing Android Run #36 remains a PASS for the PR #3 verifier repair SHA only. It is not evidence for the new KMP target declarations or exact PR #2 head.
+- The platform matrix is now a declared build contract; no iOS/watchOS/Windows/macOS/Linux app or physical-device support is claimed until its target-specific checks and device gates pass.
