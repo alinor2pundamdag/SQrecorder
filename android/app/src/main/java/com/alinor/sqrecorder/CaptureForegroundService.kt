@@ -23,8 +23,11 @@ import com.alinor.sqrecorder.domain.SessionEvent
 import com.alinor.sqrecorder.domain.StopReason
 import com.alinor.sqrecorder.domain.SessionFailureCode
 import com.alinor.sqrecorder.domain.TransitionOutcome
+import com.alinor.sqrecorder.capture.CaptureQueuePump
+import com.alinor.sqrecorder.capture.JniCaptureQueue
 import java.io.File
 import java.io.RandomAccessFile
+import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -101,7 +104,16 @@ public class CaptureForegroundService : Service() {
    check(active.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord start failed" }
    reduce(SessionEvent.CaptureStarted(SystemClock.elapsedRealtimeNanos(), 1L))
 
-   val pcm = ByteArray(bufferSize)
+   // Route AudioRecord through the fixed native queue. Disk writes are isolated
+   // to the consumer thread; overflow/contention fails closed and retains .part.
+   val queue = JniCaptureQueue(
+    sampleRateHz = rate,
+    queueBlockCapacity = QUEUE_BLOCK_CAPACITY,
+    maxBlockFrames = MAX_CAPTURE_BLOCK_FRAMES,
+   )
+   pump = CaptureQueuePump(queue, rate, output!!, 1L)
+   pump!!.start()
+   val pcm = ByteBuffer.allocateDirect(MAX_CAPTURE_BLOCK_BYTES)
    var bytes = 0L
    while (!stopping.get()) {
     if (StatFs(filesDir.absolutePath).availableBytes < MIN_FREE_BYTES) {
@@ -109,14 +121,19 @@ public class CaptureForegroundService : Service() {
      stopReason = StopReason.STORAGE_LIMIT
      break
     }
-    val count = active.read(pcm, 0, pcm.size, AudioRecord.READ_BLOCKING)
+    pcm.clear()
+    val count = active.read(pcm, pcm.capacity(), AudioRecord.READ_BLOCKING)
     if (count < 0) throw IllegalStateException("AudioRecord read failed: $count")
     if (count == 0) continue
-    output!!.write(pcm, 0, count)
+    if (count % 2 != 0) throw IllegalStateException("AudioRecord returned a partial S16 frame: $count bytes")
+    pcm.position(0)
+    pump!!.submit(pcm, count, count / 2, SystemClock.elapsedRealtimeNanos())
     bytes = Math.addExact(bytes, count.toLong())
    }
    reduce(SessionEvent.StopRequested(SystemClock.elapsedRealtimeNanos(), stopReason))
    active.stop()
+   pump!!.stopAndDrain()
+   pump = null
    reduce(SessionEvent.CaptureStopped(SystemClock.elapsedRealtimeNanos()))
    check(bytes > 0L && bytes % 2L == 0L) { "No complete PCM frames captured; partial retained" }
    output!!.seek(0)
@@ -138,6 +155,11 @@ public class CaptureForegroundService : Service() {
    try { if (active?.recordingState == AudioRecord.RECORDSTATE_RECORDING) active.stop() } catch (_: Exception) {}
    active?.release()
    recorder = null
+   try { pump?.stopAndDrain() } catch (pumpFailure: Exception) {
+    success = false
+    android.util.Log.e(TAG, "Native queue did not drain cleanly; preserve partial artifact", pumpFailure)
+   }
+   pump = null
    try { output?.fd?.sync() } catch (_: Exception) {}
    try { output?.close() } catch (_: Exception) {}
    output = null
@@ -178,5 +200,8 @@ public class CaptureForegroundService : Service() {
   private const val CHANNEL_ID = "sqrec_capture"
   private const val NOTIFICATION_ID = 6101
   private const val MIN_FREE_BYTES = 50L * 1024L * 1024L
+  private const val QUEUE_BLOCK_CAPACITY = 32
+  private const val MAX_CAPTURE_BLOCK_FRAMES = 32_768
+  private const val MAX_CAPTURE_BLOCK_BYTES = MAX_CAPTURE_BLOCK_FRAMES * 2
  }
 }
