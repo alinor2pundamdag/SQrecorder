@@ -241,6 +241,12 @@ pub fn verify_anchor_key_registry(bytes: &[u8]) -> AnchorKeyRegistryVerification
         result.last_sequence = key.sequence;
         result.last_digest = key.record_digest;
         result.retained_keys.push(key);
+        if result.retained_keys.len() > ANCHOR_KEY_REGISTRY_MAX_RECORDS {
+            result.status = AnchorKeyRegistryStatus::Corrupt;
+            result.error = Some(AnchorKeyRegistryError::RecordLimitReached);
+            result.retained_keys.pop();
+            break;
+        }
         offset += total_len;
         result.valid_prefix_bytes = offset;
     }
@@ -279,7 +285,7 @@ fn parse_registry_record(
     previous_sequence: u64,
     previous_digest: &[u8; 32],
 ) -> Result<RetainedAnchorPublicKey, AnchorKeyRegistryError> {
-    if record.len() < 84 || record.get(..4) != Some(ANCHOR_KEY_REGISTRY_MAGIC) {
+    if record.len() < 84 || record.get(..4) != Some(&ANCHOR_KEY_REGISTRY_MAGIC[..]) {
         return Err(AnchorKeyRegistryError::InvalidMagic);
     }
     if read_u16_le(record, 4) != ANCHOR_KEY_REGISTRY_VERSION {
