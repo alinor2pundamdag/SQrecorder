@@ -75,7 +75,7 @@ The wrap count and wrap entries are excluded so DEK rewrap does not require cont
 - Recovery distinguishes sealed, incomplete, corrupt, and authentication-required files. Missing/truncated chunks are never presented as complete.
 - Authentication/tag failure returns no plaintext and marks the file corrupt/tampered; never continue with unauthenticated bytes.
 
-## 2049 migration rules
+## Migration rules
 
 Envelope, cipher, wrap, and key IDs are immutable versioned identifiers. Migration is append-only: preserve old verification material, rewrap the existing DEK where possible, do not re-encrypt or alter ciphertext solely for a key-wrap migration, append a signed migration event, and never overwrite historical signatures.
 
