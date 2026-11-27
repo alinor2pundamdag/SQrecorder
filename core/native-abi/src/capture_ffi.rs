@@ -88,7 +88,9 @@ pub unsafe extern "C" fn sq_capture_create_v1(
         }
         let queue = BoundedPcmQueue::new(c.queue_block_capacity, c.max_block_frames)
             .map_err(|_| SqStatusV1::InvalidArgument)?;
-        unsafe { ptr::write(out, ptr::null_mut()); }
+        unsafe {
+            ptr::write(out, ptr::null_mut());
+        }
         let boxed = Box::new(SqCaptureEngine {
             sample_rate_hz: c.sample_rate_hz,
             queue,
