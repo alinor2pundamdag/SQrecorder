@@ -211,3 +211,69 @@ pub unsafe extern "C" fn sq_capture_finish_v1(raw: *mut SqCaptureEngine) -> SqSt
         e.queue.mark_stopped().map_err(|_| SqStatusV1::InvalidState)
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config() -> SqCaptureConfigV1 {
+        SqCaptureConfigV1 {
+            struct_size: core::mem::size_of::<SqCaptureConfigV1>() as u32,
+            sample_rate_hz: 48_000, channels: 1, sample_format: PCM_S16_LE_V1,
+            queue_block_capacity: 2, max_block_frames: 128, flags: 0, reserved: [0; 4],
+        }
+    }
+
+    #[test]
+    fn ffi_round_trip_and_stop_requires_drain() {
+        let mut handle = ptr::null_mut();
+        let cfg = config();
+        assert_eq!(unsafe { sq_capture_create_v1(&cfg, &mut handle) }, SqStatusV1::Ok);
+        assert!(!handle.is_null());
+        assert_eq!(unsafe { sq_capture_start_v1(handle) }, SqStatusV1::Ok);
+        assert_eq!(unsafe { sq_capture_start_v1(handle) }, SqStatusV1::InvalidState);
+
+        let samples = [0x12u8, 0x34, 0x56, 0x78];
+        let block = SqPcmBlockV1 {
+            struct_size: core::mem::size_of::<SqPcmBlockV1>() as u32,
+            flags: 0, sample_rate_hz: 48_000, channels: 1, sample_format: PCM_S16_LE_V1,
+            frame_count: 2, reserved0: 0, first_frame_index: 0,
+            monotonic_timestamp_ns: 10, capture_epoch: 1, payload_bytes: 4,
+            sequence: 1, reserved1: 0,
+        };
+        assert_eq!(unsafe { sq_capture_submit_pcm_v1(handle, &block, samples.as_ptr(), 4) }, SqStatusV1::Ok);
+        assert_eq!(unsafe { sq_capture_request_stop_v1(handle) }, SqStatusV1::Ok);
+        assert_eq!(unsafe { sq_capture_finish_v1(handle) }, SqStatusV1::InvalidState);
+
+        let mut out_block = SqPcmBlockV1 { struct_size: 0, flags: 0, sample_rate_hz: 0,
+            channels: 0, sample_format: 0, frame_count: 0, reserved0: 0,
+            first_frame_index: 0, monotonic_timestamp_ns: 0, capture_epoch: 0,
+            payload_bytes: 0, sequence: 0, reserved1: 0 };
+        let mut output = [0u8; 4];
+        let mut written = 0u64;
+        assert_eq!(unsafe { sq_capture_read_pcm_v1(handle, &mut out_block, output.as_mut_ptr(), 4, &mut written) }, SqStatusV1::Ok);
+        assert_eq!(output, samples);
+        assert_eq!(written, 4);
+        assert_eq!(out_block.sequence, 1);
+        assert_eq!(unsafe { sq_capture_finish_v1(handle) }, SqStatusV1::Ok);
+        let mut state = 0;
+        assert_eq!(unsafe { sq_capture_get_state_v1(handle, &mut state) }, SqStatusV1::Ok);
+        assert_eq!(state, 3);
+        unsafe { sq_capture_destroy_v1(handle) };
+    }
+
+    #[test]
+    fn ffi_rejects_invalid_configuration_and_event_api_is_explicitly_unsupported() {
+        let mut handle = ptr::null_mut();
+        let mut cfg = config();
+        cfg.reserved[0] = 1;
+        assert_eq!(unsafe { sq_capture_create_v1(&cfg, &mut handle) }, SqStatusV1::InvalidArgument);
+        cfg = config();
+        assert_eq!(unsafe { sq_capture_create_v1(&cfg, &mut handle) }, SqStatusV1::Ok);
+        let event = SqCaptureEventV1 { struct_size: 48, event_type: 1, flags: 0, reserved0: 0,
+            event_sequence: 1, monotonic_timestamp_ns: 1, capture_epoch: 1,
+            detail_code: 0, reserved1: 0 };
+        assert_eq!(unsafe { sq_capture_push_event_v1(handle, &event) }, SqStatusV1::Unsupported);
+        unsafe { sq_capture_destroy_v1(handle) };
+    }
+}
