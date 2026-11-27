@@ -9,6 +9,10 @@ kotlin {
         compileSdk = 36
         minSdk = 23
         withHostTest {}
+        withDeviceTest {
+            instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+            execution = "HOST"
+        }
     }
 
     sourceSets {
@@ -17,6 +21,11 @@ kotlin {
         }
         getByName("androidHostTest").dependencies {
             implementation(kotlin("test"))
+        }
+        getByName("androidDeviceTest").dependencies {
+            implementation("androidx.test:runner:1.6.2")
+            implementation("androidx.test.ext:junit:1.2.1")
+            implementation("junit:junit:4.13.2")
         }
     }
 }

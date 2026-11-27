@@ -43,7 +43,7 @@ jobs:
       - name: Set up Android SDK 36
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
-          packages: "platforms;android-36 build-tools;36.0.0 platform-tools ndk;28.2.13676358"
+          packages: "platforms;android-36 build-tools;36.0.0 platform-tools ndk;28.2.13676358 system-images;android-36;google_apis;x86_64"
       - name: Set up Gradle 9.7.0
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
@@ -80,3 +80,12 @@ jobs:
           unzip -l "$aar" | grep -q 'jni/arm64-v8a/libsqrec_native_abi.so'
           unzip -l "$aar" | grep -q 'jni/x86_64/libsqrec_native_abi.so'
           echo "Verified JNI libraries packaged in Android AAR."
+      - name: Run native Vault bridge on API 36 emulator
+        uses: ReactiveCircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.34.0
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: "-no-window -no-audio -no-boot-anim -camera-back none"
+          script: gradle :shared:vault-keystore-android:connectedAndroidDeviceTest --no-daemon --max-workers=2
