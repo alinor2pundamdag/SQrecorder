@@ -302,6 +302,13 @@ mod tests {
             if matches!(self.0, FaultPoint::Rename) {
                 return Err(StoreError::Io(io::Error::other("injected rename failure")));
             }
+            // For the ParentSync fault case, use a direct same-directory rename
+            // so this test isolates the injected post-rename sync failure from
+            // the platform-specific write-through rename implementation.
+            if matches!(self.0, FaultPoint::ParentSync) {
+                fs::rename(stage, dest)?;
+                return Ok(());
+            }
             OsPromotionOps.rename_stage(stage, dest)
         }
         fn sync_parent(&self, parent: &Path) -> Result<(), StoreError> {
@@ -351,10 +358,10 @@ mod tests {
             |_| Ok(()),
             || Ok(()),
         );
-        assert!(matches!(
-            result,
-            Err(StoreError::PromotionDurabilityUnknown)
-        ));
+        assert!(
+            matches!(result, Err(StoreError::PromotionDurabilityUnknown)),
+            "expected ambiguous promotion after injected parent sync failure, got {result:?}"
+        );
         assert_eq!(fs::read(&final_path).unwrap(), b"promoted");
         assert_eq!(
             inspect_recovery(&final_path, &d.join("not-the-stage")),
