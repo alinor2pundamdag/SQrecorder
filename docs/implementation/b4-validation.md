@@ -1,29 +1,35 @@
 # B4 validation record
 
-## Implemented and CI verified
+## Implemented
 
-- Approved B1 foundation retained: SQVE v1 chunked AES-256-GCM, RSA-OAEP SHA-256 wrap contract, KMP Vault/session/journal contracts.
-- Rust vault writer, random DEK/nonce prefix, AEAD/AAD, ciphertext hash, zeroization, incomplete-file refusal.
-- Rust SQJ append/hash chain and non-mutating recovery scanner; terminal writer after sink write/sync failure.
-- JCS canonical payload enforcement (RFC 8785), escaped/nested duplicate-key detection, canonical recovery verification.
-- Verified-only journal resume restores sequence/digest/timestamp; rejects damaged tails before append.
-- Rust durable-store: staged write/sync/verify/rename/parent sync/journal callback, explicit ambiguous/pending outcomes, non-destructive recovery candidate discovery, fault injection.
-- Rust CI **Run #19 PASS** at source SHA `edfb70005d5dedd400025416ec1bcad541306fd9`: strict format, workspace tests, Clippy with warnings denied.
-- Android KMP module compiles and host cryptographic contract tests pass in Gradle **Run #13** (API 36, Gradle 9.5.0). Safe key-ID predicate fixed.
-- Android P-256 journal-anchor signer and signature-preimage tests added; exact-head Gradle verification pending.
+- Approved B1 foundation retained: SQVE v1 chunked AES-256-GCM, RSA-OAEP SHA-256 wrap contract, and KMP Vault/session/journal contracts.
+- Rust Vault writer/chunk AEAD, DEK zeroization, SQJ hash-chain/recovery, terminal writer after sink failure.
+- JCS canonical payload enforcement (RFC 8785), nested/escaped duplicate-key detection, canonical recovery verification.
+- Verified-only journal resume restores sequence/digest/timestamp; damaged tails require recovery.
+- Durable-store staged promotion/sync/verify/rename/parent-sync/journal callback, explicit pending/unknown outcomes, non-destructive stage discovery, fault injection.
+- Rust opaque Vault-key C ABI + JNI entry points: create/import/copy-for-public-wrap/destroy, chunk encrypt/decrypt, authentication-failure status, guarded FFI and zeroized transient native buffers.
+- Android KMP adapter source, auth-epoch validation, explicit key rotation/invalidation handling, P-256 journal-anchor signing, domain-separated signed preimage, host crypto tests.
+- Android native build script now cross-compiles arm64-v8a + x86_64 and verifies 16 KB LOAD alignment before packaging.
+
+## Verification
+
+- Rust **Run #26 PASS**: workspace tests and Clippy `-D warnings`; JNI/C ABI compile + opaque-handle/chunk roundtrip/tamper tests. Exact Rust source SHA: `b6ca43124ec1ed9cf2a49e1090dc051a73ad9e06`.
+- Android Gradle **Run #13 PASS** for KMP module + host crypto tests before JNI/anchor additions.
+- Android Run #18 failed on transient Maven HTTP 429/502 artifact resolution; cache/retry remediation added.
+- Latest exact-head Android cross-ABI/Gradle validation is pending Run #20.
 
 ## Locked-contract compatibility blocker
 
-SQVE v1 specifies a **non-empty OAEP label** `SQREC-VAULT-DEK-v1` and MGF1-SHA256. Android Keystore exposes configurable MGF1 digest from API 35, but its RSA-OAEP private-key provider rejects non-empty `PSource.PSpecified` labels. The adapter gates key generation, wrap, unwrap and rotation and returns `UNSUPPORTED_PLATFORM`; it does not silently change the locked envelope or create keys that cannot decrypt.
+SQVE v1 specifies a **non-empty OAEP label** `SQREC-VAULT-DEK-v1` and MGF1-SHA256. Android Keystore exposes configurable MGF1 digest from API 35, but its RSA-OAEP private-key provider rejects non-empty `PSource.PSpecified` labels. The adapter fails closed with `UNSUPPORTED_PLATFORM` for key generation/wrap/unwrap/rotation; it does not alter the locked envelope or create keys that cannot decrypt.
 
-This is a platform/format incompatibility requiring explicit change control before production Android Vault acceptance. No fallback or envelope mutation was implemented.
+This platform/format incompatibility requires explicit change control before production Android Vault acceptance.
 
 ## Remaining B4 acceptance
 
-- Resolve the locked SQVE v1 OAEP-label incompatibility through an approved versioned contract change or an independently verified Android Keystore-compatible design.
-- Implement and test the concrete Rust/JNI native bridge for opaque DEK handles and chunk operations.
-- Verify journal anchors cross-platform in Rust and maintain the signing-key public registry.
-- Wire platform journal and durable file promotion to the Rust recovery contract.
-- Device tests: auth-bound unwrap, locked encrypt-only capture, key invalidation/rotation/recovery, crash-cut/ENOSPC, 16 KB page and security review.
+- Resolve OAEP-label compatibility through an approved versioned wrap-suite change or a verified compatible Keystore design.
+- Verify anchor signatures cross-platform in Rust and maintain a durable signing-key registry.
+- Connect and test the native library package on Android devices; verify API/auth, key invalidation/rotation, and lifecycle.
+- Wire Android journal and durable file promotion to Rust recovery; complete crash-cut/ENOSPC tests and security review.
+- Device evidence: locked encrypt-only capture, authenticated unwrap/playback/export, 16 KB page compliance across supported ABIs.
 
-B4 remains **BLOCKED / NOT 100% accepted** until those gates pass.
+B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
