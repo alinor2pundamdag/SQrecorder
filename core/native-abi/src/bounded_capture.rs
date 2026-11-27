@@ -183,6 +183,7 @@ impl BoundedPcmQueue {
         output[..slot.len].copy_from_slice(&slot.bytes[..slot.len]);
         let metadata = slot.metadata.take().ok_or(CaptureError::InvalidBlock)?;
         let len = slot.len;
+        slot.bytes.zeroize();
         slot.len = 0;
         inner.head = (head + 1) % self.capacity;
         inner.queued -= 1;
@@ -206,7 +207,10 @@ impl BoundedPcmQueue {
             .inner
             .lock()
             .map_err(|_| CaptureError::ResourcePoisoned)?;
-        if inner.status != CaptureStatus::Stopping || inner.queued != 0 {
+        if self.producer_fault.load(Ordering::Acquire)
+            || inner.status != CaptureStatus::Stopping
+            || inner.queued != 0
+        {
             return Err(CaptureError::InvalidState);
         }
         inner.status = CaptureStatus::Stopped;
@@ -307,4 +311,25 @@ mod tests {
             Err(CaptureError::InvalidConfiguration)
         ));
     }
+    #[test]
+    fn producer_never_waits_on_consumer_lock_and_fault_is_terminal() {
+        let queue = BoundedPcmQueue::new(2, 8).unwrap();
+        let guard = queue.inner.lock().unwrap();
+        assert_eq!(queue.submit(metadata(1, 2), &[1, 2, 3, 4]), Err(CaptureError::QueueContention));
+        drop(guard);
+        assert_eq!(queue.status().unwrap(), CaptureStatus::Failed);
+        assert!(queue.integrity_overflow().unwrap());
+        assert_eq!(queue.request_stop(), Err(CaptureError::InvalidState));
+    }
+
+    #[test]
+    fn dequeue_zeroizes_fixed_slot_before_reuse() {
+        let queue = BoundedPcmQueue::new(1, 8).unwrap();
+        queue.submit(metadata(1, 2), &[0x55, 0xaa, 0x55, 0xaa]).unwrap();
+        let mut output = [0u8; 4];
+        queue.pop_into(&mut output).unwrap();
+        let inner = queue.inner.lock().unwrap();
+        assert!(inner.slots[0].bytes.iter().all(|byte| *byte == 0));
+    }
+
 }
