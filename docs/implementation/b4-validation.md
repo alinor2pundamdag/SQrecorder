@@ -103,3 +103,13 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - **Cross-platform KMP target declarations + CI workflow:** shared domain and capability selector declare JVM/Android/Linux x64/Windows MinGW x64/iOS/watchOS/macOS targets. New matrix runs Rust workspace tests on Linux/Windows/macOS and KMP compilation/tests on supported host OS runners. Workflow is in `.github/workflows/platform-compatibility.yml`; Android contract workflow now includes capability-system host tests.
 - **CI limitation at this checkpoint:** GitHub connector returned no workflow run or combined status for the current PR #2 head at the latest query. Therefore the new module, KMP native targets, SQVE v2 common contract, and cross-OS matrix remain **NOT VERIFIED by CI**. Do not treat target declarations or committed tests as passing.
 - PR #3 Android Run #36 remains verified PASS on its repair commit only; it is not evidence for the newer PR #2 source.
+
+
+## Final implementation checkpoint — 2026-11-27
+
+- PR #2 source head before this evidence commit: `c1f1f5cc8a713e51060c53b2b5806358ccf3c08c`.
+- Added SQVE v2 KMP metadata contracts and negative/positive common tests; strict canonical Base64 pad-bit validation and bounded recipient/ephemeral-key metadata are included.
+- Added the formerly uncompiled capability selector to the Gradle build graph and platform CI job matrix. Added JVM/Linux/Windows/Apple/watchOS KMP target declarations and cross-platform Rust/KMP workflow.
+- **Execution status:** The GitHub Actions connector returned an empty workflow-run list and no combined commit statuses for the exact PR #2 head above. CI was not observed to start for this latest branch update; do not mark those new checks as passed. No local Rust/Kotlin toolchain is available in the current execution container, and outbound GitHub cloning is blocked, so local build execution was unavailable.
+- Android Run #36 PASS remains verified on PR #3 commit `5a11193d2dc17d56af2edd4c35bb11bab20eb232`, not this newer PR #2 head.
+- Physical Android/iOS/watchOS/Windows device acceptance was not performed in this session. B4 remains **NOT 100% accepted**.
