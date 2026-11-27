@@ -197,7 +197,7 @@ mod vault_ffi {
 
     fn allocate_handle(key: VaultFileKey) -> Result<u64, SqStatusV1> {
         let id = NEXT_HANDLE
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| current.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| current.checked_add(1))
             .map_err(|_| SqStatusV1::Resource)?;
         let mut keys = registry().lock().map_err(|_| SqStatusV1::Resource)?;
         if keys.insert(id, key).is_some() {
