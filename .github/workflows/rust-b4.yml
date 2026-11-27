@@ -1,24 +1,15 @@
-name: Rust B4 journal gate
+name: Rust B4 journal vault durability gate
 
 on:
   push:
     branches: [main]
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "core/session-journal/**"
-      - ".github/workflows/rust-b4.yml"
+    paths: ["Cargo.toml", "Cargo.lock", "core/**", ".github/workflows/rust-b4.yml"]
   pull_request:
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "core/session-journal/**"
-      - ".github/workflows/rust-b4.yml"
+    paths: ["Cargo.toml", "Cargo.lock", "core/**", ".github/workflows/rust-b4.yml"]
   workflow_dispatch:
 
 permissions:
   contents: read
-
 concurrency:
   group: rust-b4-${{ github.ref }}
   cancel-in-progress: true
@@ -29,19 +20,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Install stable Rust and rustfmt
-        run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
-      - name: Check formatting
-        run: cargo fmt --all -- --check
-
+      - run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
+      - run: cargo fmt --all -- --check
   tests:
-    name: Journal compile + unit tests
+    name: Workspace compile + journal, Vault, durability tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - name: Install stable Rust
-        run: rustup toolchain install stable --profile minimal && rustup default stable
-      - name: Check workspace
-        run: cargo check --workspace
-      - name: Run journal tests
-        run: cargo test --workspace --all-targets
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - run: cargo check --workspace
+      - run: cargo test --workspace --all-targets
