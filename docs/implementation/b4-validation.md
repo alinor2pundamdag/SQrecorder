@@ -198,3 +198,13 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Historical GitHub Actions jobs inspected during this checkpoint were green: Rust run `45987953578`, Android Vault run `45987953623`, and six-job cross-platform run `45987953672`. Their job conclusions were success; however, the commit-run lookup did **not** associate a fresh run with the exact current B4 source SHA. Therefore these are historical green evidence, not a fresh exact-head attestation.
 - No new B4 source defect was established from the present repository read. The release blockers listed above remain real implementation/security gates—not checklist-only items.
 - This evidence revision requires its own exact-commit CI association before it can be treated as final evidence. Do not mark B4 complete or release-ready based on historical green jobs.
+
+
+## Windows durable-store CI repair — 2026-11-27 22:27 +08:00
+
+- Current B4 head before this correction: `4784ff128fd016d13337c5971de1f252a6107671`.
+- Cross-platform Run #91 (`46009026821`) failed only in Windows Rust portable-core test `directory_sync_failure_reports_ambiguous_promotion`; Rust and Android workflow at that SHA passed.
+- Log confirmed seven durable-store tests passed and the injected parent-directory-sync test failed its expected `PromotionDurabilityUnknown` assertion after stage creation/rename. The test combined a synthetic post-rename sync failure with the platform-specific write-through rename, so it did not isolate the fault boundary.
+- Correction: the `FaultPoint::ParentSync` test path now uses a direct same-directory rename and then injects the parent-sync error; real platform write-through rename remains exercised by normal promotion tests. Added assertion diagnostics showing the actual result variant if it fails again.
+- Fix commit: `0bbda73c60cacbcbcc87d0d7f3ff222b59e3a0a5`.
+- **Not yet verified:** fresh Windows Rust and full cross-platform matrix on this fix/evidence head. No gate marked PASS from the failed run; rerun evidence required.
