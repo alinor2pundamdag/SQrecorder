@@ -1,6 +1,10 @@
 //! Fixed-capacity PCM ingress queue. Overflow fails closed and records an integrity flag.
 
-use std::sync::{\n    Mutex,\n    atomic::{AtomicBool, Ordering},\n};\nuse zeroize::Zeroize;
+use std::sync::{
+    Mutex,
+    atomic::{AtomicBool, Ordering},
+};
+use zeroize::Zeroize;
 
 const MAX_QUEUE_BLOCKS: u32 = 256;
 const MAX_BLOCK_BYTES: u32 = 256 * 1024;
