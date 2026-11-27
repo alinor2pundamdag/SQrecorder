@@ -194,8 +194,7 @@ public data class JournalAppendResult(
 )
 
 /** Opaque, short-lived platform authentication session; never a password/biometric secret. */
-@JvmInline
-public value class VaultAuthSessionId(public val opaqueId: String)
+public data class VaultAuthSessionId(public val opaqueId: String)
 
 public data class VaultAuthContext(
     public val sessionId: VaultAuthSessionId,
