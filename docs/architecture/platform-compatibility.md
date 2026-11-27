@@ -33,4 +33,4 @@ SQRecorder is designed for multiple installable platform shells around one porta
 
 ## Support-status policy
 
-A target is not “supported” merely because source code compiles. Publish target status as: **planned**, **build verified**, **CI tested**, **physical-device verified**, or **production supported**. Each release must link the exact OS/architecture, CI run, and device evidence. This matrix is the target architecture; the current repository is not yet implemented or verified on every listed target.
+A target is not “supported” merely because source code compiles. Publish target status as: **planned**, **build verified**, **CI tested**, **physical-device verified**, or **production supported**. Each release must link the exact OS/architecture, CI run, and device evidence. The shared domain Gradle target declarations now include JVM, Android, Linux x64, Windows MinGW x64, iOS arm64/simulator, macOS arm64, and watchOS device/simulator. These are compile targets, not completed platform apps. The new CI matrix must pass before any target is marked build-verified; physical and production status remains separate.
