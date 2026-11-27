@@ -208,3 +208,13 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Correction: the `FaultPoint::ParentSync` test path now uses a direct same-directory rename and then injects the parent-sync error; real platform write-through rename remains exercised by normal promotion tests. Added assertion diagnostics showing the actual result variant if it fails again.
 - Fix commit: `0bbda73c60cacbcbcc87d0d7f3ff222b59e3a0a5`.
 - **Not yet verified:** fresh Windows Rust and full cross-platform matrix on this fix/evidence head. No gate marked PASS from the failed run; rerun evidence required.
+
+
+## Corrective rerun after Windows durability-test repair — 2026-11-27
+
+- Latest B4 implementation/evidence source at this checkpoint: `89ce951e51b98b6a837a98f2266889e72cfd6231`.
+- Rust Run #136 (`46016198716`) **PASS** on exact SHA: locked metadata, rustfmt, workspace tests, Clippy.
+- Cross-platform Run #95 (`46016198880`) **PASS** on exact SHA: Linux/macOS/Windows Rust portable-core jobs and Linux/Windows/macOS KMP host compile/test jobs all succeeded. The Windows `directory_sync_failure_reports_ambiguous_promotion` test passed after the test was isolated from platform-specific write-through rename.
+- Android Vault Run #161 (`46016198883`) is **IN PROGRESS** on exact SHA; API 36 emulator Vault bridge was the active step at last poll. Do not mark Android gate complete until run conclusion is success.
+- Earlier Windows failure Run #91 remains in history and is superseded only for this exact source by Run #95. Physical-device gates, SQVE v2 provider/security review, journal/durable recovery integration, and 16 KB device evidence remain open.
+- The subsequent evidence-only commit will require another exact-head workflow check; preserve the above run references as evidence for this source SHA, not the later documentation commit.
