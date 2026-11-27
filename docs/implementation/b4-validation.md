@@ -144,3 +144,13 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 9. Final checklist and evidence must be regenerated against one exact integrated commit after all required gates pass.
 
 **B4 acceptance remains IN PROGRESS / NOT 100%.**
+
+
+## Portable anchor registry/verifier implementation — 2026-11-27
+
+- Added `core/session-journal/src/anchor_registry.rs`: append-only SQAK v1 public-key records with sequence, prior-digest chain, key-ID SHA-256 fingerprint binding, record digest, strict scan/recovery status, duplicate-key rejection, bounded registry/record/key sizes, durable sink append+sync interface, and verified-only resume. Unit tests cover append/verify/resume/history, duplicate key, tamper, and truncated tail.
+- Added `core/session-journal/src/anchor_verifier.rs`: Rust portable anchor metadata validation, retained-key resolution, and exact Android-compatible binary signing preimage. ECDSA execution is intentionally provider-injected; **the RustCrypto/platform provider implementation and real cross-platform signature golden vector are not complete**. Fake-provider tests validate control flow/preimage, not the ECDSA primitive.
+- Added Android retained-key resolver/test earlier: scans retained numbered Android Keystore signer aliases, checks fingerprinted key ID, returns defensive copy, fails closed. The Android alias lookup is implemented; registry export/restore and multi-platform durable store integration remain.
+- Latest PR #2 B4 head before this evidence commit: `74fbb78b7556e3c3368417bc663ba9206b3aee9e`.
+- **Local verification limitation:** no Rust toolchain is installed in the execution container (`rustc: command not found`). GitHub Actions connector returned no PR-triggered workflow run or combined status for the current head. New Rust registry/verifier and Kotlin host tests are **not yet CI-verified**; source commits/tests are not proof of passing.
+- Android Run #36 is still a PASS only for PR #3 merge ref `7053602107e085990209d33d577d9c60516d2d22`; it is not latest B4 branch evidence.
