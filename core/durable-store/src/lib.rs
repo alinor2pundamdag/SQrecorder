@@ -106,7 +106,10 @@ where
 /// symlinks and unrelated files are ignored. Results are sorted for deterministic recovery.
 pub fn discover_staged_files(dest: &Path) -> Result<Vec<PathBuf>, StoreError> {
     let parent = dest.parent().ok_or(StoreError::InvalidPath)?;
-    let name = dest.file_name().ok_or(StoreError::InvalidPath)?.to_string_lossy();
+    let name = dest
+        .file_name()
+        .ok_or(StoreError::InvalidPath)?
+        .to_string_lossy();
     let prefix = format!(".{name}.sqstage-");
     let mut candidates = Vec::new();
     for entry in fs::read_dir(parent)? {
@@ -384,7 +387,10 @@ mod tests {
 
         let found = discover_staged_files(&final_path).unwrap();
         assert_eq!(found, vec![s1.clone(), s2.clone()]);
-        assert!(s1.exists() && s2.exists(), "recovery discovery is read-only");
+        assert!(
+            s1.exists() && s2.exists(),
+            "recovery discovery is read-only"
+        );
         fs::remove_dir_all(d).unwrap();
     }
 
