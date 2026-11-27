@@ -8,8 +8,7 @@ public enum class VaultFileState {
 }
 
 /** Opaque provider-owned handle; identifier is not key material. */
-@JvmInline
-public value class VaultFileKeyHandle(public val opaqueId: String)
+public data class VaultFileKeyHandle(public val opaqueId: String)
 
 public data class VaultKeyWrap(
     public val suite: VaultKeyWrapSuite,
