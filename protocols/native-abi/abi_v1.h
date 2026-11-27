@@ -78,6 +78,14 @@ typedef struct sq_pcm_block_v1 {
     uint32_t reserved1;
 } sq_pcm_block_v1;
 
+enum {
+    SQ_CAPTURE_EVENT_INPUT_OVERRUN = 1u,
+    SQ_CAPTURE_EVENT_AUDIO_ROUTE_CHANGED = 2u,
+    SQ_CAPTURE_EVENT_PERMISSION_REVOKED = 3u,
+    SQ_CAPTURE_EVENT_STORAGE_PRESSURE = 4u,
+    SQ_CAPTURE_EVENT_INTERRUPTED = 5u
+};
+
 typedef struct sq_capture_event_v1 {
     uint32_t struct_size;
     uint32_t event_type;
