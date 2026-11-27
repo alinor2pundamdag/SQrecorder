@@ -113,7 +113,7 @@ pub fn discover_staged_files(dest: &Path) -> Result<Vec<PathBuf>, StoreError> {
         let entry = entry?;
         let file_name = entry.file_name();
         let file_name = file_name.to_string_lossy();
-        if !file_name.starts_with(&prefix) {
+        if !file_name.starts_with(prefix.as_str()) {
             continue;
         }
         if entry.file_type()?.is_file() {
