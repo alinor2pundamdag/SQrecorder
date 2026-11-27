@@ -1,6 +1,7 @@
 //! Fixed-capacity PCM ingress queue. Overflow fails closed and records an integrity flag.
 
-use std::sync::Mutex;\nuse zeroize::Zeroize;
+use std::sync::Mutex;
+use zeroize::Zeroize;
 
 const MAX_QUEUE_BLOCKS: u32 = 256;
 const MAX_BLOCK_BYTES: u32 = 256 * 1024;
@@ -41,7 +42,11 @@ struct Slot {
     metadata: Option<PcmMetadata>,
 }
 
-impl Drop for Slot {\n    fn drop(&mut self) { self.bytes.zeroize(); }\n}\n\nstruct Inner {
+impl Drop for Slot {
+    fn drop(&mut self) { self.bytes.zeroize(); }
+}
+
+struct Inner {
     slots: Vec<Slot>,
     head: usize,
     tail: usize,
