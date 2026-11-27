@@ -253,7 +253,7 @@ mod tests {
         fs::remove_dir_all(d).unwrap();
     }
 
-    #[derive(Clone, Copy)]
+    #[derive(Clone, Copy, Debug)]
     enum FaultPoint {
         PartialStageWrite,
         NoSpace,
@@ -332,7 +332,7 @@ mod tests {
                 || Ok(()),
             );
             assert!(result.is_err());
-            assert_eq!(fs::read(&final_path).unwrap(), b"old");
+            assert_eq!(fs::read(&final_path).unwrap(), b"old", "fault point: {point:?}");
             fs::remove_dir_all(d).unwrap();
         }
     }
