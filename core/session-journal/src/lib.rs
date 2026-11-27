@@ -289,7 +289,9 @@ fn validate_payload(payload: &[u8], expected_event_code: u16) -> Result<(), Jour
     }
     let value: serde_json::Value =
         serde_json::from_slice(payload).map_err(|_| JournalError::InvalidPayloadJson)?;
-    if has_duplicate_json_keys(payload) { return Err(JournalError::DuplicateJsonKey); }
+    if has_duplicate_json_keys(payload) {
+        return Err(JournalError::DuplicateJsonKey);
+    }
     let object = value
         .as_object()
         .ok_or(JournalError::PayloadSchemaMismatch)?;
