@@ -1,7 +1,6 @@
 //! Fixed-capacity PCM ingress queue. Overflow fails closed and records an integrity flag.
 
-use std::sync::Mutex;
-use zeroize::Zeroize;
+use std::sync::{\n    Mutex,\n    atomic::{AtomicBool, Ordering},\n};\nuse zeroize::Zeroize;
 
 const MAX_QUEUE_BLOCKS: u32 = 256;
 const MAX_BLOCK_BYTES: u32 = 256 * 1024;
@@ -22,6 +21,7 @@ pub enum CaptureError {
     InvalidState,
     QueueOverflow,
     ResourcePoisoned,
+    QueueContention,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,6 +62,7 @@ pub struct BoundedPcmQueue {
     capacity: usize,
     max_bytes: usize,
     inner: Mutex<Inner>,
+    producer_fault: AtomicBool,
 }
 
 impl BoundedPcmQueue {
@@ -100,6 +101,7 @@ impl BoundedPcmQueue {
         Ok(Self {
             capacity: capacity as usize,
             max_bytes,
+            producer_fault: AtomicBool::new(false),
             inner: Mutex::new(Inner {
                 slots,
                 head: 0,
@@ -125,10 +127,19 @@ impl BoundedPcmQueue {
             return Err(CaptureError::InvalidBlock);
         }
 
-        let mut inner = self
-            .inner
-            .lock()
-            .map_err(|_| CaptureError::ResourcePoisoned)?;
+        let mut inner = match self.inner.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                self.producer_fault.store(true, Ordering::Release);
+                return Err(CaptureError::QueueContention);
+            }
+            Err(std::sync::TryLockError::Poisoned(_)) => return Err(CaptureError::ResourcePoisoned),
+        };
+        if self.producer_fault.load(Ordering::Acquire) {
+            inner.status = CaptureStatus::Failed;
+            inner.integrity_overflow = true;
+            return Err(CaptureError::QueueContention);
+        }
         if inner.status != CaptureStatus::Running {
             return Err(CaptureError::InvalidState);
         }
@@ -199,6 +210,7 @@ impl BoundedPcmQueue {
     }
 
     pub fn status(&self) -> Result<CaptureStatus, CaptureError> {
+        if self.producer_fault.load(Ordering::Acquire) { return Ok(CaptureStatus::Failed); }
         Ok(self
             .inner
             .lock()
@@ -207,6 +219,7 @@ impl BoundedPcmQueue {
     }
 
     pub fn integrity_overflow(&self) -> Result<bool, CaptureError> {
+        if self.producer_fault.load(Ordering::Acquire) { return Ok(true); }
         Ok(self
             .inner
             .lock()
