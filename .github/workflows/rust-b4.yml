@@ -21,9 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
-      - run: cargo fmt --all
-      - name: Emit formatter output for exact source repair
-        run: cat core/vault-core/src/lib.rs core/durable-store/src/lib.rs
+      - run: cargo fmt --all -- --check
   tests:
     name: Workspace compile + journal, Vault, durability tests
     runs-on: ubuntu-latest
