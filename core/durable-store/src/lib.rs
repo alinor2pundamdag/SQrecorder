@@ -1,13 +1,10 @@
 //! Crash-conscious atomic file promotion and recovery inspection.
-#![forbid(unsafe_code)]
-use std::{
+
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
-#[cfg(not(windows))]
-use std::fs::File;
 static SEQ: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug)]
 pub enum StoreError {
