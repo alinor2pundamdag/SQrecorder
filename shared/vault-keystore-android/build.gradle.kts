@@ -15,7 +15,7 @@ kotlin {
         androidMain.dependencies {
             implementation(project(":shared:domain"))
         }
-        androidHostTest.dependencies {
+        getByName("androidHostTest").dependencies {
             implementation(kotlin("test"))
         }
     }
