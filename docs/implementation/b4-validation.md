@@ -48,3 +48,31 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Root cause verified in job log: emulator runner invoked `-accel off`; emulator 37.3.10 exited with `Software CPU emulation (-accel off) is not supported. A hardware CPU accelerator is required (or set ANDROID_I_WANT_MY_TCG=yes to force TCG software emulation).` Subsequent ADB polling ended in `Timeout waiting for emulator to boot.` This is CI runner/emulator startup failure, not a Vault test assertion or product code failure.
 - Corrective workflow commit `4b208a6c666969d22e8ef6aa70fc41cedd53127d` sets the documented `ANDROID_I_WANT_MY_TCG=yes` fallback for the emulator step. Android Run #31 was triggered and was **QUEUED** at the time of this record: https://github.com/alinor2pundamdag/SQrecorder/actions/runs/45969516297. It must complete before claiming emulator acceptance.
 - Rust Run #32 remains **PASS** at tested Rust source SHA `1a1bc57968d63886ab2b1935773edb254aca6e1c`. Latest workflow-only head is `4b208a6c666969d22e8ef6aa70fc41cedd53127d`; do not claim exact-current-head green until Run #31 and any triggered checks conclude.
+
+
+## Latest PR #3 host-test repair — 2026-11-27
+
+- Investigated failed Android Run #32 (PR #3; native ABI build and 16 KB ELF alignment succeeded). Job log localized both failures to Android host tests: valid anchor verification and key-fingerprint mismatch assertions.
+- Root cause: Android host-test mocks do not implement `android.util.Base64`; verifier decoding threw a mocked-platform `RuntimeException`, and the test fixture encoder also called the mocked Android API. This is a host-test portability defect.
+- Corrective PR #3 commits: verifier `836afe79b1e71838ae7771737015f879df5ca56c`; test fixture `5a11193d2dc17d56af2edd4c35bb11bab20eb232`.
+- Fix: strict standard Base64 decoder compatible with minSdk 23; JVM Base64 in host-test fixture. Checks alphabet, padding placement, output size and canonical unused padding bits. No signature preimage, fingerprint, suite, SQVE or envelope changed.
+- **Verification:** commits exist; follow-up CI result pending. Do not mark PR #3 tests or B4 accepted until the new run passes.
+
+## B4 acceptance checklist (live status)
+
+| Gate | Status | Evidence / remaining action |
+|---|---|---|
+| Rust format, locked metadata, workspace tests, Clippy | PASS on recorded SHA only | Re-run on final integrated B4 SHA |
+| Android native ABI build + 16 KB ELF LOAD alignment | PASS on prior CI source | Re-run after integration; physical page-size evidence required |
+| Android host anchor verifier tests | FIX COMMITTED; CI PENDING | PR #3 new run must pass |
+| API 36 emulator Vault bridge | Run #34 PASS on prior main B4 SHA | Re-run against integrated candidate head |
+| Durable historical anchor-key registry + rotation retention | NOT IMPLEMENTED / BLOCKING | Persist append-only key records; rotation/recovery tests |
+| Rust cross-platform anchor verifier + golden vectors | BLOCKING | Cross-check identical preimage/signature semantics |
+| Android journal + durable-store recovery wiring | BLOCKING | Integrate and test safe recovery/no silent loss |
+| Crash-cut + ENOSPC + fault matrix | BLOCKING | Complete fault injection and recovery assertions |
+| SQVE OAEP-label compatibility | BLOCKING / DECISION REQUIRED | Recommend separately versioned SQVE v2 (option B); preserve v1 pending explicit approval |
+| Physical-device auth, Keystore invalidation/rotation, locked encrypt-only, authenticated unwrap/play/export | NOT RUN — DEVICE REQUIRED | User device run and evidence artifacts |
+| Physical-device 16 KB page support across supported ABI/device matrix | NOT RUN — DEVICE REQUIRED | Record actual device evidence |
+| PR #2 / PR #3 merge | HOLD | Both stay open/draft until every required CI and physical gate is green |
+
+**B4 verdict: IN PROGRESS — NOT 100%.** No acceptance gate is waived. Historical CI passes are not final-head or physical-device evidence.
