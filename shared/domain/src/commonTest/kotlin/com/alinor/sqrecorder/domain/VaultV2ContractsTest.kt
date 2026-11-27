@@ -27,7 +27,7 @@ class VaultV2ContractsTest {
     @Test
     fun validV2MetadataPassesAndDoesNotChangeV1Contract() {
         assertNull(validV2().validate())
-        assertEquals(1, VaultEnvelopeHeader.V1_CHUNK_SIZE_BYTES / 1_048_576)
+        assertEquals(1_048_576, VaultEnvelopeHeader.V1_CHUNK_SIZE_BYTES)
         assertEquals(2, VaultV2EnvelopeContract.VERSION)
     }
 
@@ -87,6 +87,10 @@ class VaultV2ContractsTest {
         assertEquals(
             VaultV2ContractError.INVALID_WRAPPED_DEK,
             validV2().copy(recipients = listOf(first.copy(wrappedDekBase64 = "A=AA"))).validate(),
+        )
+        assertEquals(
+            VaultV2ContractError.INVALID_HEADER_MAC_ENCODING,
+            validV2().copy(headerMacBase64 = "B".repeat(43) + "=").validate(),
         )
     }
 }
