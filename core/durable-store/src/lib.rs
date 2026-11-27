@@ -14,6 +14,8 @@ pub enum StoreError {
     VerificationFailed,
     /// File promotion and directory sync succeeded; journal reconciliation is required.
     JournalCommitPending,
+    /// Rename occurred but parent-directory sync failed; inspect recovery before reporting state.
+    PromotionDurabilityUnknown,
 }
 impl From<io::Error> for StoreError {
     fn from(e: io::Error) -> Self {
@@ -27,7 +29,31 @@ pub enum RecoveryState {
     BothPresent,
     NeitherPresent,
 }
-/// Sync stage, validate, atomically rename, sync parent, then journal callback. Failed stages remain for recovery.
+/// Operations are separated so crash/failure boundaries can be fault-injected in tests.
+trait PromotionOps {
+    fn write_and_sync_stage(&self, stage: &Path, bytes: &[u8]) -> Result<(), StoreError>;
+    fn rename_stage(&self, stage: &Path, dest: &Path) -> Result<(), StoreError>;
+    fn sync_parent(&self, parent: &Path) -> Result<(), StoreError>;
+}
+struct OsPromotionOps;
+impl PromotionOps for OsPromotionOps {
+    fn write_and_sync_stage(&self, stage: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+        let mut file = OpenOptions::new().write(true).create_new(true).open(stage)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        Ok(())
+    }
+    fn rename_stage(&self, stage: &Path, dest: &Path) -> Result<(), StoreError> {
+        fs::rename(stage, dest)?;
+        Ok(())
+    }
+    fn sync_parent(&self, parent: &Path) -> Result<(), StoreError> {
+        File::open(parent)?.sync_all()?;
+        Ok(())
+    }
+}
+/// Sync stage, validate, atomically rename, sync parent, then journal callback.
+/// Errors preserve candidates and communicate whether promotion is ambiguous.
 pub fn durable_promote<V, J>(
     dest: &Path,
     bytes: &[u8],
@@ -38,29 +64,35 @@ where
     V: Fn(&Path) -> Result<(), StoreError>,
     J: FnOnce() -> Result<(), StoreError>,
 {
-    let p = dest.parent().ok_or(StoreError::InvalidPath)?;
-    if !p.is_dir() {
+    durable_promote_with_ops(&OsPromotionOps, dest, bytes, verify, commit)
+}
+fn durable_promote_with_ops<O, V, J>(
+    ops: &O,
+    dest: &Path,
+    bytes: &[u8],
+    verify: V,
+    commit: J,
+) -> Result<(), StoreError>
+where
+    O: PromotionOps,
+    V: Fn(&Path) -> Result<(), StoreError>,
+    J: FnOnce() -> Result<(), StoreError>,
+{
+    let parent = dest.parent().ok_or(StoreError::InvalidPath)?;
+    if !parent.is_dir() {
         return Err(StoreError::InvalidPath);
     }
-    let n = dest
-        .file_name()
-        .ok_or(StoreError::InvalidPath)?
-        .to_string_lossy();
-    let stage = p.join(format!(
-        ".{n}.sqstage-{}-{}",
+    let name = dest.file_name().ok_or(StoreError::InvalidPath)?.to_string_lossy();
+    let stage = parent.join(format!(
+        ".{name}.sqstage-{}-{}",
         std::process::id(),
         SEQ.fetch_add(1, Ordering::Relaxed)
     ));
-    let mut f = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(&stage)?;
-    f.write_all(bytes)?;
-    f.sync_all()?;
-    drop(f);
+    ops.write_and_sync_stage(&stage, bytes)?;
     verify(&stage)?;
-    fs::rename(&stage, dest)?;
-    File::open(p)?.sync_all()?;
+    ops.rename_stage(&stage, dest)?;
+    ops.sync_parent(parent)
+        .map_err(|_| StoreError::PromotionDurabilityUnknown)?;
     commit().map_err(|_| StoreError::JournalCommitPending)
 }
 /// Inspection is non-destructive; it never deletes or truncates candidates.
@@ -151,6 +183,65 @@ mod tests {
         );
         assert!(matches!(result, Err(StoreError::JournalCommitPending)));
         assert_eq!(fs::read(&f).unwrap(), b"promoted");
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[derive(Clone, Copy)]
+    enum FaultPoint { PartialStageWrite, FileSync, Rename, ParentSync }
+    struct FaultOps(FaultPoint);
+    impl PromotionOps for FaultOps {
+        fn write_and_sync_stage(&self, stage: &Path, bytes: &[u8]) -> Result<(), StoreError> {
+            match self.0 {
+                FaultPoint::PartialStageWrite => {
+                    let mut f = OpenOptions::new().write(true).create_new(true).open(stage)?;
+                    f.write_all(&bytes[..bytes.len().min(3)])?;
+                    Err(StoreError::Io(io::Error::new(io::ErrorKind::WriteZero, "injected partial write")))
+                }
+                FaultPoint::FileSync => {
+                    let mut f = OpenOptions::new().write(true).create_new(true).open(stage)?;
+                    f.write_all(bytes)?;
+                    Err(StoreError::Io(io::Error::new(io::ErrorKind::Other, "injected fsync failure")))
+                }
+                _ => OsPromotionOps.write_and_sync_stage(stage, bytes),
+            }
+        }
+        fn rename_stage(&self, stage: &Path, dest: &Path) -> Result<(), StoreError> {
+            if matches!(self.0, FaultPoint::Rename) {
+                return Err(StoreError::Io(io::Error::new(io::ErrorKind::Other, "injected rename failure")));
+            }
+            OsPromotionOps.rename_stage(stage, dest)
+        }
+        fn sync_parent(&self, parent: &Path) -> Result<(), StoreError> {
+            if matches!(self.0, FaultPoint::ParentSync) {
+                return Err(StoreError::Io(io::Error::new(io::ErrorKind::Other, "injected directory sync failure")));
+            }
+            OsPromotionOps.sync_parent(parent)
+        }
+    }
+    #[test]
+    fn fault_injection_preserves_old_final_before_rename() {
+        for point in [FaultPoint::PartialStageWrite, FaultPoint::FileSync, FaultPoint::Rename] {
+            let d = td();
+            let final_path = d.join("final");
+            fs::write(&final_path, b"old").unwrap();
+            let result = durable_promote_with_ops(
+                &FaultOps(point), &final_path, b"replacement", |_| Ok(()), || Ok(())
+            );
+            assert!(result.is_err());
+            assert_eq!(fs::read(&final_path).unwrap(), b"old");
+            fs::remove_dir_all(d).unwrap();
+        }
+    }
+    #[test]
+    fn directory_sync_failure_reports_ambiguous_promotion() {
+        let d = td();
+        let final_path = d.join("final");
+        let result = durable_promote_with_ops(
+            &FaultOps(FaultPoint::ParentSync), &final_path, b"promoted", |_| Ok(()), || Ok(())
+        );
+        assert!(matches!(result, Err(StoreError::PromotionDurabilityUnknown)));
+        assert_eq!(fs::read(&final_path).unwrap(), b"promoted");
+        assert_eq!(inspect_recovery(&final_path, &d.join("not-the-stage")), RecoveryState::FinalPresent);
         fs::remove_dir_all(d).unwrap();
     }
 
