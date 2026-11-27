@@ -39,3 +39,11 @@
 - Added a preallocated 64-event metadata ring; it performs no heap allocation per event.
 - C ABI event push/read now operate on the ring. Queue overflow is a terminal integrity failure, and finish requires both PCM blocks and events to be drained.
 - Rust tests cover ordered event readback, event overflow fail-closed behavior, and the stop/drain contract. Exact-head CI for this latest event implementation is pending; earlier Run #100 does not include this event-queue commit.
+
+## JNI adapter verification checkpoint
+
+- Exact source head before this evidence update: `935a3bbea544b5eef55f15b9889dd36e71b90a8f`.
+- Rust contract Run #121 (`46011685859`) **PASS**: formatting, C/C++ ABI contract compile+execute, workspace tests, and Clippy. This includes the native JNI bridge and bounded queue/event implementation.
+- Android Run #145 (`46011462549`) was executing against earlier head `d2f3ae9d6fc3c34cc03537b3df338149e4889891`; it includes the first metadata tests that exposed native-library eager loading. The load-on-instance correction is at `935a3bbea544b5eef55f15b9889dd36e71b90a8f`.
+- Android exact-head Run #146 (`46011685760`) is pending/queued at this checkpoint. Its result is required before claiming the Kotlin metadata fix passes.
+- Cross-platform Run #80 (`46011685808`) is in progress on the exact pre-evidence head; Rust jobs passed, macOS/Windows KMP jobs remain active.
