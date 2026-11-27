@@ -19,10 +19,11 @@
 
 ## Verification
 
-- Rust **Run #26 PASS**: workspace tests and Clippy `-D warnings`; JNI/C ABI compile + opaque-handle/chunk roundtrip/tamper tests. Exact Rust source SHA: `b6ca43124ec1ed9cf2a49e1090dc051a73ad9e06`.
-- Android Gradle **Run #13 PASS** for KMP module + host crypto tests before JNI/anchor additions.
-- Android Run #18 failed on transient Maven HTTP 429/502 artifact resolution; cache/retry remediation added.
-- Latest exact-head Android cross-ABI/Gradle validation is pending Run #20.
+- Historical baseline: Rust **Run #26 PASS** for workspace tests/Clippy and native ABI tests at source SHA `b6ca43124ec1ed9cf2a49e1090dc051a73ad9e06`; this is not evidence for current branch HEAD.
+- Historical Android Gradle **Run #13 PASS** covered KMP/host crypto tests before later JNI/anchor/auth changes.
+- Android Run #18 recorded transient Maven HTTP 429/502; bounded retry/cache mitigation remains in workflow.
+- CI workflow hardening committed: Rust validation now targets `main` for PR #2, checks the event revision via pinned checkout, validates the committed lockfile (`cargo metadata --locked`), uses `cargo fmt --check`, and has read-only permissions (no bot formatting/lockfile pushes).
+- Latest observed PR head: `cd871c6170ebbd656e04472ee82570db6fece6e8`. GitHub connector status/run queries returned no status entries or PR workflow runs for this SHA; exact-head green is therefore **not verified**. Do not promote historical run results to current-head acceptance.
 
 ## Locked-contract compatibility blocker
 
