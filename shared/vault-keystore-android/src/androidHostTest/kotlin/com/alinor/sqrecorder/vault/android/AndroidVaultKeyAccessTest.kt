@@ -1,5 +1,7 @@
 package com.alinor.sqrecorder.vault.android
 
+import com.alinor.sqrecorder.domain.VaultAuthContext
+import com.alinor.sqrecorder.domain.VaultAuthSessionId
 import java.security.KeyPairGenerator
 import java.security.spec.MGF1ParameterSpec
 import javax.crypto.Cipher
@@ -23,6 +25,29 @@ class AndroidVaultKeyAccessTest {
         assertEquals(first, second)
         assertEquals(32, first.substringAfterLast('-').length)
         assertTrue(first.matches(Regex("rsa-oaep-sha256-v1-[0-9a-f]{32}")))
+    }
+
+    @Test
+    fun authContextMustBeCurrentAndWithinThirtySecondWindow() {
+        val now = 5_000_000_000L
+        val context = VaultAuthContext(
+            sessionId = VaultAuthSessionId("host-test-session"),
+            authorizationEpoch = 7,
+            expiresAtMonotonicNs = now + VAULT_AUTH_WINDOW_NANOS,
+        )
+        val current = VaultAuthContextVerifier { it.authorizationEpoch == 7L }
+
+        assertTrue(isCurrentVaultAuthContext(context, now, current))
+        assertEquals(
+            false,
+            isCurrentVaultAuthContext(
+                context.copy(expiresAtMonotonicNs = now + VAULT_AUTH_WINDOW_NANOS + 1),
+                now,
+                current,
+            ),
+        )
+        assertEquals(false, isCurrentVaultAuthContext(context, now, VaultAuthContextVerifier { false }))
+        assertEquals(false, isCurrentVaultAuthContext(context, now + 1, current))
     }
 
     @Test
