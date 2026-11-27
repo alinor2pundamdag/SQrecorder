@@ -1,5 +1,8 @@
 //! Crash-conscious atomic file promotion and recovery inspection.
-
+#![forbid(unsafe_code)]
+#[cfg(not(windows))]
+use std::fs::File;
+use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
