@@ -60,6 +60,7 @@ pub enum JournalError {
     SinkAppendFailed,
     SinkSyncFailed,
     WriterTerminal,
+    RecoveryRequired,
     SequenceExhausted,
 }
 
@@ -110,6 +111,37 @@ impl<S: JournalSink> JournalWriter<S> {
             last_monotonic_timestamp_ns: None,
             terminal: false,
         }
+    }
+
+    /// Resume only from a fully verified, intact journal.
+    ///
+    /// The sink must be positioned to append after exactly `existing_bytes`;
+    /// damaged/truncated journals require recovery and must not be appended in place.
+    pub fn resume(sink: S, existing_bytes: &[u8]) -> Result<Self, JournalError> {
+        let verified = verify_journal(existing_bytes);
+        if verified.status != JournalVerificationStatus::Valid
+            || verified.valid_prefix_bytes != existing_bytes.len()
+        {
+            return Err(JournalError::RecoveryRequired);
+        }
+
+        let mut offset = 0usize;
+        let mut last_timestamp = None;
+        while offset < existing_bytes.len() {
+            let body_len = read_u32_le(existing_bytes, offset) as usize;
+            let total_len = body_len + 4;
+            let body = &existing_bytes[offset + 4..offset + total_len];
+            last_timestamp = Some(read_u64_le(body, 16));
+            offset += total_len;
+        }
+
+        Ok(Self {
+            sink,
+            next_sequence: verified.last_sequence.checked_add(1),
+            previous_digest: verified.last_digest,
+            last_monotonic_timestamp_ns: last_timestamp,
+            terminal: false,
+        })
     }
 
     pub fn append(
@@ -764,6 +796,62 @@ mod tests {
         assert!(!has_duplicate_json_keys(
             br#"{"eventCode":2,"schemaVersion":1,"key":1,"keys":2}"#
         ));
+    }
+
+    #[test]
+    fn writer_resumes_verified_chain_and_timestamp_after_restart() {
+        let mut initial = JournalWriter::new(MemorySink::default());
+        let first = initial.append(input(1, [0; 32])).unwrap();
+        let existing = initial.into_sink().bytes;
+
+        let sink = MemorySink {
+            bytes: existing.clone(),
+            ..MemorySink::default()
+        };
+        let mut resumed = JournalWriter::resume(sink, &existing).unwrap();
+        resumed.append(input(2, first.digest)).unwrap();
+
+        let bytes = resumed.into_sink().bytes;
+        let verified = verify_journal(&bytes);
+        assert_eq!(verified.status, JournalVerificationStatus::Valid);
+        assert_eq!(verified.last_sequence, 2);
+    }
+
+    #[test]
+    fn writer_resume_rejects_damaged_tail_without_mutating_sink() {
+        let mut initial = JournalWriter::new(MemorySink::default());
+        initial.append(input(1, [0; 32])).unwrap();
+        let mut existing = initial.into_sink().bytes;
+        existing.extend_from_slice(&[0xAA, 0xBB]);
+
+        let sink = MemorySink {
+            bytes: existing.clone(),
+            ..MemorySink::default()
+        };
+        assert!(matches!(
+            JournalWriter::resume(sink, &existing),
+            Err(JournalError::RecoveryRequired)
+        ));
+        assert_eq!(existing.last_chunk(), Some(&[0xAA, 0xBB][..]));
+    }
+
+    #[test]
+    fn resumed_writer_preserves_monotonic_timestamp_guard() {
+        let mut initial = JournalWriter::new(MemorySink::default());
+        let first = initial.append(input(1, [0; 32])).unwrap();
+        let existing = initial.into_sink().bytes;
+        let sink = MemorySink {
+            bytes: existing.clone(),
+            ..MemorySink::default()
+        };
+        let mut resumed = JournalWriter::resume(sink, &existing).unwrap();
+
+        let mut regressed = input(2, first.digest);
+        regressed.monotonic_timestamp_ns = 5;
+        assert_eq!(
+            resumed.append(regressed),
+            Err(JournalError::TimestampRegression)
+        );
     }
 
     #[test]
