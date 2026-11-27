@@ -50,6 +50,11 @@ public fun interface VaultAuthContextVerifier {
     public fun isCurrent(context: VaultAuthContext): Boolean
 }
 
+internal val SQVE_V1_OAEP_LABEL = "SQREC-VAULT-DEK-v1".toByteArray(Charsets.UTF_8)
+
+internal fun androidKeystoreSupportsSqveV1Oaep(apiLevel: Int): Boolean =
+    apiLevel >= 35 && SQVE_V1_OAEP_LABEL.isEmpty()
+
 public enum class VaultKeyAccessFailure {
     AUTHENTICATION_REQUIRED,
     AUTH_CONTEXT_INVALID,
@@ -180,6 +185,11 @@ public class AndroidVaultKeyAccess(
     }
 
     private fun generateWrappingKey(alias: String) {
+        // Android Keystore rejects non-empty OAEP PSource labels. SQVE v1 locks
+        // a non-empty label, so never create an unusable key or silently change format.
+        if (!androidKeystoreSupportsSqveV1Oaep(Build.VERSION.SDK_INT)) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.UNSUPPORTED_PLATFORM)
+        }
         // Android Keystore exposed configurable MGF1 digests in API 35.
         // SQVE v1 locks MGF1=SHA-256; never downgrade to the historical SHA-1 default.
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
