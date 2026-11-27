@@ -196,9 +196,16 @@ mod vault_ffi {
     }
 
     fn allocate_handle(key: VaultFileKey) -> Result<u64, SqStatusV1> {
-        let id = NEXT_HANDLE
-            .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| current.checked_add(1))
-            .map_err(|_| SqStatusV1::Resource)?;
+        let id = loop {
+            let current = NEXT_HANDLE.load(Ordering::Relaxed);
+            let next = current.checked_add(1).ok_or(SqStatusV1::Resource)?;
+            if NEXT_HANDLE
+                .compare_exchange_weak(current, next, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+            {
+                break current;
+            }
+        };
         let mut keys = registry().lock().map_err(|_| SqStatusV1::Resource)?;
         if keys.insert(id, key).is_some() {
             return Err(SqStatusV1::Internal);
