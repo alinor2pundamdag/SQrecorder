@@ -37,8 +37,8 @@ Status: **BLOCKED / NOT ACCEPTED**. This document is the single B4 evidence gate
 ## Current verified repository gap (2026-11-27)
 - Journal implementation exists at `core/session-journal/src/lib.rs`.
 - Root Cargo workspace, journal crate manifest, and a journal CI workflow have now been added.
-- Current repo tree previously contained no Vault module, persistence/recovery module, lockfile, or CI workflow. These remain implementation blockers.
-- CI execution has not yet been observed for the latest commits; connector-authored pushes may not dispatch Actions. Do not treat missing run/status as pass.
+- The current checked tree has no committed `Cargo.lock`, Vault module, or durable persistence/recovery module. These remain blockers. The journal CI currently resolves dependencies without `--locked`, so it is a source/test gate, not a reproducible locked build.
+- **Journal CI evidence (verified 2026-11-27):** exact HEAD `de641da53976d70ddfecbcc83135d426504d7785`; workflow run [#8, attempt 2](https://github.com/alinor2pundamdag/SQrecorder/actions/runs/45947991370). Both jobs completed successfully: `cargo fmt --all -- --check`, `cargo check --workspace`, and `cargo test --workspace --all-targets`. This evidence covers journal/workspace only; it does not satisfy Vault, durable recovery, committed lockfile, or Android platform acceptance.
 
 ## Release rule
 B4 remains blocked until every section above is implemented and verified. B5 Android capture integration must not begin on the assumption that B4 passed.
