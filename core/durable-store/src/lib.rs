@@ -1,11 +1,13 @@
 //! Crash-conscious atomic file promotion and recovery inspection.
 #![forbid(unsafe_code)]
 use std::{
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::{self, Write},
     path::{Path, PathBuf},
     sync::atomic::{AtomicU64, Ordering},
 };
+#[cfg(not(windows))]
+use std::fs::File;
 static SEQ: AtomicU64 = AtomicU64::new(0);
 #[derive(Debug)]
 pub enum StoreError {
@@ -47,12 +49,23 @@ impl PromotionOps for OsPromotionOps {
         Ok(())
     }
     fn rename_stage(&self, stage: &Path, dest: &Path) -> Result<(), StoreError> {
-        fs::rename(stage, dest)?;
+        sqrec_windows_durable_rename::rename_write_through(stage, dest)?;
         Ok(())
     }
     fn sync_parent(&self, parent: &Path) -> Result<(), StoreError> {
-        File::open(parent)?.sync_all()?;
-        Ok(())
+        #[cfg(windows)]
+        {
+            // Windows directory handles do not support portable std::fs parent fsync.
+            // The platform helper performs the rename with MOVEFILE_WRITE_THROUGH,
+            // after the stage file itself was sync_all()'d.
+            let _ = parent;
+            Ok(())
+        }
+        #[cfg(not(windows))]
+        {
+            File::open(parent)?.sync_all()?;
+            Ok(())
+        }
     }
 }
 /// Sync stage, validate, atomically rename, sync parent, then journal callback.
