@@ -232,8 +232,7 @@ pub fn verify_envelope<R: Read + Seek>(
         || u16::from_le_bytes([fixed[4], fixed[5]]) != 1
         || u16::from_le_bytes([fixed[8], fixed[9]]) != 1
         || u16::from_le_bytes([fixed[10], fixed[11]]) != 0
-        || u32::from_le_bytes(fixed[12..16].try_into().unwrap()) as usize
-            != SQVE_CHUNK_BYTES
+        || u32::from_le_bytes(fixed[12..16].try_into().unwrap()) as usize != SQVE_CHUNK_BYTES
         || fixed[56..64].iter().any(|byte| *byte != 0)
     {
         return Err(EnvelopeError::MalformedHeader);
@@ -273,7 +272,9 @@ pub fn verify_envelope<R: Read + Seek>(
         .try_reserve_exact(wrap_count)
         .map_err(|_| EnvelopeError::AllocationFailed)?;
     for _ in 0..wrap_count {
-        let record = header.get(cursor..cursor + 8).ok_or(EnvelopeError::MalformedHeader)?;
+        let record = header
+            .get(cursor..cursor + 8)
+            .ok_or(EnvelopeError::MalformedHeader)?;
         let suite_code = u16::from_le_bytes([record[0], record[1]]);
         if suite_code != WrapSuite::RsaOaepSha256 as u16 {
             return Err(EnvelopeError::MalformedHeader);
@@ -284,10 +285,16 @@ pub fn verify_envelope<R: Read + Seek>(
         if recipient_len == 0 || recipient_len > SQVE_RECIPIENT_ID_MAX_BYTES {
             return Err(EnvelopeError::MalformedHeader);
         }
-        let recipient_end = cursor.checked_add(recipient_len).ok_or(EnvelopeError::MalformedHeader)?;
-        let wrapped_end = recipient_end.checked_add(wrapped_len).ok_or(EnvelopeError::MalformedHeader)?;
+        let recipient_end = cursor
+            .checked_add(recipient_len)
+            .ok_or(EnvelopeError::MalformedHeader)?;
+        let wrapped_end = recipient_end
+            .checked_add(wrapped_len)
+            .ok_or(EnvelopeError::MalformedHeader)?;
         let recipient = std::str::from_utf8(
-            header.get(cursor..recipient_end).ok_or(EnvelopeError::MalformedHeader)?,
+            header
+                .get(cursor..recipient_end)
+                .ok_or(EnvelopeError::MalformedHeader)?,
         )
         .map_err(|_| EnvelopeError::MalformedHeader)?
         .to_owned();
@@ -316,7 +323,11 @@ pub fn verify_envelope<R: Read + Seek>(
     }
     let expected_file_len = (header_len as u64)
         .checked_add(plaintext_bytes)
-        .and_then(|n| chunk_count.checked_mul(32).and_then(|overhead| n.checked_add(overhead)))
+        .and_then(|n| {
+            chunk_count
+                .checked_mul(32)
+                .and_then(|overhead| n.checked_add(overhead))
+        })
         .and_then(|n| n.checked_add(SQVE_FOOTER_BYTES as u64))
         .ok_or(EnvelopeError::LengthOverflow)?;
     if file_len > expected_file_len {
@@ -605,5 +616,4 @@ mod tests {
             Err(EnvelopeError::TrailingData)
         ));
     }
-
 }
