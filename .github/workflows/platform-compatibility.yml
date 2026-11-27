@@ -5,6 +5,7 @@ on:
     branches: [main, b4-hardening-approved-foundation]
     paths:
       - "shared/domain/**"
+      - "shared/capability-system/**"
       - "core/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -73,11 +74,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinLinuxX64 :shared:domain:allTests"
+            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinLinuxX64 :shared:domain:allTests :shared:capability-system:compileKotlinJvm :shared:capability-system:compileKotlinLinuxX64 :shared:capability-system:allTests"
           - os: windows-latest
-            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinMingwX64 :shared:domain:allTests"
+            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinMingwX64 :shared:domain:allTests :shared:capability-system:compileKotlinJvm :shared:capability-system:compileKotlinMingwX64 :shared:capability-system:allTests"
           - os: macos-latest
-            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinIosArm64 :shared:domain:compileKotlinIosSimulatorArm64 :shared:domain:compileKotlinMacosArm64 :shared:domain:compileKotlinWatchosDeviceArm64 :shared:domain:compileKotlinWatchosSimulatorArm64 :shared:domain:allTests"
+            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinIosArm64 :shared:domain:compileKotlinIosSimulatorArm64 :shared:domain:compileKotlinMacosArm64 :shared:domain:compileKotlinWatchosDeviceArm64 :shared:domain:compileKotlinWatchosSimulatorArm64 :shared:domain:allTests :shared:capability-system:compileKotlinJvm :shared:capability-system:compileKotlinIosArm64 :shared:capability-system:compileKotlinIosSimulatorArm64 :shared:capability-system:compileKotlinMacosArm64 :shared:capability-system:compileKotlinWatchosDeviceArm64 :shared:capability-system:compileKotlinWatchosSimulatorArm64 :shared:capability-system:allTests"
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
