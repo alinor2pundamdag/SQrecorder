@@ -63,3 +63,14 @@ This section supersedes earlier "JNI not yet implemented" statements above.
 - The event ring is implemented at the native ABI slice; event persistence into SQJ and durable recovery is still outstanding.
 - Release-critical remaining work: integrate actual AudioRecord producer/consumer and backpressure/overflow stop; remove plaintext recording path; canonical WAV writer and encrypted Vault integration; journal event/finalization/hash and idempotency; durable store promotion/reconciliation with encrypted artifact; crash-cut/ENOSPC/force-stop/recovery tests; UI recovery/integrity reporting; complete exact-head Android + cross-platform CI and review.
 - Physical-device testing is intentionally deferred until these software and security gates are complete. CI/emulator is not a substitute for the eventual physical-device matrix.
+
+
+## Follow-up verification and JNI boundary correction — 2026-11-27 22:25 +08:00
+
+- Live PR metadata confirmed latest pre-correction source head `f0b221888acef807ec2f4196b747a302582ff980`.
+- Exact-head CI on that source: Rust Run #129 PASS; cross-platform Run #88 PASS; Android Vault Run #154 PASS. All three workflows completed successfully; Android included 16 KB JNI build, app assembly/unit tests, and API 36 emulator Vault bridge. This does not close physical-device or end-to-end secure capture gates.
+- Source audit found a JNI signed-to-unsigned validation gap in `nativePushEvent`: negative Java `jint/jlong` fields could be cast to large unsigned ABI values before rejection. Corrected by validating supported event type 1–5, positive sequence/timestamp/epoch, and nonnegative detail code before conversion.
+- Added Rust unit tests for accepted event metadata, negative-value rejection, and unknown event types. Implementation commit: `95028ef2711d1825601c4df5a6f72283aa2f946b`; tests commit: `3424bbe58e3a0fde9de9db764d02fbbc7f1eff73`.
+- Latest head after correction: `3424bbe58e3a0fde9de9db764d02fbbc7f1eff73`. GitHub check-runs and workflow-run queries returned zero records for this exact SHA at the time of this update. Therefore the JNI correction and new tests are **NOT VERIFIED by CI yet**; prior Run #129/#88/#154 do not attest this new head.
+- Android `CaptureForegroundService.kt` on PR #4 still writes plaintext app-private WAV directly and does not instantiate the JNI queue. The JNI adapter exists, but actual AudioRecord producer/consumer integration is still open. Do not call the capture path production-secure.
+- Remaining release blockers: bounded queue integration with AudioRecord and controlled backpressure; canonical WAV writer; Vault-encrypted output; SQJ journal/checkpoint/finalization/hash; durable promotion/recovery; crash-cut/ENOSPC/force-stop tests; recovery/integrity UI; final exact-head CI and required device matrix.
