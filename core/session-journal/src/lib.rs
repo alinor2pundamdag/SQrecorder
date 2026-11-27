@@ -164,11 +164,15 @@ fn validate_payload(payload: &[u8], expected_event_code: u16) -> Result<(), Jour
     }
     let value: serde_json::Value =
         serde_json::from_slice(payload).map_err(|_| JournalError::InvalidPayloadJson)?;
-    let object = value.as_object().ok_or(JournalError::PayloadSchemaMismatch)?;
-    let schema_version = object.get("schemaVersion").and_then(serde_json::Value::as_u64);
+    let object = value
+        .as_object()
+        .ok_or(JournalError::PayloadSchemaMismatch)?;
+    let schema_version = object
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_u64);
     let event_code = object.get("eventCode").and_then(serde_json::Value::as_u64);
-    if schema_version != Some(u64::from(JOURNAL_VERSION)) ||
-        event_code != Some(u64::from(expected_event_code))
+    if schema_version != Some(u64::from(JOURNAL_VERSION))
+        || event_code != Some(u64::from(expected_event_code))
     {
         return Err(JournalError::PayloadSchemaMismatch);
     }
@@ -645,7 +649,10 @@ mod tests {
         );
         let sink = writer.into_sink();
         let verification = verify_journal(&sink.bytes);
-        assert_eq!(verification.status, JournalVerificationStatus::TruncatedTail);
+        assert_eq!(
+            verification.status,
+            JournalVerificationStatus::TruncatedTail
+        );
         assert_eq!(verification.valid_prefix_bytes, 0);
     }
 
