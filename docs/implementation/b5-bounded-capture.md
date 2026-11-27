@@ -74,3 +74,14 @@ This section supersedes earlier "JNI not yet implemented" statements above.
 - Latest head after correction: `3424bbe58e3a0fde9de9db764d02fbbc7f1eff73`. GitHub check-runs and workflow-run queries returned zero records for this exact SHA at the time of this update. Therefore the JNI correction and new tests are **NOT VERIFIED by CI yet**; prior Run #129/#88/#154 do not attest this new head.
 - Android `CaptureForegroundService.kt` on PR #4 still writes plaintext app-private WAV directly and does not instantiate the JNI queue. The JNI adapter exists, but actual AudioRecord producer/consumer integration is still open. Do not call the capture path production-secure.
 - Remaining release blockers: bounded queue integration with AudioRecord and controlled backpressure; canonical WAV writer; Vault-encrypted output; SQJ journal/checkpoint/finalization/hash; durable promotion/recovery; crash-cut/ENOSPC/force-stop tests; recovery/integrity UI; final exact-head CI and required device matrix.
+
+
+## AudioRecord → native queue integration checkpoint — 2026-11-27 22:32 +08:00
+
+- Integrated Android `AudioRecord` producer into `JniCaptureQueue` in PR #5; direct file writes were removed from the capture thread.
+- Added `CaptureQueuePump`: single consumer drains PCM and metadata event ring, validates sample format/rate, capture epoch, sequence and frame-index continuity, then writes to the current WAV staging sink. Producer uses a reusable direct buffer; native queue remains fixed-capacity. Consumer parks briefly when idle and is unparked on successful submit.
+- Producer and consumer sequence/frame counters are independent (corrected before the current CI head); queue failures stop capture and preserve the partial artifact rather than marking the take successful.
+- Exact integration source head `8049e6fb234fc16fcc16da19cbd72cbf33320633`: Rust Run #140 (`46016618916`) **PASS**; cross-platform Run #99 (`46016618871`) **IN PROGRESS**; Android Run #165 (`46016618940`) **PENDING** with no job provisioned at last poll. A prior Android run #158 is still executing on earlier head `1ffa277ea47ce59d9ef0d53d400a73be2af45679` and cannot attest the integrated service.
+- This integration does **not** make the capture path production-secure: the consumer still writes plaintext app-private WAV staging. SQVE Vault encryption, SQJ durable event/checkpoint, durable promotion/recovery, crash/ENOSPC/force-stop tests, and recovery/integrity UI remain release blockers.
+- The queue is fail-closed on producer contention/overflow; no real-time physical-device performance or losslessness claim is made before measurement and device testing.
+- The evidence update creates a new commit, so its exact-head CI must also pass before this slice is accepted.
