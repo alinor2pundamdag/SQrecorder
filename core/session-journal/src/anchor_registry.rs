@@ -333,7 +333,7 @@ fn parse_registry_record(
     let id_end = 52 + id_len;
     let key_end = id_end + key_len;
     let key_id = std::str::from_utf8(&record[52..id_end])
-       .map_err(|_| AnchorKeyRegistryError::InvalidKeyId)?
+        .map_err(|_| AnchorKeyRegistryError::InvalidKeyId)?
         .to_owned();
     let public_key = record[id_end..key_end].to_vec();
     if public_key.first() != Some(&0x30) || anchor_public_key_id(&public_key) != key_id {
