@@ -25,6 +25,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: rust-contracts-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   rust-contracts:
     runs-on: ubuntu-latest
@@ -32,30 +36,22 @@ jobs:
       RUST_TOOLCHAIN: "1.100.0"
       CARGO_TERM_COLOR: always
     steps:
-      - name: Clone exact pushed branch
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git clone --depth 1 --branch "$GITHUB_REF_NAME" \
-            "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" source
+      - name: Checkout exact event revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
       - name: Install pinned Rust toolchain
-        working-directory: source
         run: |
           set -euo pipefail
           rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --component rustfmt --component clippy
           rustup default "$RUST_TOOLCHAIN"
           rustc --version
           cargo --version
-      - name: Resolve and generate workspace lock
-        working-directory: source
-        run: cargo generate-lockfile
+      - name: Verify committed lockfile is current
+        run: cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/cargo-metadata.json"
       - name: Check Rust formatting
-        working-directory: source
         run: cargo fmt --all -- --check
       - name: Workspace tests
-        working-directory: source
         run: cargo test --workspace --locked
       - name: Clippy
-        working-directory: source
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
