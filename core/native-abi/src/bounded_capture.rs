@@ -191,6 +191,7 @@ impl BoundedPcmQueue {
     }
 
     pub fn request_stop(&self) -> Result<(), CaptureError> {
+        if self.producer_fault.load(Ordering::Acquire) { return Err(CaptureError::InvalidState); }
         let mut inner = self
             .inner
             .lock()
@@ -203,6 +204,7 @@ impl BoundedPcmQueue {
     }
 
     pub fn mark_stopped(&self) -> Result<(), CaptureError> {
+        if self.producer_fault.load(Ordering::Acquire) { return Err(CaptureError::InvalidState); }
         let mut inner = self
             .inner
             .lock()
