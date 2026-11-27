@@ -22,15 +22,6 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - run: rustup toolchain install 1.85.1 --profile minimal --component rustfmt && rustup default 1.85.1
-      # Temporary formatter capture: generated artifact is committed back to this PR,
-      # then the final workflow returns to strict check-only mode.
-      - run: cargo fmt --all
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: b4-rustfmt-source
-          path: core/durable-store/src/lib.rs
-          if-no-files-found: error
-          retention-days: 3
       - run: cargo fmt --all -- --check
   tests:
     name: Workspace compile + journal, Vault, durability tests
@@ -42,7 +33,7 @@ jobs:
         run: git ls-files --error-unmatch Cargo.lock
       - run: cargo check --workspace --locked
       - run: cargo test --workspace --all-targets --locked
-      - name: Export generated Cargo.lock for repository commit
+      - name: Archive the committed Cargo.lock used by this CI run
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: b4-cargo-lockfile
