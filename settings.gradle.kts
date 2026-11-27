@@ -16,4 +16,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "SQRecorder"
 include(":shared:domain")
+include(":shared:capability-system")
 include(":shared:vault-keystore-android")
