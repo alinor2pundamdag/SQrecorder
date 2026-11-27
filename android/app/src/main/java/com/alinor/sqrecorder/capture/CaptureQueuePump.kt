@@ -29,8 +29,10 @@ internal class CaptureQueuePump(
         priority = Thread.NORM_PRIORITY
     }
 
-    private var expectedFrameIndex = 0L
-    private var expectedSequence = 1
+    private var producerFrameIndex = 0L
+    private var producerSequence = 1
+    private var consumerFrameIndex = 0L
+    private var consumerSequence = 1
 
     fun start() {
         check(!consumer.isAlive && !consumerDone.get()) { "PCM consumer already started" }
@@ -52,18 +54,18 @@ internal class CaptureQueuePump(
             sampleRateHz = sampleRateHz,
             byteCount = byteCount,
             frameCount = frameCount,
-            firstFrameIndex = expectedFrameIndex,
+            firstFrameIndex = producerFrameIndex,
             monotonicTimestampNs = monotonicTimestampNs,
             captureEpoch = captureEpoch,
-            sequence = expectedSequence,
+            sequence = producerSequence,
         )
         if (status != JniCaptureQueue.STATUS_OK) {
             val error = IllegalStateException("native PCM submit failed with sq_status_v1=$status")
             consumerFailure.compareAndSet(null, error)
             throw error
         }
-        expectedFrameIndex = Math.addExact(expectedFrameIndex, frameCount.toLong())
-        expectedSequence = Math.addExact(expectedSequence, 1)
+        producerFrameIndex = Math.addExact(producerFrameIndex, frameCount.toLong())
+        producerSequence = Math.addExact(producerSequence, 1)
     }
 
     /** Stops producers, drains both native rings, and verifies native final state. */
@@ -111,15 +113,15 @@ internal class CaptureQueuePump(
                 check(metadata.sampleRateHz == sampleRateHz && metadata.channels == 1 &&
                     metadata.sampleFormat == 1 && metadata.payloadBytes == byteCount &&
                     metadata.captureEpoch == captureEpoch &&
-                    metadata.firstFrameIndex == expectedFrameIndex &&
-                    metadata.sequence == expectedSequence
+                    metadata.firstFrameIndex == consumerFrameIndex &&
+                    metadata.sequence == consumerSequence
                 ) { "native PCM metadata discontinuity; retain partial and mark integrity failure" }
                 check(byteCount <= stagingBytes.size.toLong() && byteCount % 2L == 0L)
                 pcm.position(0)
                 pcm.get(stagingBytes, 0, byteCount.toInt())
                 output.write(stagingBytes, 0, byteCount.toInt())
-                expectedFrameIndex = Math.addExact(expectedFrameIndex, metadata.frameCount.toLong())
-                expectedSequence = Math.addExact(expectedSequence, 1)
+                consumerFrameIndex = Math.addExact(consumerFrameIndex, metadata.frameCount.toLong())
+                consumerSequence = Math.addExact(consumerSequence, 1)
             }
         } catch (failure: Throwable) {
             consumerFailure.compareAndSet(null, failure)
