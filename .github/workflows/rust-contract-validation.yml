@@ -11,6 +11,9 @@ on:
       - rust-toolchain.toml
       - core/**
       - .github/workflows/rust-contract-validation.yml
+      - docs/architecture/**
+      - docs/decisions/**
+      - docs/security/**
   pull_request:
     branches:
       - main
