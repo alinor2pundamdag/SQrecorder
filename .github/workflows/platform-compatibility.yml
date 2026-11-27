@@ -14,7 +14,9 @@ on:
       - "docs/architecture/**"
       - "docs/decisions/**"
       - "docs/security/**"
+      - ".github/workflows/android-vault-contract.yml"
       - ".github/workflows/platform-compatibility.yml"
+      - ".github/workflows/rust-contract-validation.yml"
   pull_request:
     branches: [main]
     paths:
