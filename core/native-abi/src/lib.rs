@@ -147,7 +147,7 @@ mod vault_ffi {
             atomic::{AtomicU64, Ordering},
         },
     };
-    use zeroize::Zeroize;
+    use zeroize::{Zeroize, Zeroizing};
 
     static NEXT_HANDLE: AtomicU64 = AtomicU64::new(1);
     static KEYS: OnceLock<Mutex<HashMap<u64, VaultFileKey>>> = OnceLock::new();
@@ -241,10 +241,12 @@ mod vault_ffi {
             }
             // SAFETY: validated fixed length and caller-provided readable pointer.
             let input = unsafe { input_slice(dek, DEK_BYTES)? };
-            let mut temporary = [0u8; DEK_BYTES];
-            temporary.copy_from_slice(input);
+            let temporary = Zeroizing::new({
+                let mut bytes = [0u8; DEK_BYTES];
+                bytes.copy_from_slice(input);
+                bytes
+            });
             let key = VaultFileKey::from_bytes(&temporary).map_err(map_crypto)?;
-            temporary.zeroize();
             let handle = allocate_handle(key)?;
             // SAFETY: validated non-null; caller provides writable u64 storage.
             unsafe { ptr::write(out_handle, handle) };
@@ -272,9 +274,8 @@ mod vault_ffi {
             let output = unsafe { output_slice(out_dek, DEK_BYTES)? };
             let keys = registry().lock().map_err(|_| SqStatusV1::Resource)?;
             let key = keys.get(&handle).ok_or(SqStatusV1::InvalidState)?;
-            let mut temporary = key.copy_for_public_wrap();
+            let temporary = Zeroizing::new(key.copy_for_public_wrap());
             output.copy_from_slice(&temporary);
-            temporary.zeroize();
             Ok(())
         })
     }
