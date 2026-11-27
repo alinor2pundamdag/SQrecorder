@@ -3,6 +3,26 @@ package com.alinor.sqrecorder.capture
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+public data class PcmBlockMetadata(
+    public val sampleRateHz: Int,
+    public val channels: Int,
+    public val sampleFormat: Int,
+    public val frameCount: Int,
+    public val firstFrameIndex: Long,
+    public val monotonicTimestampNs: Long,
+    public val captureEpoch: Long,
+    public val payloadBytes: Long,
+    public val sequence: Int,
+)
+
+public data class CaptureEventMetadata(
+    public val eventType: Int,
+    public val eventSequence: Long,
+    public val monotonicTimestampNs: Long,
+    public val captureEpoch: Long,
+    public val detailCode: Int,
+)
+
 /**
  * Thin JNI adapter for the bounded native PCM/event queues.
  *
@@ -104,6 +124,36 @@ public class JniCaptureQueue(
         public const val PCM_BLOCK_METADATA_BYTES: Int = 64
         public const val EVENT_METADATA_BYTES: Int = 48
         private const val PCM_BYTES_PER_FRAME: Int = 2
+
+        public fun decodePcmMetadata(bytes: ByteArray): PcmBlockMetadata {
+            require(bytes.size >= PCM_BLOCK_METADATA_BYTES)
+            val b = ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder())
+            require(b.getInt(0) == PCM_BLOCK_METADATA_BYTES)
+            return PcmBlockMetadata(
+                sampleRateHz = b.getInt(8),
+                channels = b.getShort(12).toInt() and 0xffff,
+                sampleFormat = b.getShort(14).toInt() and 0xffff,
+                frameCount = b.getInt(16),
+                firstFrameIndex = b.getLong(24),
+                monotonicTimestampNs = b.getLong(32),
+                captureEpoch = b.getLong(40),
+                payloadBytes = b.getLong(48),
+                sequence = b.getInt(56),
+            )
+        }
+
+        public fun decodeEventMetadata(bytes: ByteArray): CaptureEventMetadata {
+            require(bytes.size >= EVENT_METADATA_BYTES)
+            val b = ByteBuffer.wrap(bytes).order(ByteOrder.nativeOrder())
+            require(b.getInt(0) == EVENT_METADATA_BYTES)
+            return CaptureEventMetadata(
+                eventType = b.getInt(4),
+                eventSequence = b.getLong(16),
+                monotonicTimestampNs = b.getLong(24),
+                captureEpoch = b.getLong(32),
+                detailCode = b.getInt(40),
+            )
+        }
 
         init {
             System.loadLibrary("sqrec_native_abi")
