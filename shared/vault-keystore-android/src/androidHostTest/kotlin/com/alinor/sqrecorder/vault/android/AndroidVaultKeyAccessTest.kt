@@ -8,7 +8,7 @@ import javax.crypto.spec.PSource
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertNotEquals
+import kotlin.test.assertTrue
 
 class AndroidVaultKeyAccessTest {
     @Test
@@ -22,7 +22,7 @@ class AndroidVaultKeyAccessTest {
 
         assertEquals(first, second)
         assertEquals(32, first.substringAfterLast('-').length)
-        assertEquals(true, first.matches(Regex("rsa-oaep-sha256-v1-[0-9a-f]{32}")))
+        assertTrue(first.matches(Regex("rsa-oaep-sha256-v1-[0-9a-f]{32}")))
     }
 
     @Test
