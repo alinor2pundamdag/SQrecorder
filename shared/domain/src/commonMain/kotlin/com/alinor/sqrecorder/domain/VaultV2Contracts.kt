@@ -64,6 +64,7 @@ public data class VaultV2EnvelopeContract(
             !headerMacBase64.endsWith("=")
         ) return VaultV2ContractError.INVALID_HEADER_MAC_ENCODING
         if (recipients.isEmpty()) return VaultV2ContractError.MISSING_RECIPIENT
+        if (recipients.size > MAX_RECIPIENTS) return VaultV2ContractError.INVALID_WRAPPED_DEK
         if (recipients.any { !it.recipientKeyId.isSafeId() }) {
             return VaultV2ContractError.INVALID_RECIPIENT_ID
         }
@@ -71,7 +72,9 @@ public data class VaultV2EnvelopeContract(
             return VaultV2ContractError.DUPLICATE_RECIPIENT
         }
         for (recipient in recipients) {
-            if (!recipient.wrappedDekBase64.isCanonicalBase64()) {
+            if (recipient.wrappedDekBase64.length > MAX_WRAPPED_DEK_BASE64_BYTES ||
+                !recipient.wrappedDekBase64.isCanonicalBase64()
+            ) {
                 return VaultV2ContractError.INVALID_WRAPPED_DEK
             }
             when (recipient.suite) {
@@ -101,6 +104,8 @@ public data class VaultV2EnvelopeContract(
         public const val CHUNK_SIZE_BYTES: Int = 1_048_576
         public const val MIN_RSA_2048_CIPHERTEXT_BASE64: Int = 344
         public const val ECDH_WRAPPED_DEK_BASE64_LENGTH: Int = 64
+        public const val MAX_WRAPPED_DEK_BASE64_BYTES: Int = 16_384
+        public const val MAX_RECIPIENTS: Int = 16
     }
 }
 
@@ -140,7 +145,18 @@ private fun String.isCanonicalBase64(): Boolean {
             }
         }
     }
+    if (padding == 1 && (base64Value(this[length - 2]) and 0x03) != 0) return false
+    if (padding == 2 && (base64Value(this[length - 3]) and 0x0f) != 0) return false
     return true
+}
+
+private fun base64Value(c: Char): Int = when (c) {
+    in 'A'..'Z' -> c.code - 'A'.code
+    in 'a'..'z' -> c.code - 'a'.code + 26
+    in '0'..'9' -> c.code - '0'.code + 52
+    '+' -> 62
+    '/' -> 63
+    else -> -1
 }
 
 private fun String.isLowerHex(expected: Int): Boolean =
