@@ -1,27 +1,30 @@
 # B4 — Journal, Vault, and durable recovery acceptance gate
 
-Status: **BLOCKED / NOT ACCEPTED**. Rust foundation is verified; full B4 acceptance is not.
+Status: **BLOCKED / NOT ACCEPTED**. Rust B4 foundation is implemented and exact-head CI verified; remaining acceptance requires the approved Android/KMP baseline and end-to-end platform/device evidence.
 
-## Latest exact-head verification — PASS
-- PR #1 head: `6df129392cdb83871123e5a7c4bf5baa17bd5082`
-- GitHub Actions Run **#39** (`45952859449`): **SUCCESS**
-- Passed jobs: workspace compile + journal/Vault/durability tests; Rust formatting.
-- Run #39 validates this exact head. It does not validate Android/device behavior.
+## Exact source verification — PASS
+- Source SHA: `81d0c45ed02401a67f40d9c994b89fc124642b43`
+- GitHub Actions **Run #51** (`45954763730`): **SUCCESS**
+- Passed: strict rustfmt; locked workspace check; all workspace tests.
+- This verifies the Rust source SHA above. It is not Android/device acceptance.
 
-## Implemented
-- AES-256-GCM envelope; random per-file DEK and nonce; caller AAD; DEK zeroization; platform wrapping boundary.
-- Durable stage write, file sync, validation, atomic promotion, parent sync, journal callback; explicit journal-pending and durability-unknown outcomes.
-- Non-destructive recovery inspection and deterministic stage-file discovery; regular matching files only, symlinks/unrelated files excluded.
-- Fault-injection coverage for partial write, simulated ENOSPC, file-sync, rename, parent-sync, and journal failure.
-- Reproducible locked Rust CI; roadmap and RTM documented.
+## B4-R implemented
+- AES-256-GCM envelope, random per-file DEK/nonce, AAD authentication, zeroization, platform wrapping boundary.
+- Durable stage write/sync/verify/rename/parent-sync/journal callback with explicit pending/unknown outcomes.
+- Non-destructive staged-file discovery and filesystem/journal reconciliation decision.
+- Fault injection for partial write, simulated ENOSPC, file sync, rename, parent sync, and journal failure.
+- Journal append/hash-chain verification; partial-write/sync failure latches writer terminal.
+- Duplicate-key scanner now correctly traverses nested objects and compares decoded escaped keys.
+- Payload bytes are enforced as RFC 8785/JCS canonical JSON using pinned `serde_json_canonicalizer 0.3.2`; writer and recovery verifier reject noncanonical bytes.
+- Writer can resume sequence, digest, and monotonic timestamp only from a fully verified intact journal; damaged/truncated tails return recovery-required and are never appended in place.
+- Rust toolchain/Cargo.lock locked; roadmap + RTM maintained.
 
-## Remaining B4 work
-- Restore/create the approved Android/KMP project baseline, then implement and verify the approved Android security/platform path.
-- Complete canonical journal validation and end-to-end journal/session/filesystem reconciliation.
-- Add crash-cut and real-device storage-pressure/recovery evidence; preserve ambiguous artifacts and prevent silent evidence loss.
-- Complete security review and final acceptance evidence matrix.
+## Remaining B4 acceptance
+- Restore/create the approved Android/KMP baseline; implement platform integration and run its compile/security tests.
+- Complete platform journal/session/filesystem reconciliation and crash-cut recovery tests.
+- Verify Keystore auth-bound unwrap, locked decrypt denial, invalidation/rotation/recovery behavior.
+- Run device storage-pressure/ENOSPC, lifecycle, vault and security review; record exact device/API evidence.
+- Complete RTM evidence and acceptance sign-off.
 
 ## Architecture guard
-No locked blueprint decision changed. Keep the approved per-file AES-256 DEK/AES-GCM, authenticated Keystore custody, offline-first behavior, and locked Quick Capture semantics. Any proposed deviation requires explicit change control.
-
-B4 stays blocked until all required platform, journal/recovery, security, and device gates pass. Do not claim acceptance from Rust CI alone.
+Locked blueprint decisions remain unchanged. B4 stays blocked until platform, security, journal/recovery and device gates pass. Keep PR draft/unmerged; do not infer 100% acceptance from Rust CI.
