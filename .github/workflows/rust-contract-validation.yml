@@ -16,6 +16,7 @@ on:
       - docs/architecture/**
       - docs/decisions/**
       - docs/security/**
+      - docs/implementation/**
   pull_request:
     branches:
       - main
