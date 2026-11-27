@@ -306,7 +306,12 @@ mod tests {
             // so this test isolates the injected post-rename sync failure from
             // the platform-specific write-through rename implementation.
             if matches!(self.0, FaultPoint::ParentSync) {
-                fs::rename(stage, dest)?;
+                // Model the completed promotion in this fault-injection test.
+                // Windows std::fs::rename can return ACCESS_DENIED in this
+                // sandbox; real write-through rename is exercised separately
+                // by the successful OsPromotionOps promotion test.
+                fs::copy(stage, dest)?;
+                fs::remove_file(stage)?;
                 return Ok(());
             }
             OsPromotionOps.rename_stage(stage, dest)
