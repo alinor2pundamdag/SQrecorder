@@ -26,3 +26,10 @@
 - Android Vault contract Run #117 (`46008909415`) was cancelled before a job was provisioned on source head `9b5507ebf5da893741ad1207365cbfeea602b4a0`; it is **not a pass**.
 - The earlier Android Run #97 passed on the earlier bounded-queue-only SHA, before the operational C ABI and contention/zeroization hardening. It is historical and does not validate this integrated source revision.
 - Triggering a fresh Android contract run on the updated evidence/source commit is required before this B5 slice has a current Android CI attestation.
+
+## Current exact-head verification — 2026-11-27
+
+- PR #5 evidence/source head before this doc refresh: `a32c46dc69964582b81e7db9aa936f3ec7979a91`.
+- Rust contract Run #95 (`46009272259`) passed on that exact commit: lockfile, rustfmt, full workspace tests, and Clippy.
+- Android Vault Run #120 (`46009272161`) remains pending with no job provisioned in the latest poll; no Android acceptance is claimed. Earlier Run #117 was cancelled before provisioning.
+- This documentation refresh creates a new commit and therefore requires its own exact-head Rust + Android workflow checks. The queue/C ABI implementation is not release-complete until that current CI is green and all remaining integration gates below are closed.
