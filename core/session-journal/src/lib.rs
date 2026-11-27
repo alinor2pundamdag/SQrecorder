@@ -799,6 +799,17 @@ mod tests {
     }
 
     #[test]
+    fn writer_resume_empty_journal_starts_at_genesis() {
+        let mut writer = JournalWriter::resume(MemorySink::default(), &[]).unwrap();
+        let receipt = writer.append(input(1, [0; 32])).unwrap();
+        assert_eq!(receipt.sequence, 1);
+        assert_eq!(
+            verify_journal(&writer.into_sink().bytes).status,
+            JournalVerificationStatus::Valid
+        );
+    }
+
+    #[test]
     fn writer_resumes_verified_chain_and_timestamp_after_restart() {
         let mut initial = JournalWriter::new(MemorySink::default());
         let first = initial.append(input(1, [0; 32])).unwrap();
