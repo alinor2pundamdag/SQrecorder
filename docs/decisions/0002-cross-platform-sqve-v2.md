@@ -6,7 +6,7 @@
 
 ## Context
 
-SQVE v1 fixes a non-empty RSA-OAEP label `SQREC-VAULT-DEK-v1`. Android Keystore's RSA-OAEP provider requires an empty `PSource.PSpecified` label for the supported operation. Changing v1 in place would break interoperability and violate the locked format. SQRecorder must target more than Android: iOS/iPadOS, Wear OS and watchOS companions, Windows, macOS, Linux, and JVM/Java integrations are in scope, subject to OS/API/device constraints.
+SQVE v1 fixes a non-empty RSA-OAEP label `SQREC-VAULT-DEK-v1`. Android Keystore's RSA-OAEP provider requires an empty `PSource.PSpecified` label for the supported operation and defaults MGF1 to SHA-1 unless a digest is explicitly configured (configurable MGF1 digests are available from API 35). Changing v1 in place would break interoperability and violate the locked format. SQRecorder must target more than Android: iOS/iPadOS, Wear OS and watchOS companions, Windows, macOS, Linux, and JVM/Java integrations are in scope, subject to OS/API/device constraints.
 
 ## Decision
 
