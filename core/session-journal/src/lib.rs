@@ -732,7 +732,7 @@ mod tests {
     #[test]
     fn duplicate_key_scanner_decodes_escaped_keys_and_checks_nested_objects() {
         assert!(has_duplicate_json_keys(
-            br#"{"outer":{"key":1,"\\u006Bey":2},"eventCode":2,"schemaVersion":1}"#
+            br#"{"outer":{"key":1,"\u006Bey":2},"eventCode":2,"schemaVersion":1}"#
         ));
         assert!(has_duplicate_json_keys(
             br#"{"eventCode":2,"schemaVersion":1,"items":[{"x":1,"x":2}]}"#
