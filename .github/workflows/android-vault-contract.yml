@@ -5,6 +5,7 @@ on:
     branches: [main, b4-hardening-approved-foundation]
     paths:
       - "build.gradle.kts"
+      - "android/**"
       - "settings.gradle.kts"
       - "shared/domain/**"
       - "shared/capability-system/**"
@@ -102,6 +103,8 @@ jobs:
           unzip -l "$aar" | grep -q 'jni/arm64-v8a/libsqrec_native_abi.so'
           unzip -l "$aar" | grep -q 'jni/x86_64/libsqrec_native_abi.so'
           echo "Verified JNI libraries packaged in Android AAR."
+      - name: Assemble Android recorder application
+        run: gradle :android:app:assembleDebug --no-daemon --max-workers=2
       - name: Enable KVM for hardware-accelerated emulator
         shell: bash
         run: |
