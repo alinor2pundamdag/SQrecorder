@@ -23,6 +23,14 @@ pub struct JournalSignatureAnchor {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AnchorSigningPayloadError {
+    InvalidSequence,
+    InvalidKeyId,
+    LengthOverflow,
+    AllocationFailed,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AnchorCryptoProviderError {
     Unsupported,
     ProviderFailure,
@@ -89,7 +97,7 @@ pub fn verify_journal_anchor<P: P256Sha256SignatureProvider>(
         anchor.monotonic_timestamp_ns,
     ) {
         Ok(bytes) => bytes,
-        Err(()) => return JournalAnchorVerificationResult::InvalidMetadata,
+        Err(_) => return JournalAnchorVerificationResult::InvalidMetadata,
     };
     match provider.verify(&key.encoded_public_key, &payload, &anchor.signature_der) {
         Ok(true) => JournalAnchorVerificationResult::Valid,
@@ -111,16 +119,19 @@ pub fn journal_anchor_signing_payload(
     key_id: &str,
     auth_epoch: u64,
     monotonic_ns: u64,
-) -> Result<Vec<u8>, ()> {
-    if sequence == 0 || !is_anchor_key_id(key_id) {
-        return Err(());
+) -> Result<Vec<u8>, AnchorSigningPayloadError> {
+    if sequence == 0 {
+        return Err(AnchorSigningPayloadError::InvalidSequence);
+    }
+    if !is_anchor_key_id(key_id) {
+        return Err(AnchorSigningPayloadError::InvalidKeyId);
     }
     let id = key_id.as_bytes();
-    let id_len = u16::try_from(id.len()).map_err(|_| ())?;
+    let id_len = u16::try_from(id.len()).map_err(|_| AnchorSigningPayloadError::LengthOverflow)?;
     let mut payload = Vec::new();
     payload
         .try_reserve(JOURNAL_ANCHOR_DOMAIN.len() + 8 + 32 + 2 + id.len() + 16)
-        .map_err(|_| ())?;
+        .map_err(|_| AnchorSigningPayloadError::AllocationFailed)?;
     payload.extend_from_slice(JOURNAL_ANCHOR_DOMAIN);
     payload.extend_from_slice(&sequence.to_le_bytes());
     payload.extend_from_slice(digest);
