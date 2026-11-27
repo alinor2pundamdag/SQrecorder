@@ -74,9 +74,9 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinLinuxX64 :shared:domain:allTests :shared:capability-system:compileKotlinJvm :shared:capability-system:compileKotlinLinuxX64 :shared:capability-system:allTests"
+            targets: ":shared:domain:jvmTest :shared:domain:compileKotlinLinuxX64 :shared:capability-system:jvmTest :shared:capability-system:compileKotlinLinuxX64"
           - os: windows-latest
-            targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinMingwX64 :shared:domain:allTests :shared:capability-system:compileKotlinJvm :shared:capability-system:compileKotlinMingwX64 :shared:capability-system:allTests"
+            targets: ":shared:domain:jvmTest :shared:domain:compileKotlinMingwX64 :shared:capability-system:jvmTest :shared:capability-system:compileKotlinMingwX64"
           - os: macos-latest
             targets: ":shared:domain:compileKotlinJvm :shared:domain:compileKotlinIosArm64 :shared:domain:compileKotlinIosSimulatorArm64 :shared:domain:compileKotlinMacosArm64 :shared:domain:compileKotlinWatchosDeviceArm64 :shared:domain:compileKotlinWatchosSimulatorArm64 :shared:domain:allTests :shared:capability-system:compileKotlinJvm :shared:capability-system:compileKotlinIosArm64 :shared:capability-system:compileKotlinIosSimulatorArm64 :shared:capability-system:compileKotlinMacosArm64 :shared:capability-system:compileKotlinWatchosDeviceArm64 :shared:capability-system:compileKotlinWatchosSimulatorArm64 :shared:capability-system:allTests"
     steps:
