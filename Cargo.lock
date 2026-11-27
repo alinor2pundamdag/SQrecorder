@@ -298,6 +298,10 @@ version = "0.1.0"
 [[package]]
 name = "sqrec-native-abi"
 version = "0.1.0"
+dependencies = [
+ "sqrec-vault-crypto",
+ "zeroize",
+]
 
 [[package]]
 name = "sqrec-session-journal"

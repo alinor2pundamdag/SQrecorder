@@ -135,15 +135,17 @@ mod tests {
 mod vault_ffi {
     use super::SqStatusV1;
     use sqrec_vault_crypto::{
-        VaultCryptoError, VaultFileKey, DEK_BYTES, GCM_NONCE_BYTES, GCM_TAG_BYTES,
-        encrypt_chunk_in_place, decrypt_chunk_in_place,
+        DEK_BYTES, GCM_NONCE_BYTES, GCM_TAG_BYTES, VaultCryptoError, VaultFileKey,
+        decrypt_chunk_in_place, encrypt_chunk_in_place,
     };
     use std::{
         collections::HashMap,
         panic::{AssertUnwindSafe, catch_unwind},
-        ptr,
-        slice,
-        sync::{Mutex, OnceLock, atomic::{AtomicU64, Ordering}},
+        ptr, slice,
+        sync::{
+            Mutex, OnceLock,
+            atomic::{AtomicU64, Ordering},
+        },
     };
     use zeroize::Zeroize;
 
@@ -310,7 +312,8 @@ mod vault_ffi {
             let tag_out = unsafe { output_slice(out_tag, GCM_TAG_BYTES)? };
             let keys = registry().lock().map_err(|_| SqStatusV1::Resource)?;
             let key = keys.get(&handle).ok_or(SqStatusV1::InvalidState)?;
-            let tag = encrypt_chunk_in_place(key, nonce_array, aad_slice, data).map_err(map_crypto)?;
+            let tag =
+                encrypt_chunk_in_place(key, nonce_array, aad_slice, data).map_err(map_crypto)?;
             tag_out.copy_from_slice(&tag);
             Ok(())
         })
@@ -340,7 +343,8 @@ mod vault_ffi {
             let data = unsafe { output_slice(buffer, buffer_len as usize)? };
             let keys = registry().lock().map_err(|_| SqStatusV1::Resource)?;
             let key = keys.get(&handle).ok_or(SqStatusV1::InvalidState)?;
-            decrypt_chunk_in_place(key, nonce_array, aad_slice, data, tag_slice).map_err(map_crypto)?;
+            decrypt_chunk_in_place(key, nonce_array, aad_slice, data, tag_slice)
+                .map_err(map_crypto)?;
             Ok(())
         })
     }
@@ -352,20 +356,32 @@ mod vault_ffi {
         #[test]
         fn opaque_handle_copy_wrap_import_and_destroy_lifecycle() {
             let mut handle = 0u64;
-            assert_eq!(unsafe { sq_vault_key_create_v1(&mut handle) }, SqStatusV1::Ok);
+            assert_eq!(
+                unsafe { sq_vault_key_create_v1(&mut handle) },
+                SqStatusV1::Ok
+            );
             assert_ne!(handle, 0);
 
             let mut bytes = [0u8; DEK_BYTES];
             let mut written = 0u32;
             assert_eq!(
-                unsafe { sq_vault_key_copy_for_wrap_v1(handle, bytes.as_mut_ptr(), bytes.len() as u32, &mut written) },
+                unsafe {
+                    sq_vault_key_copy_for_wrap_v1(
+                        handle,
+                        bytes.as_mut_ptr(),
+                        bytes.len() as u32,
+                        &mut written,
+                    )
+                },
                 SqStatusV1::Ok
             );
             assert_eq!(written as usize, DEK_BYTES);
 
             let mut imported = 0u64;
             assert_eq!(
-                unsafe { sq_vault_key_import_v1(bytes.as_ptr(), bytes.len() as u32, &mut imported) },
+                unsafe {
+                    sq_vault_key_import_v1(bytes.as_ptr(), bytes.len() as u32, &mut imported)
+                },
                 SqStatusV1::Ok
             );
             let mut expected = bytes;
@@ -373,7 +389,14 @@ mod vault_ffi {
 
             let mut copied = [0u8; DEK_BYTES];
             assert_eq!(
-                unsafe { sq_vault_key_copy_for_wrap_v1(imported, copied.as_mut_ptr(), copied.len() as u32, &mut written) },
+                unsafe {
+                    sq_vault_key_copy_for_wrap_v1(
+                        imported,
+                        copied.as_mut_ptr(),
+                        copied.len() as u32,
+                        &mut written,
+                    )
+                },
                 SqStatusV1::Ok
             );
             assert_eq!(copied, expected);
@@ -383,7 +406,14 @@ mod vault_ffi {
             assert_eq!(unsafe { sq_vault_key_destroy_v1(handle) }, SqStatusV1::Ok);
             assert_eq!(unsafe { sq_vault_key_destroy_v1(imported) }, SqStatusV1::Ok);
             assert_eq!(
-                unsafe { sq_vault_key_copy_for_wrap_v1(handle, copied.as_mut_ptr(), copied.len() as u32, &mut written) },
+                unsafe {
+                    sq_vault_key_copy_for_wrap_v1(
+                        handle,
+                        copied.as_mut_ptr(),
+                        copied.len() as u32,
+                        &mut written,
+                    )
+                },
                 SqStatusV1::InvalidState
             );
         }
@@ -391,7 +421,10 @@ mod vault_ffi {
         #[test]
         fn ffi_chunk_encrypt_decrypt_and_tamper_zeroization() {
             let mut handle = 0u64;
-            assert_eq!(unsafe { sq_vault_key_create_v1(&mut handle) }, SqStatusV1::Ok);
+            assert_eq!(
+                unsafe { sq_vault_key_create_v1(&mut handle) },
+                SqStatusV1::Ok
+            );
             let nonce = [7u8; GCM_NONCE_BYTES];
             let aad = b"file|chunk=0";
             let original = b"ciphertext evidence";
@@ -401,10 +434,15 @@ mod vault_ffi {
             assert_eq!(
                 unsafe {
                     sq_vault_encrypt_chunk_v1(
-                        handle, nonce.as_ptr(), nonce.len() as u32,
-                        aad.as_ptr(), aad.len() as u32,
-                        buffer.as_mut_ptr(), buffer.len() as u32,
-                        tag.as_mut_ptr(), tag.len() as u32,
+                        handle,
+                        nonce.as_ptr(),
+                        nonce.len() as u32,
+                        aad.as_ptr(),
+                        aad.len() as u32,
+                        buffer.as_mut_ptr(),
+                        buffer.len() as u32,
+                        tag.as_mut_ptr(),
+                        tag.len() as u32,
                     )
                 },
                 SqStatusV1::Ok
@@ -414,10 +452,15 @@ mod vault_ffi {
             assert_eq!(
                 unsafe {
                     sq_vault_decrypt_chunk_v1(
-                        handle, nonce.as_ptr(), nonce.len() as u32,
-                        aad.as_ptr(), aad.len() as u32,
-                        buffer.as_mut_ptr(), buffer.len() as u32,
-                        tag.as_ptr(), tag.len() as u32,
+                        handle,
+                        nonce.as_ptr(),
+                        nonce.len() as u32,
+                        aad.as_ptr(),
+                        aad.len() as u32,
+                        buffer.as_mut_ptr(),
+                        buffer.len() as u32,
+                        tag.as_ptr(),
+                        tag.len() as u32,
                     )
                 },
                 SqStatusV1::Ok
@@ -430,10 +473,15 @@ mod vault_ffi {
             assert_eq!(
                 unsafe {
                     sq_vault_decrypt_chunk_v1(
-                        handle, nonce.as_ptr(), nonce.len() as u32,
-                        aad.as_ptr(), aad.len() as u32,
-                        buffer.as_mut_ptr(), buffer.len() as u32,
-                        bad_tag.as_ptr(), bad_tag.len() as u32,
+                        handle,
+                        nonce.as_ptr(),
+                        nonce.len() as u32,
+                        aad.as_ptr(),
+                        aad.len() as u32,
+                        buffer.as_mut_ptr(),
+                        buffer.len() as u32,
+                        bad_tag.as_ptr(),
+                        bad_tag.len() as u32,
                     )
                 },
                 SqStatusV1::AuthenticationFailed
