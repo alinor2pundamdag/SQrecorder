@@ -5,6 +5,7 @@ on:
     branches:
       - batch-1-foundation
       - b4-hardening-approved-foundation
+      - android-b5-capture
     paths:
       - Cargo.toml
       - Cargo.lock
