@@ -82,6 +82,8 @@ jobs:
           echo "Verified JNI libraries packaged in Android AAR."
       - name: Run native Vault bridge on API 36 emulator
         uses: ReactiveCircus/android-emulator-runner@1dcd0090116d15e7c562f8db72807de5e036a4ed # v2.34.0
+        env:
+          ANDROID_I_WANT_MY_TCG: "yes"
         with:
           api-level: 36
           target: google_apis
