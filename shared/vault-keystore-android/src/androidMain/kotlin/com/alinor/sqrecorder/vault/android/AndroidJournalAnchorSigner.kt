@@ -33,9 +33,7 @@ public class AndroidJournalAnchorSigner(
             throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
         }
         val now = SystemClock.elapsedRealtimeNanos()
-        if (!authContext.validate(now) || !authVerifier.isCurrent(authContext) ||
-            authContext.expiresAtMonotonicNs - now > AUTH_WINDOW_NANOS
-        ) {
+        if (!isCurrentVaultAuthContext(authContext, now, authVerifier)) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.AUTH_CONTEXT_INVALID)
         }
 
@@ -155,7 +153,6 @@ public class AndroidJournalAnchorSigner(
         const val SIGNATURE_ALGORITHM = "SHA256withECDSA"
         const val SIGNATURE_ID = "ecdsa-p256-sha256-v1"
         const val AUTH_WINDOW_SECONDS = 30
-        const val AUTH_WINDOW_NANOS = AUTH_WINDOW_SECONDS * 1_000_000_000L
     }
 }
 
