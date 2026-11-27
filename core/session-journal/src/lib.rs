@@ -12,8 +12,8 @@ pub use anchor_registry::{
 };
 pub use anchor_verifier::{
     AnchorCryptoProviderError, AnchorSigningPayloadError, JournalAnchorVerificationResult,
-    JournalSignatureAnchor,
-    P256Sha256SignatureProvider, journal_anchor_signing_payload, verify_journal_anchor,
+    JournalSignatureAnchor, P256Sha256SignatureProvider, journal_anchor_signing_payload,
+    verify_journal_anchor,
 };
 
 pub const JOURNAL_MAGIC: &[u8; 4] = b"SQJR";
