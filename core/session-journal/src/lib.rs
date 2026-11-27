@@ -4,10 +4,15 @@
 use sha2::{Digest, Sha256};
 
 pub mod anchor_registry;
+pub mod anchor_verifier;
 pub use anchor_registry::{
     AnchorKeyRegistryError, AnchorKeyRegistryStatus, AnchorKeyRegistryVerification,
     AnchorKeyRegistryWriter, RetainedAnchorPublicKey, anchor_public_key_id,
     verify_anchor_key_registry,
+};
+pub use anchor_verifier::{
+    AnchorCryptoProviderError, JournalSignatureAnchor, JournalAnchorVerificationResult,
+    P256Sha256SignatureProvider, journal_anchor_signing_payload, verify_journal_anchor,
 };
 
 pub const JOURNAL_MAGIC: &[u8; 4] = b"SQJR";
