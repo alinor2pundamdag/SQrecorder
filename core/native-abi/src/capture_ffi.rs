@@ -2,8 +2,8 @@
 //! concurrently with another operation. Input pointers must reference valid ranges.
 use crate::{
     ABI_MAJOR_V1, ABI_MINOR_V1, BoundedPcmQueue, CaptureEventMetadata, CaptureStatus,
-    PCM_S16_LE_V1, PcmMetadata,
-    SqAbiInfoV1, SqCaptureConfigV1, SqCaptureEventV1, SqPcmBlockV1, SqStatusV1,
+    PCM_S16_LE_V1, PcmMetadata, SqAbiInfoV1, SqCaptureConfigV1, SqCaptureEventV1, SqPcmBlockV1,
+    SqStatusV1,
 };
 use std::{
     panic::{AssertUnwindSafe, catch_unwind},
@@ -190,25 +190,28 @@ pub unsafe extern "C" fn sq_capture_push_event_v1(
         // SAFETY: caller provides a readable event descriptor.
         let event = unsafe { &*event };
         if event.struct_size as usize != core::mem::size_of::<SqCaptureEventV1>()
-            || event.reserved0 != 0 || event.reserved1 != 0
+            || event.reserved0 != 0
+            || event.reserved1 != 0
         {
             return Err(SqStatusV1::InvalidArgument);
         }
         let metadata = CaptureEventMetadata {
-            event_type: event.event_type, flags: event.flags,
+            event_type: event.event_type,
+            flags: event.flags,
             event_sequence: event.event_sequence,
             monotonic_timestamp_ns: event.monotonic_timestamp_ns,
-            capture_epoch: event.capture_epoch, detail_code: event.detail_code,
+            capture_epoch: event.capture_epoch,
+            detail_code: event.detail_code,
         };
         e.queue.push_event(metadata).map_err(|error| match error {
-            crate::CaptureError::QueueOverflow | crate::CaptureError::QueueContention
+            crate::CaptureError::QueueOverflow
+            | crate::CaptureError::QueueContention
             | crate::CaptureError::ResourcePoisoned => SqStatusV1::Resource,
             crate::CaptureError::InvalidState => SqStatusV1::InvalidState,
             _ => SqStatusV1::InvalidArgument,
         })
     })
 }
-
 
 #[unsafe(no_mangle)]
 /// # Safety
@@ -222,17 +225,25 @@ pub unsafe extern "C" fn sq_capture_read_event_v1(
         if out_event.is_null() || !e.started.load(Ordering::Acquire) {
             return Err(SqStatusV1::InvalidArgument);
         }
-        let event = e.queue.pop_event().map_err(|_| SqStatusV1::Resource)?
+        let event = e
+            .queue
+            .pop_event()
+            .map_err(|_| SqStatusV1::Resource)?
             .ok_or(SqStatusV1::WouldBlock)?;
         let value = SqCaptureEventV1 {
             struct_size: core::mem::size_of::<SqCaptureEventV1>() as u32,
-            event_type: event.event_type, flags: event.flags, reserved0: 0,
+            event_type: event.event_type,
+            flags: event.flags,
+            reserved0: 0,
             event_sequence: event.event_sequence,
             monotonic_timestamp_ns: event.monotonic_timestamp_ns,
-            capture_epoch: event.capture_epoch, detail_code: event.detail_code,
+            capture_epoch: event.capture_epoch,
+            detail_code: event.detail_code,
             reserved1: 0,
         };
-        unsafe { ptr::write(out_event, value); }
+        unsafe {
+            ptr::write(out_event, value);
+        }
         Ok(())
     })
 }
@@ -481,17 +492,31 @@ mod tests {
         assert_eq!(unsafe { sq_capture_start_v1(handle) }, SqStatusV1::Ok);
         let event = SqCaptureEventV1 {
             struct_size: core::mem::size_of::<SqCaptureEventV1>() as u32,
-            event_type: 1, flags: 0, reserved0: 0, event_sequence: 1,
-            monotonic_timestamp_ns: 1, capture_epoch: 1, detail_code: 7,
+            event_type: 1,
+            flags: 0,
+            reserved0: 0,
+            event_sequence: 1,
+            monotonic_timestamp_ns: 1,
+            capture_epoch: 1,
+            detail_code: 7,
             reserved1: 0,
         };
-        assert_eq!(unsafe { sq_capture_push_event_v1(handle, &event) }, SqStatusV1::Ok);
+        assert_eq!(
+            unsafe { sq_capture_push_event_v1(handle, &event) },
+            SqStatusV1::Ok
+        );
         let mut out = event;
         out.event_type = 0;
-        assert_eq!(unsafe { sq_capture_read_event_v1(handle, &mut out) }, SqStatusV1::Ok);
+        assert_eq!(
+            unsafe { sq_capture_read_event_v1(handle, &mut out) },
+            SqStatusV1::Ok
+        );
         assert_eq!(out.event_type, event.event_type);
         assert_eq!(out.detail_code, event.detail_code);
-        assert_eq!(unsafe { sq_capture_request_stop_v1(handle) }, SqStatusV1::Ok);
+        assert_eq!(
+            unsafe { sq_capture_request_stop_v1(handle) },
+            SqStatusV1::Ok
+        );
         assert_eq!(unsafe { sq_capture_finish_v1(handle) }, SqStatusV1::Ok);
         unsafe { sq_capture_destroy_v1(handle) };
     }
