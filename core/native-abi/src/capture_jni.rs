@@ -19,6 +19,21 @@ use std::{mem::size_of, ptr, slice};
 const PCM_BLOCK_SIZE: usize = size_of::<SqPcmBlockV1>();
 const EVENT_SIZE: usize = size_of::<SqCaptureEventV1>();
 
+/// Validate signed JNI values before widening them to the unsigned C ABI fields.
+fn valid_event_args(
+    event_type: jint,
+    sequence: jlong,
+    timestamp_ns: jlong,
+    epoch: jlong,
+    detail: jint,
+) -> bool {
+    (1..=5).contains(&event_type)
+        && sequence > 0
+        && timestamp_ns > 0
+        && epoch > 0
+        && detail >= 0
+}
+
 fn handle(value: jlong) -> *mut SqCaptureEngine {
     if value <= 0 {
         ptr::null_mut()
@@ -219,11 +234,7 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
     // Reject negative Java signed integers before converting them to ABI u32/u64.
     // Otherwise -1 would become a large unsigned value and cross the language boundary.
     if raw.is_null()
-        || !(1..=5).contains(&event_type)
-        || sequence <= 0
-        || timestamp_ns <= 0
-        || epoch <= 0
-        || detail < 0
+        || !valid_event_args(event_type, sequence, timestamp_ns, epoch, detail)
     {
         return SqStatusV1::InvalidArgument as jint;
     }
@@ -324,5 +335,31 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
 ) {
     unsafe {
         sq_capture_destroy_v1(handle(raw_handle));
+    }
+}
+
+#[cfg(test)]
+mod jni_validation_tests {
+    use super::valid_event_args;
+
+    #[test]
+    fn accepts_supported_positive_event_metadata() {
+        assert!(valid_event_args(1, 1, 1, 1, 0));
+        assert!(valid_event_args(5, 42, 123, 9, 7));
+    }
+
+    #[test]
+    fn rejects_negative_signed_values_before_unsigned_conversion() {
+        assert!(!valid_event_args(-1, 1, 1, 1, 0));
+        assert!(!valid_event_args(1, -1, 1, 1, 0));
+        assert!(!valid_event_args(1, 1, -1, 1, 0));
+        assert!(!valid_event_args(1, 1, 1, -1, 0));
+        assert!(!valid_event_args(1, 1, 1, 1, -1));
+    }
+
+    #[test]
+    fn rejects_unknown_event_types() {
+        assert!(!valid_event_args(0, 1, 1, 1, 0));
+        assert!(!valid_event_args(6, 1, 1, 1, 0));
     }
 }
