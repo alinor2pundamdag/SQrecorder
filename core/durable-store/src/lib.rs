@@ -12,6 +12,7 @@ static SEQ: AtomicU64 = AtomicU64::new(0);
 pub enum StoreError {
     Io(io::Error),
     InvalidPath,
+    DestinationExists,
     VerificationFailed,
     /// File promotion and directory sync succeeded; journal reconciliation is required.
     JournalCommitPending,
@@ -87,6 +88,62 @@ where
 /// The stage is synced and verified before rename, and journal commit is last.
 /// A failed writer/verification leaves the stage candidate for non-destructive
 /// recovery inspection instead of silently deleting evidence.
+/// Streaming promotion for a newly created destination. Unlike replacement
+/// promotion, this uses an atomic no-clobber filesystem primitive and never
+/// overwrites an existing recording identifier.
+pub fn durable_promote_streaming_new<W, V, J>(
+    dest: &Path,
+    write_stage: W,
+    verify: V,
+    commit: J,
+) -> Result<(), StoreError>
+where
+    W: FnOnce(&mut File) -> Result<(), StoreError>,
+    V: Fn(&Path) -> Result<(), StoreError>,
+    J: FnOnce() -> Result<(), StoreError>,
+{
+    if dest.try_exists()? {
+        return Err(StoreError::DestinationExists);
+    }
+    let parent = dest.parent().ok_or(StoreError::InvalidPath)?;
+    if !parent.is_dir() {
+        return Err(StoreError::InvalidPath);
+    }
+    let name = dest
+        .file_name()
+        .ok_or(StoreError::InvalidPath)?
+        .to_string_lossy();
+    let stage = parent.join(format!(
+        ".{name}.sqstage-{}-{}",
+        std::process::id(),
+        SEQ.fetch_add(1, Ordering::Relaxed)
+    ));
+
+    let mut stage_file = OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&stage)?;
+    write_stage(&mut stage_file)?;
+    stage_file.sync_all()?;
+    drop(stage_file);
+    verify(&stage)?;
+
+    if let Err(rename_error) =
+        sqrec_windows_durable_rename::rename_write_through_new(&stage, dest)
+    {
+        // The no-replace primitive guarantees an existing destination was not
+        // overwritten. If both paths exist, preserve both for reconciliation.
+        if dest.try_exists()? {
+            return Err(StoreError::PromotionDurabilityUnknown);
+        }
+        return Err(StoreError::Io(rename_error));
+    }
+    OsPromotionOps
+        .sync_parent(parent)
+        .map_err(|_| StoreError::PromotionDurabilityUnknown)?;
+    commit().map_err(|_| StoreError::JournalCommitPending)
+}
+
 pub fn durable_promote_streaming<W, V, J>(
     dest: &Path,
     write_stage: W,
@@ -542,4 +599,50 @@ mod tests {
         assert_eq!(fs::read(&stages[0]).unwrap(), b"partial encrypted stream");
         fs::remove_dir_all(d).unwrap();
     }
+    #[test]
+    fn new_streaming_promotion_never_overwrites_existing_destination() {
+        let d = td();
+        let final_path = d.join("existing-recording");
+        fs::write(&final_path, b"original").unwrap();
+        let mut journal_committed = false;
+        let result = durable_promote_streaming_new(
+            &final_path,
+            |file| {
+                file.write_all(b"replacement")?;
+                Ok(())
+            },
+            |_| Ok(()),
+            || {
+                journal_committed = true;
+                Ok(())
+            },
+        );
+        assert!(matches!(result, Err(StoreError::DestinationExists)));
+        assert_eq!(fs::read(&final_path).unwrap(), b"original");
+        assert!(!journal_committed);
+        assert!(discover_staged_files(&final_path).unwrap().is_empty());
+        fs::remove_dir_all(d).unwrap();
+    }
+
+    #[test]
+    fn new_streaming_promotion_creates_final_without_clobber() {
+        let d = td();
+        let final_path = d.join("new-recording");
+        durable_promote_streaming_new(
+            &final_path,
+            |file| {
+                file.write_all(b"new encrypted bytes")?;
+                Ok(())
+            },
+            |stage| {
+                assert_eq!(fs::read(stage)?, b"new encrypted bytes");
+                Ok(())
+            },
+            || Ok(()),
+        )
+        .unwrap();
+        assert_eq!(fs::read(&final_path).unwrap(), b"new encrypted bytes");
+        fs::remove_dir_all(d).unwrap();
+    }
+
 }
