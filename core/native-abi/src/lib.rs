@@ -6,6 +6,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod bounded_capture;
+pub mod capture_ffi;
 pub use bounded_capture::{BoundedPcmQueue, CaptureError, CaptureStatus, PcmMetadata};
 
 /// Native ABI major version.
