@@ -278,9 +278,9 @@ mod tests {
 
     #[test]
     fn rejects_queue_memory_above_budget() {
-        assert_eq!(
+        assert!(matches!(
             BoundedPcmQueue::new(256, 131_072),
             Err(CaptureError::InvalidConfiguration)
-        );
+        ));
     }
 }
