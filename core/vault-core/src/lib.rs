@@ -35,10 +35,9 @@ pub fn encrypt_file<W: DekWrapper>(
     // The guard zeroizes on every return path, including RNG and adapter errors.
     let mut dek = Zeroizing::new([0u8; DEK_BYTES]);
     getrandom::getrandom(&mut *dek).map_err(|_| VaultError::RandomUnavailable)?;
-    let enc = encrypt_dek(&dek, plain, aad);
-    let wrap = w.wrap_dek(&dek);
-    let (n, c) = enc?;
-    let wrapped_dek = wrap?;
+    // Fail fast: do not invoke the key-wrapping adapter if payload encryption failed.
+    let (n, c) = encrypt_dek(&dek, plain, aad)?;
+    let wrapped_dek = w.wrap_dek(&dek)?;
     let mut envelope = Vec::with_capacity(17 + c.len());
     envelope.extend_from_slice(MAGIC);
     envelope.push(1);
@@ -115,6 +114,46 @@ mod tests {
             decrypt_file(&w, &x, &e.wrapped_dek, b"session/file").unwrap_err(),
             VaultError::AuthenticationFailed
         )
+    }
+    #[test]
+    fn wrapped_key_tampering_and_aad_mismatch_fail_closed() {
+        let w = Fake([0x5A; 32]);
+        let encrypted = encrypt_file(&w, b"vault payload", b"session-7/file-2").unwrap();
+
+        let mut wrapped = encrypted.wrapped_dek.clone();
+        wrapped[0] ^= 0x80;
+        assert_eq!(
+            decrypt_file(&w, &encrypted.envelope, &wrapped, b"session-7/file-2").unwrap_err(),
+            VaultError::AuthenticationFailed
+        );
+        assert_eq!(
+            decrypt_file(&w, &encrypted.envelope, &encrypted.wrapped_dek, b"session-8/file-2").unwrap_err(),
+            VaultError::AuthenticationFailed
+        );
+    }
+
+    #[test]
+    fn empty_and_binary_payloads_roundtrip() {
+        let w = Fake([0x19; 32]);
+        for payload in [&[][..], &[0, 0xFF, 0x80, 1][..]] {
+            let encrypted = encrypt_file(&w, payload, b"nonempty-context").unwrap();
+            assert_eq!(
+                decrypt_file(&w, &encrypted.envelope, &encrypted.wrapped_dek, b"nonempty-context").unwrap(),
+                payload
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_unknown_envelope_version() {
+        let w = Fake([0; 32]);
+        let encrypted = encrypt_file(&w, b"x", b"context").unwrap();
+        let mut envelope = encrypted.envelope;
+        envelope[4] = 2;
+        assert_eq!(
+            decrypt_file(&w, &envelope, &encrypted.wrapped_dek, b"context").unwrap_err(),
+            VaultError::UnsupportedVersion
+        );
     }
     #[test]
     fn rejects_malformed() {
