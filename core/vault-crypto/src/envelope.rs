@@ -3,7 +3,7 @@
 //! This module writes a caller-provided temporary sink. The platform storage
 //! adapter is responsible for fsync, atomic rename, directory fsync, and
 //! appending the durable journal commit after promotion.
-use std::io::Write;
+use std::io::{Read, Seek, SeekFrom, Write};
 
 use sha2::{Digest, Sha256};
 
@@ -51,6 +51,12 @@ pub enum EnvelopeError {
     IncompleteFile,
     LengthOverflow,
     WriteFailed,
+    ReadFailed,
+    MalformedHeader,
+    MalformedChunk,
+    MalformedFooter,
+    DigestMismatch,
+    TrailingData,
     Crypto(VaultCryptoError),
 }
 
@@ -195,6 +201,202 @@ impl<W: Write> VaultEnvelopeWriter<W> {
     pub fn serialized_header_bytes(&self) -> &[u8] {
         &self.header_bytes
     }
+}
+
+/// Result of a structural SQVE v1 verification. This verifies the serialized
+/// stream digest and layout; callers must still authenticate/decrypt every GCM
+/// chunk before exposing plaintext.
+pub struct EnvelopeVerification {
+    pub metadata: EnvelopeMetadata,
+    pub serialized_header_bytes: usize,
+    pub serialized_file_bytes: u64,
+}
+
+/// Verifies an SQVE v1 stream without loading the whole file into memory.
+/// At most one maximum-size ciphertext chunk and the bounded header are buffered.
+pub fn verify_envelope<R: Read + Seek>(
+    reader: &mut R,
+) -> Result<EnvelopeVerification, EnvelopeError> {
+    let file_len = reader
+        .seek(SeekFrom::End(0))
+        .map_err(|_| EnvelopeError::ReadFailed)?;
+    reader
+        .seek(SeekFrom::Start(0))
+        .map_err(|_| EnvelopeError::ReadFailed)?;
+
+    let mut fixed = [0u8; SQVE_HEADER_BYTES];
+    reader
+        .read_exact(&mut fixed)
+        .map_err(|_| EnvelopeError::ReadFailed)?;
+    if &fixed[..4] != b"SQVE"
+        || u16::from_le_bytes([fixed[4], fixed[5]]) != 1
+        || u16::from_le_bytes([fixed[8], fixed[9]]) != 1
+        || u16::from_le_bytes([fixed[10], fixed[11]]) != 0
+        || u32::from_le_bytes(fixed[12..16].try_into().unwrap()) as usize
+            != SQVE_CHUNK_BYTES
+        || fixed[56..64].iter().any(|byte| *byte != 0)
+    {
+        return Err(EnvelopeError::MalformedHeader);
+    }
+
+    let header_len = u16::from_le_bytes([fixed[6], fixed[7]]) as usize;
+    let key_id_len = u16::from_le_bytes([fixed[52], fixed[53]]) as usize;
+    let wrap_count = u16::from_le_bytes([fixed[54], fixed[55]]) as usize;
+    if !(SQVE_HEADER_BYTES..=SQVE_MAX_HEADER_BYTES).contains(&header_len)
+        || key_id_len == 0
+        || key_id_len > SQVE_FILE_KEY_ID_MAX_BYTES
+        || wrap_count == 0
+    {
+        return Err(EnvelopeError::MalformedHeader);
+    }
+
+    let mut header = vec![0u8; header_len];
+    header[..SQVE_HEADER_BYTES].copy_from_slice(&fixed);
+    reader
+        .read_exact(&mut header[SQVE_HEADER_BYTES..])
+        .map_err(|_| EnvelopeError::ReadFailed)?;
+
+    let file_key_id = std::str::from_utf8(
+        header
+            .get(SQVE_HEADER_BYTES..SQVE_HEADER_BYTES + key_id_len)
+            .ok_or(EnvelopeError::MalformedHeader)?,
+    )
+    .map_err(|_| EnvelopeError::MalformedHeader)?
+    .to_owned();
+    if !is_key_id(&file_key_id, SQVE_FILE_KEY_ID_MAX_BYTES) {
+        return Err(EnvelopeError::MalformedHeader);
+    }
+
+    let mut cursor = SQVE_HEADER_BYTES + key_id_len;
+    let mut wraps = Vec::new();
+    wraps
+        .try_reserve_exact(wrap_count)
+        .map_err(|_| EnvelopeError::AllocationFailed)?;
+    for _ in 0..wrap_count {
+        let record = header.get(cursor..cursor + 8).ok_or(EnvelopeError::MalformedHeader)?;
+        let suite_code = u16::from_le_bytes([record[0], record[1]]);
+        if suite_code != WrapSuite::RsaOaepSha256 as u16 {
+            return Err(EnvelopeError::MalformedHeader);
+        }
+        let recipient_len = u16::from_le_bytes([record[2], record[3]]) as usize;
+        let wrapped_len = u32::from_le_bytes(record[4..8].try_into().unwrap()) as usize;
+        cursor += 8;
+        if recipient_len == 0 || recipient_len > SQVE_RECIPIENT_ID_MAX_BYTES {
+            return Err(EnvelopeError::MalformedHeader);
+        }
+        let recipient_end = cursor.checked_add(recipient_len).ok_or(EnvelopeError::MalformedHeader)?;
+        let wrapped_end = recipient_end.checked_add(wrapped_len).ok_or(EnvelopeError::MalformedHeader)?;
+        let recipient = std::str::from_utf8(
+            header.get(cursor..recipient_end).ok_or(EnvelopeError::MalformedHeader)?,
+        )
+        .map_err(|_| EnvelopeError::MalformedHeader)?
+        .to_owned();
+        if !is_key_id(&recipient, SQVE_RECIPIENT_ID_MAX_BYTES) {
+            return Err(EnvelopeError::MalformedHeader);
+        }
+        let wrapped_dek = header
+            .get(recipient_end..wrapped_end)
+            .ok_or(EnvelopeError::MalformedHeader)?
+            .to_vec();
+        wraps.push(WrappedDek {
+            suite: WrapSuite::RsaOaepSha256,
+            recipient_key_id: recipient,
+            wrapped_dek,
+        });
+        cursor = wrapped_end;
+    }
+    if cursor != header_len {
+        return Err(EnvelopeError::MalformedHeader);
+    }
+
+    let plaintext_bytes = u64::from_le_bytes(fixed[16..24].try_into().unwrap());
+    let chunk_count = u64::from_le_bytes(fixed[24..32].try_into().unwrap());
+    if chunk_count != expected_chunk_count(plaintext_bytes) {
+        return Err(EnvelopeError::MalformedHeader);
+    }
+    let expected_file_len = (header_len as u64)
+        .checked_add(plaintext_bytes)
+        .and_then(|n| chunk_count.checked_mul(32).and_then(|overhead| n.checked_add(overhead)))
+        .and_then(|n| n.checked_add(SQVE_FOOTER_BYTES as u64))
+        .ok_or(EnvelopeError::LengthOverflow)?;
+    if file_len > expected_file_len {
+        return Err(EnvelopeError::TrailingData);
+    }
+    if file_len != expected_file_len {
+        return Err(EnvelopeError::MalformedChunk);
+    }
+
+    let mut metadata = EnvelopeMetadata {
+        file_uuid: fixed[32..48].try_into().unwrap(),
+        file_key_id,
+        nonce_prefix: fixed[48..52].try_into().unwrap(),
+        plaintext_bytes,
+        chunk_count,
+        wraps,
+    };
+    validate_metadata(&metadata)?;
+    let mut stream_hash = Sha256::new();
+    stream_hash.update(&header);
+    let mut chunk_buffer = vec![0u8; SQVE_CHUNK_BYTES + GCM_TAG_BYTES];
+
+    for index in 0..chunk_count {
+        let mut record = [0u8; 16];
+        reader
+            .read_exact(&mut record)
+            .map_err(|_| EnvelopeError::ReadFailed)?;
+        let record_index = u64::from_le_bytes(record[..8].try_into().unwrap());
+        let plaintext_len = u32::from_le_bytes(record[8..12].try_into().unwrap()) as usize;
+        let ciphertext_len = u32::from_le_bytes(record[12..16].try_into().unwrap()) as usize;
+        let offset = index
+            .checked_mul(SQVE_CHUNK_BYTES as u64)
+            .ok_or(EnvelopeError::LengthOverflow)?;
+        let expected_plaintext_len = plaintext_bytes
+            .checked_sub(offset)
+            .ok_or(EnvelopeError::MalformedChunk)?
+            .min(SQVE_CHUNK_BYTES as u64) as usize;
+        if record_index != index
+            || plaintext_len != expected_plaintext_len
+            || ciphertext_len != plaintext_len + GCM_TAG_BYTES
+            || ciphertext_len > chunk_buffer.len()
+        {
+            return Err(EnvelopeError::MalformedChunk);
+        }
+        reader
+            .read_exact(&mut chunk_buffer[..ciphertext_len])
+            .map_err(|_| EnvelopeError::ReadFailed)?;
+        stream_hash.update(record);
+        stream_hash.update(&chunk_buffer[..ciphertext_len]);
+    }
+
+    let mut footer = [0u8; SQVE_FOOTER_BYTES];
+    reader
+        .read_exact(&mut footer)
+        .map_err(|_| EnvelopeError::ReadFailed)?;
+    if &footer[..4] != b"SQVF"
+        || u16::from_le_bytes([footer[4], footer[5]]) != 1
+        || u16::from_le_bytes([footer[6], footer[7]]) as usize != SQVE_FOOTER_BYTES
+        || u64::from_le_bytes(footer[8..16].try_into().unwrap()) != chunk_count
+        || u64::from_le_bytes(footer[16..24].try_into().unwrap()) != plaintext_bytes
+    {
+        return Err(EnvelopeError::MalformedFooter);
+    }
+    let digest = stream_hash.finalize();
+    if digest.as_slice() != &footer[24..56] {
+        return Err(EnvelopeError::DigestMismatch);
+    }
+    if reader
+        .read(&mut [0u8; 1])
+        .map_err(|_| EnvelopeError::ReadFailed)?
+        != 0
+    {
+        return Err(EnvelopeError::TrailingData);
+    }
+
+    Ok(EnvelopeVerification {
+        metadata,
+        serialized_header_bytes: header_len,
+        serialized_file_bytes: file_len,
+    })
 }
 
 fn validate_metadata(metadata: &EnvelopeMetadata) -> Result<(), EnvelopeError> {
@@ -368,4 +570,34 @@ mod tests {
         assert_eq!(&bytes[header_len..header_len + 4], b"SQVF");
         assert_eq!(bytes.len(), header_len + SQVE_FOOTER_BYTES);
     }
+    #[test]
+    fn streaming_verifier_round_trips_and_checks_footer_digest() {
+        let key = VaultFileKey { bytes: [0x42; 32] };
+        let mut writer = VaultEnvelopeWriter::new(Vec::<u8>::new(), metadata(3), key).unwrap();
+        let mut chunk = b"abc".to_vec();
+        writer.write_chunk(&mut chunk).unwrap();
+        let bytes = writer.finish().unwrap();
+        let mut cursor = std::io::Cursor::new(bytes.clone());
+        let verified = verify_envelope(&mut cursor).unwrap();
+        assert_eq!(verified.metadata.plaintext_bytes, 3);
+        assert_eq!(verified.metadata.chunk_count, 1);
+        assert_eq!(verified.metadata.file_key_id, "file-dek-v1");
+
+        let mut tampered = bytes;
+        let last = tampered.len() - 1;
+        tampered[last] ^= 1;
+        let mut cursor = std::io::Cursor::new(tampered);
+        assert_eq!(verify_envelope(&mut cursor), Err(EnvelopeError::DigestMismatch));
+    }
+
+    #[test]
+    fn streaming_verifier_rejects_trailing_bytes() {
+        let key = VaultFileKey { bytes: [0x11; 32] };
+        let writer = VaultEnvelopeWriter::new(Vec::<u8>::new(), metadata(0), key).unwrap();
+        let mut bytes = writer.finish().unwrap();
+        bytes.push(0);
+        let mut cursor = std::io::Cursor::new(bytes);
+        assert_eq!(verify_envelope(&mut cursor), Err(EnvelopeError::TrailingData));
+    }
+
 }
