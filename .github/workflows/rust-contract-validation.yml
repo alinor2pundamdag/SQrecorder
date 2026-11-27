@@ -64,15 +64,8 @@ jobs:
           cargo --version
       - name: Verify committed lockfile is current
         run: cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/cargo-metadata.json"
-      - name: Format Rust workspace and export durable-store test helper
-        shell: bash
-        run: |
-          cargo fmt --all
-          cargo fmt --all -- --check
-          echo "SQREC_DURABLE_STORE_B64_BEGIN"
-          base64 -w0 core/durable-store/src/lib.rs
-          echo
-          echo "SQREC_DURABLE_STORE_B64_END"
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
       - name: Compile and execute native ABI C and C++ layout contracts
         shell: bash
         run: |
