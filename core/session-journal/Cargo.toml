@@ -7,4 +7,5 @@ rust-version.workspace = true
 
 [dependencies]
 serde_json = { workspace = true }
+serde_json_canonicalizer = { workspace = true }
 sha2 = { workspace = true }
