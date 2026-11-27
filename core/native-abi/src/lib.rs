@@ -7,6 +7,7 @@
 
 pub mod bounded_capture;
 pub mod capture_ffi;
+pub mod capture_jni;
 pub use bounded_capture::{
     BoundedPcmQueue, CaptureError, CaptureEventMetadata, CaptureStatus, PcmMetadata,
 };
