@@ -64,8 +64,19 @@ jobs:
           cargo --version
       - name: Verify committed lockfile is current
         run: cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/cargo-metadata.json"
-      - name: Check Rust formatting
-        run: cargo fmt --all -- --check
+      - name: Format Rust workspace and export capture event sources
+        shell: bash
+        run: |
+          cargo fmt --all
+          cargo fmt --all -- --check
+          echo "SQREC_CAPTURE_FFI_B64_BEGIN"
+          base64 -w0 core/native-abi/src/capture_ffi.rs
+          echo
+          echo "SQREC_CAPTURE_FFI_B64_END"
+          echo "SQREC_BOUNDED_B64_BEGIN"
+          base64 -w0 core/native-abi/src/bounded_capture.rs
+          echo
+          echo "SQREC_BOUNDED_B64_END"
       - name: Compile and execute native ABI C and C++ layout contracts
         shell: bash
         run: |
