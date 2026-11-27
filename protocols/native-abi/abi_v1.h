@@ -111,6 +111,10 @@ sq_status_v1 sq_capture_submit_pcm_v1(
 sq_status_v1 sq_capture_push_event_v1(
     sq_capture_engine *engine,
     const sq_capture_event_v1 *event);
+sq_status_v1 sq_capture_read_pcm_v1(
+    sq_capture_engine *engine, sq_pcm_block_v1 *out_block,
+    uint8_t *out_pcm, uint64_t capacity, uint64_t *out_written);
+sq_status_v1 sq_capture_finish_v1(sq_capture_engine *engine);
 sq_status_v1 sq_capture_request_stop_v1(sq_capture_engine *engine);
 sq_status_v1 sq_capture_get_state_v1(
     const sq_capture_engine *engine,
