@@ -80,7 +80,7 @@ public class AndroidVaultKeyAccess(
         native.generateFileKeyHandle()
 
     override fun currentPublicWrappingKeyId(): String =
-        keyId(publicKeyForAlias(currentAlias(createIfMissing = true)))
+        vaultWrappingKeyId(publicKeyForAlias(currentAlias(createIfMissing = true)))
 
     override fun wrapFileKeyWithPublicKey(
         fileKeyHandle: VaultFileKeyHandle,
@@ -93,7 +93,7 @@ public class AndroidVaultKeyAccess(
                 throw VaultKeyAccessException(VaultKeyAccessFailure.NATIVE_BRIDGE_FAILURE)
             }
             val cipher = Cipher.getInstance(OAEP_TRANSFORMATION)
-            cipher.init(Cipher.ENCRYPT_MODE, publicKey, oaepParameters())
+            cipher.init(Cipher.ENCRYPT_MODE, publicKey, vaultOaepParameters())
             val wrapped = cipher.doFinal(dek)
             return VaultKeyWrap(
                 suite = VaultKeyWrapSuite.RSA_OAEP_SHA256_V1,
@@ -138,7 +138,7 @@ public class AndroidVaultKeyAccess(
         try {
             val privateKey = privateKeyForAlias(alias)
             val cipher = Cipher.getInstance(OAEP_TRANSFORMATION)
-            cipher.init(Cipher.DECRYPT_MODE, privateKey, oaepParameters())
+            cipher.init(Cipher.DECRYPT_MODE, privateKey, vaultOaepParameters())
             dek = cipher.doFinal(wrappedBytes)
             if (dek.size != DEK_BYTES) {
                 throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
@@ -165,7 +165,7 @@ public class AndroidVaultKeyAccess(
         val next = Math.addExact(current, 1L)
         val alias = ALIAS_PREFIX + next
         generateWrappingKey(alias)
-        return keyId(publicKeyForAlias(alias))
+        return vaultWrappingKeyId(publicKeyForAlias(alias))
     }
 
     private fun currentAlias(createIfMissing: Boolean): String {
@@ -238,7 +238,7 @@ public class AndroidVaultKeyAccess(
         val store = keyStore()
         val alias = store.aliases().toList().firstOrNull { candidate ->
             candidate.startsWith(ALIAS_PREFIX) &&
-                store.getCertificate(candidate)?.publicKey?.let(::keyId) == id
+                store.getCertificate(candidate)?.publicKey?.let(::vaultWrappingKeyId) == id
         }
         return alias ?: throw VaultKeyAccessException(VaultKeyAccessFailure.KEY_NOT_FOUND)
     }
@@ -255,19 +255,6 @@ public class AndroidVaultKeyAccess(
         const val AUTH_WINDOW_SECONDS = 30
         const val AUTH_WINDOW_NANOS = AUTH_WINDOW_SECONDS * 1_000_000_000L
         val OAEP_LABEL = "SQREC-VAULT-DEK-v1".toByteArray(Charsets.UTF_8)
-
-        fun oaepParameters(): OAEPParameterSpec = OAEPParameterSpec(
-            "SHA-256",
-            "MGF1",
-            MGF1ParameterSpec.SHA256,
-            PSource.PSpecified(OAEP_LABEL),
-        )
-
-        fun keyId(publicKey: PublicKey): String {
-            val digest = MessageDigest.getInstance("SHA-256").digest(publicKey.encoded)
-            val fingerprint = digest.take(16).joinToString("") { "%02x".format(it) }
-            return "rsa-oaep-sha256-v1-$fingerprint"
-        }
     }
 }
 
@@ -296,4 +283,17 @@ public class AndroidVaultChunkCipher(
         }
         return native.decryptChunk(fileKeyHandle, nonce, associatedData, ciphertextAndTag)
     }
+}
+
+internal fun vaultOaepParameters(): OAEPParameterSpec = OAEPParameterSpec(
+    "SHA-256",
+    "MGF1",
+    MGF1ParameterSpec.SHA256,
+    PSource.PSpecified("SQREC-VAULT-DEK-v1".toByteArray(Charsets.UTF_8)),
+)
+
+internal fun vaultWrappingKeyId(publicKey: PublicKey): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(publicKey.encoded)
+    val fingerprint = digest.take(16).joinToString("") { "%02x".format(it) }
+    return "rsa-oaep-sha256-v1-$fingerprint"
 }
