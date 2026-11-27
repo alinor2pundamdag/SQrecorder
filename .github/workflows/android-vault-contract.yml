@@ -1,0 +1,43 @@
+name: SQRecorder Android Vault contract validation
+
+on:
+  push:
+    branches: [main, b4-hardening-approved-foundation]
+    paths:
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "shared/domain/**"
+      - "shared/vault-keystore-android/**"
+      - ".github/workflows/android-vault-contract.yml"
+  pull_request:
+    paths:
+      - "build.gradle.kts"
+      - "settings.gradle.kts"
+      - "shared/domain/**"
+      - "shared/vault-keystore-android/**"
+      - ".github/workflows/android-vault-contract.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  android-vault:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up JDK 17
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Set up Android SDK 36
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
+        with:
+          packages: "platforms;android-36 build-tools;36.0.0 platform-tools"
+      - name: Set up Gradle 9.5.0
+        uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          gradle-version: "9.5.0"
+          cache-provider: basic
+      - name: Compile Android Vault adapter and run host contract tests
+        run: gradle :shared:vault-keystore-android:build --no-daemon
