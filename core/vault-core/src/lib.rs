@@ -4,7 +4,7 @@ use aes_gcm::{
     aead::{Aead, KeyInit, Payload},
     Aes256Gcm, Nonce,
 };
-use zeroize::Zeroize;
+use zeroize::Zeroizing;
 pub const DEK_BYTES: usize = 32;
 pub const NONCE_BYTES: usize = 12;
 pub const MAGIC: &[u8; 4] = b"SQVE";
@@ -32,11 +32,11 @@ pub fn encrypt_file<W: DekWrapper>(
     plain: &[u8],
     aad: &[u8],
 ) -> Result<EncryptedFile, VaultError> {
-    let mut dek = [0; 32];
-    getrandom::getrandom(&mut dek).map_err(|_| VaultError::RandomUnavailable)?;
+    // The guard zeroizes on every return path, including RNG and adapter errors.
+    let mut dek = Zeroizing::new([0u8; DEK_BYTES]);
+    getrandom::getrandom(&mut *dek).map_err(|_| VaultError::RandomUnavailable)?;
     let enc = encrypt_dek(&dek, plain, aad);
     let wrap = w.wrap_dek(&dek);
-    dek.zeroize();
     let (n, c) = enc?;
     let wrapped_dek = wrap?;
     let mut envelope = Vec::with_capacity(17 + c.len());
@@ -70,13 +70,12 @@ pub fn decrypt_file<W: DekWrapper>(
     if e[4] != 1 {
         return Err(VaultError::UnsupportedVersion);
     }
-    let mut k = w.unwrap_dek(wrapped)?;
-    let c = Aes256Gcm::new_from_slice(&k).map_err(|_| VaultError::InvalidKey)?;
-    let r = c
-        .decrypt(Nonce::from_slice(&e[5..17]), Payload { msg: &e[17..], aad })
-        .map_err(|_| VaultError::AuthenticationFailed);
-    k.zeroize();
-    r
+    // Wrapped-key adapters may return an error; successful plaintext key material
+    // is guarded so all subsequent errors still trigger zeroization.
+    let k = Zeroizing::new(w.unwrap_dek(wrapped)?);
+    let c = Aes256Gcm::new_from_slice(&k[..]).map_err(|_| VaultError::InvalidKey)?;
+    c.decrypt(Nonce::from_slice(&e[5..17]), Payload { msg: &e[17..], aad })
+        .map_err(|_| VaultError::AuthenticationFailed)
 }
 #[cfg(test)]
 mod tests {
