@@ -23,8 +23,6 @@ fn handle(value: jlong) -> *mut SqCaptureEngine {
     if value <= 0 { ptr::null_mut() } else { value as usize as *mut SqCaptureEngine }
 }
 
-fn code(status: SqStatusV1) -> jint { status as jint }
-
 fn copy_struct_to_java(env: &mut JNIEnv, array: &JByteArray, bytes: &[u8]) -> bool {
     if env.get_array_length(array).map(|len| len as usize).unwrap_or(0) < bytes.len() {
         return false;
