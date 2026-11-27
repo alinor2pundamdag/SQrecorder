@@ -96,3 +96,15 @@ This section supersedes earlier "JNI not yet implemented" statements above.
 - This confirms build/CI integration only. It does not exercise real microphone/audio-route behavior, queue contention/overflow under sustained hardware capture, or physical device acceptance.
 - This head still uses plaintext app-private WAV staging as the consumer sink. Vault finalization, SQJ event durability, atomic encrypted promotion/recovery, crash/ENOSPC/force-stop recovery and UI remain release blockers.
 - Evidence update commit will advance the branch head and requires a fresh exact-head CI run.
+
+
+## Latest exact-head verification — 2026-11-27 14:47 UTC
+
+This checkpoint supersedes prior queued/pending Android status entries for the same current PR head.
+
+- PR #5 exact source SHA: `8d81411310990262ffef723a57f0c144faf01793`.
+- Rust contract Run #153: **PASS**.
+- Cross-platform Run #112: **PASS** (all six Rust/KMP jobs).
+- Android Vault Run #178: **PASS** (JNI 16 KB alignment, Vault host contracts, app assembly/unit tests, API 36 emulator native Vault bridge).
+- GitHub Actions API confirms all three runs completed successfully for this exact SHA.
+- This is CI/build verification, not physical-device acceptance or release sign-off. B5 still fails its release gate while secure Vault/SQJ finalization and durable recovery are not connected end-to-end and the consumer sink is plaintext app-private WAV.
