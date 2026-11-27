@@ -3,7 +3,7 @@
 use crate::{
     BoundedPcmQueue, CaptureStatus, PcmMetadata, SqCaptureConfigV1, SqPcmBlockV1,
     SqCaptureEventV1, SqAbiInfoV1, SqStatusV1, ABI_MAJOR_V1, ABI_MINOR_V1,
-    PCM_S16_LE_V1, CHANNEL_LAYOUT_MONO_V1,
+    PCM_S16_LE_V1,
 };
 use std::{
     panic::{catch_unwind, AssertUnwindSafe},
@@ -164,4 +164,50 @@ pub unsafe extern "C" fn sq_capture_destroy_v1(raw: *mut SqCaptureEngine) {
         // SAFETY: caller must destroy exactly once and ensure no concurrent use.
         drop(unsafe { Box::from_raw(raw) });
     }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sq_capture_read_pcm_v1(
+    raw: *mut SqCaptureEngine, out_block: *mut SqPcmBlockV1,
+    out_pcm: *mut u8, capacity: u64, out_written: *mut u64,
+) -> SqStatusV1 {
+    guarded(|| {
+        let e = unsafe { engine(raw)? };
+        if !e.started.load(Ordering::Acquire) || out_block.is_null() || out_written.is_null()
+            || capacity > MAX_FFI_PCM_BYTES as u64
+        { return Err(SqStatusV1::InvalidArgument); }
+        // SAFETY: caller provides writable metadata and buffer capacity.
+        let output = if capacity == 0 { &mut [] } else {
+            if out_pcm.is_null() { return Err(SqStatusV1::InvalidArgument); }
+            unsafe { slice::from_raw_parts_mut(out_pcm, capacity as usize) }
+        };
+        unsafe { ptr::write(out_written, 0); }
+        let (metadata, len) = match e.queue.pop_into(output) {
+            Ok(Some(item)) => item,
+            Ok(None) => return Err(SqStatusV1::WouldBlock),
+            Err(crate::CaptureError::InvalidBlock) => return Err(SqStatusV1::BufferTooSmall),
+            Err(crate::CaptureError::ResourcePoisoned) => return Err(SqStatusV1::Resource),
+            Err(_) => return Err(SqStatusV1::InvalidState),
+        };
+        let b = SqPcmBlockV1 {
+            struct_size: core::mem::size_of::<SqPcmBlockV1>() as u32,
+            flags: 0, sample_rate_hz: metadata.sample_rate_hz,
+            channels: metadata.channels, sample_format: metadata.sample_format,
+            frame_count: metadata.frames, reserved0: 0,
+            first_frame_index: metadata.first_frame_index,
+            monotonic_timestamp_ns: metadata.monotonic_timestamp_ns,
+            capture_epoch: metadata.capture_epoch, payload_bytes: len as u64,
+            sequence: metadata.sequence, reserved1: 0,
+        };
+        unsafe { ptr::write(out_block, b); ptr::write(out_written, len as u64); }
+        Ok(())
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn sq_capture_finish_v1(raw: *mut SqCaptureEngine) -> SqStatusV1 {
+    guarded(|| {
+        let e = unsafe { engine(raw)? };
+        e.queue.mark_stopped().map_err(|_| SqStatusV1::InvalidState)
+    })
 }
