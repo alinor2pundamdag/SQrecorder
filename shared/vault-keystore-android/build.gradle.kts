@@ -8,7 +8,7 @@ kotlin {
         namespace = "com.alinor.sqrecorder.vault.android"
         compileSdk = 36
         minSdk = 23
-        withHostTestBuilder {}
+        withHostTest {}
     }
 
     sourceSets {
