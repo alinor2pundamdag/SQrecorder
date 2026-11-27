@@ -104,5 +104,6 @@ jobs:
           target: google_apis
           arch: x86_64
           disable-animations: true
-          emulator-boot-timeout: 900\n          emulator-options: "-no-window -no-audio -no-boot-anim -camera-back none"
+          emulator-boot-timeout: 900
+          emulator-options: "-no-window -no-audio -no-boot-anim -camera-back none"
           script: gradle :shared:vault-keystore-android:connectedAndroidDeviceTest --no-daemon --max-workers=2
