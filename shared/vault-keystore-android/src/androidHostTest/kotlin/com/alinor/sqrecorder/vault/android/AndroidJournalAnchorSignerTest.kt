@@ -52,6 +52,6 @@ class AndroidJournalAnchorSignerTest {
         val publicDer = generator.generateKeyPair().public.encoded
         val id = signingKeyId(publicDer)
 
-        assertTrue(id.matches(Regex("ecdsa-p256-sha256-v1-[0-9a-f]{32}")))
+        check(id.matches(Regex("ecdsa-p256-sha256-v1-[0-9a-f]{32}")))
     }
 }
