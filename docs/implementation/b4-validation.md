@@ -23,7 +23,7 @@
 - Historical Android Gradle **Run #13 PASS** covered KMP/host crypto tests before later JNI/anchor/auth changes.
 - Android Run #18 recorded transient Maven HTTP 429/502; bounded retry/cache mitigation remains in workflow.
 - CI workflow hardening committed: Rust validation now targets `main` for PR #2, checks the event revision via pinned checkout, validates the committed lockfile (`cargo metadata --locked`), uses `cargo fmt --check`, and has read-only permissions (no bot formatting/lockfile pushes).
-- Latest observed PR head: `cd871c6170ebbd656e04472ee82570db6fece6e8`. GitHub connector status/run queries returned no status entries or PR workflow runs for this SHA; exact-head green is therefore **not verified**. Do not promote historical run results to current-head acceptance.
+- Latest observed PR head before this documentation commit: `049045644f40f5d4eb293e452a660860787f8b18`. GitHub connector status/run queries returned no status entries or PR workflow runs for this SHA; exact-head green is therefore **not verified**. Do not promote historical run results to current-head acceptance.
 
 ## Locked-contract compatibility blocker
 
