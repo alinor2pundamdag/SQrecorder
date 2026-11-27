@@ -126,6 +126,7 @@ public class AndroidVaultKeyAccess(
             throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
         }
         requireSqveV1AndroidKeystoreSupport()
+        requireSqveV1AndroidKeystoreSupport()
         val now = SystemClock.elapsedRealtimeNanos()
         if (!authContext.validate(now) || !authVerifier.isCurrent(authContext) ||
             authContext.expiresAtMonotonicNs - now > AUTH_WINDOW_NANOS
