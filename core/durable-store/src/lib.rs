@@ -12,6 +12,8 @@ pub enum StoreError {
     Io(io::Error),
     InvalidPath,
     VerificationFailed,
+    /// File promotion and directory sync succeeded; journal reconciliation is required.
+    JournalCommitPending,
 }
 impl From<io::Error> for StoreError {
     fn from(e: io::Error) -> Self {
@@ -59,7 +61,7 @@ where
     verify(&stage)?;
     fs::rename(&stage, dest)?;
     File::open(p)?.sync_all()?;
-    commit()
+    commit().map_err(|_| StoreError::JournalCommitPending)
 }
 /// Inspection is non-destructive; it never deletes or truncates candidates.
 pub fn inspect_recovery(d: &Path, s: &Path) -> RecoveryState {
@@ -137,6 +139,21 @@ mod tests {
         assert_eq!(fs::read(&f).unwrap(), b"old");
         fs::remove_dir_all(d).unwrap()
     }
+    #[test]
+    fn journal_failure_is_explicit_after_durable_promotion() {
+        let d = td();
+        let f = d.join("final");
+        let result = durable_promote(
+            &f,
+            b"promoted",
+            |_| Ok(()),
+            || Err(StoreError::VerificationFailed),
+        );
+        assert!(matches!(result, Err(StoreError::JournalCommitPending)));
+        assert_eq!(fs::read(&f).unwrap(), b"promoted");
+        fs::remove_dir_all(d).unwrap();
+    }
+
     #[test]
     fn staged_recovery_is_not_deleted() {
         let d = td();
