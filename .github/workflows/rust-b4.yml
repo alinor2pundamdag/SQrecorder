@@ -34,7 +34,7 @@ jobs:
       - run: cargo check --workspace --locked
       - run: cargo test --workspace --all-targets --locked
       - name: Export generated Cargo.lock for repository commit
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa # v4.6.2
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: b4-cargo-lockfile
           path: Cargo.lock
