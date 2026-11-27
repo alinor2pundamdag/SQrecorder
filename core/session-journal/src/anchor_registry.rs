@@ -4,7 +4,7 @@
 //! integrity chain detects partial/reordered records; the storage adapter must
 //! provide durable append+sync and protect the registry file against replacement.
 //! A hash chain alone is not an external trust root or backup/restore signature.
-use crate::{JournalSink, JournalSinkError};
+use crate::JournalSink;
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
@@ -220,9 +220,8 @@ pub fn verify_anchor_key_registry(bytes: &[u8]) -> AnchorKeyRegistryVerification
             result.error = Some(AnchorKeyRegistryError::LengthOverflow);
             break;
         };
-        if body_len < 84
-            || body_len
-                > 4 + 2 + 8 + 2 + 4 + 32 + ANCHOR_KEY_ID_BYTES + ANCHOR_KEY_MAX_DER_BYTES + 32
+        if !(84..=4 + 2 + 8 + 2 + 4 + 32 + ANCHOR_KEY_ID_BYTES + ANCHOR_KEY_MAX_DER_BYTES + 32)
+            .contains(&body_len)
         {
             result.status = AnchorKeyRegistryStatus::Corrupt;
             result.error = Some(AnchorKeyRegistryError::InvalidRecord);
