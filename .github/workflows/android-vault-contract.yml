@@ -8,6 +8,12 @@ on:
       - "settings.gradle.kts"
       - "shared/domain/**"
       - "shared/vault-keystore-android/**"
+      - "core/native-abi/**"
+      - "core/vault-crypto/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "scripts/build-android-vault-native.sh"
       - ".github/workflows/android-vault-contract.yml"
   pull_request:
     paths:
@@ -37,13 +43,21 @@ jobs:
       - name: Set up Android SDK 36
         uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
-          packages: "platforms;android-36 build-tools;36.0.0 platform-tools"
+          packages: "platforms;android-36 build-tools;36.0.0 platform-tools ndk;28.2.13676358"
       - name: Set up Gradle 9.5.0
         uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
-          gradle-version: "9.5.0"
+          gradle-version: "9.7.0"
           cache-provider: basic
           cache-read-only: false
+      - name: Install pinned Rust toolchain and Android targets
+        run: |
+          rustup toolchain install 1.100.0 --profile minimal
+          rustup default 1.100.0
+          rustup target add aarch64-linux-android x86_64-linux-android
+          rustc --version
+      - name: Build 16 KB-aligned Rust JNI libraries
+        run: bash scripts/build-android-vault-native.sh
       - name: Compile Android Vault adapter and run host contract tests
         shell: bash
         run: |
