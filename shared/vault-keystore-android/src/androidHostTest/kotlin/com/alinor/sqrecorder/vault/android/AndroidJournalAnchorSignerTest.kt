@@ -6,7 +6,6 @@ import java.security.spec.ECGenParameterSpec
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class AndroidJournalAnchorSignerTest {
@@ -53,6 +52,5 @@ class AndroidJournalAnchorSignerTest {
         val id = signingKeyId(publicDer)
 
         assertTrue(id.matches(Regex("ecdsa-p256-sha256-v1-[0-9a-f]{32}")))
-        assertNotEquals(publicDer.toList(), id.toList())
     }
 }
