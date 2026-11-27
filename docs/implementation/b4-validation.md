@@ -218,3 +218,14 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Android Vault Run #161 (`46016198883`) is **IN PROGRESS** on exact SHA; API 36 emulator Vault bridge was the active step at last poll. Do not mark Android gate complete until run conclusion is success.
 - Earlier Windows failure Run #91 remains in history and is superseded only for this exact source by Run #95. Physical-device gates, SQVE v2 provider/security review, journal/durable recovery integration, and 16 KB device evidence remain open.
 - The subsequent evidence-only commit will require another exact-head workflow check; preserve the above run references as evidence for this source SHA, not the later documentation commit.
+
+
+## Exact-head verification closure — 2026-11-27 14:53 UTC
+
+- Current PR #2 source SHA: `d550b32744bd17bfbdd62c4361ed6eca211f23f3`.
+- Rust contract Run #159: **PASS** (locked metadata, rustfmt, workspace tests, Clippy).
+- Cross-platform Run #118: **PASS** (all six Rust/KMP Linux, macOS, Windows jobs).
+- Android Vault Run #184: **PASS** (native/JNI 16 KB checks, host contracts, app/unit build, API 36 emulator Vault bridge).
+- These three workflows are confirmed completed/successful by GitHub Actions for the exact source SHA above. This closes the current CI verification wait for this B4 hardening slice; it does not close B4 release acceptance.
+- **SQVE scope correction:** SQVE v1 remains unchanged. Owner-approved ADR 0002 is the only approved envelope-version revision: separately versioned SQVE v2, with schema, cryptographic golden vectors, provider conformance, migration and independent review still required. Do not change other locked blueprint decisions or treat v2 metadata contracts as complete crypto.
+- B4 remains **IN PROGRESS / NOT 100%**: end-to-end secure capture finalization, signed journal/key-registry integration, crash/ENOSPC recovery matrix, final integrated CI, and required device acceptance remain open.
