@@ -8,7 +8,7 @@
 /// Native ABI major version.
 pub const ABI_MAJOR_V1: u16 = 1;
 /// Native ABI minor version.
-pub const ABI_MINOR_V1: u16 = 0;
+pub const ABI_MINOR_V1: u16 = 1;
 /// Signed 16-bit little-endian PCM sample format identifier.
 pub const PCM_S16_LE_V1: u16 = 1;
 /// Mono channel-layout identifier.
@@ -28,6 +28,7 @@ pub enum SqStatusV1 {
     Resource = -7,
     Unsupported = -8,
     Internal = -9,
+    AuthenticationFailed = -10,
 }
 
 /// ABI information returned by the version negotiation function.
@@ -111,6 +112,7 @@ mod tests {
         assert_eq!(SqStatusV1::Ok as i32, 0);
         assert_eq!(SqStatusV1::WouldBlock as i32, -5);
         assert_eq!(SqStatusV1::Internal as i32, -9);
+        assert_eq!(SqStatusV1::AuthenticationFailed as i32, -10);
     }
 
     #[test]
@@ -359,6 +361,7 @@ mod vault_ffi {
                 unsafe { sq_vault_key_import_v1(bytes.as_ptr(), bytes.len() as u32, &mut imported) },
                 SqStatusV1::Ok
             );
+            let mut expected = bytes;
             bytes.zeroize();
 
             let mut copied = [0u8; DEK_BYTES];
@@ -366,13 +369,14 @@ mod vault_ffi {
                 unsafe { sq_vault_key_copy_for_wrap_v1(imported, copied.as_mut_ptr(), copied.len() as u32, &mut written) },
                 SqStatusV1::Ok
             );
-            assert_eq!(copied, bytes);
+            assert_eq!(copied, expected);
             copied.zeroize();
+            expected.zeroize();
 
             assert_eq!(unsafe { sq_vault_key_destroy_v1(handle) }, SqStatusV1::Ok);
             assert_eq!(unsafe { sq_vault_key_destroy_v1(imported) }, SqStatusV1::Ok);
             assert_eq!(
-                unsafe { sq_vault_key_copy_for_wrap_v1(handle, ptr::null_mut(), 0, &mut written) },
+                unsafe { sq_vault_key_copy_for_wrap_v1(handle, copied.as_mut_ptr(), copied.len() as u32, &mut written) },
                 SqStatusV1::InvalidState
             );
         }
