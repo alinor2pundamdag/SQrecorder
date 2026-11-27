@@ -34,9 +34,11 @@ public class JniCaptureQueue(
     queueBlockCapacity: Int,
     maxBlockFrames: Int,
 ) : AutoCloseable {
-    private var handle: Long = nativeCreate(sampleRateHz, queueBlockCapacity, maxBlockFrames)
+    private var handle: Long = 0L
 
     init {
+        System.loadLibrary("sqrec_native_abi")
+        handle = nativeCreate(sampleRateHz, queueBlockCapacity, maxBlockFrames)
         check(handle > 0L) { "native capture queue handle was not created" }
     }
 
@@ -155,9 +157,6 @@ public class JniCaptureQueue(
             )
         }
 
-        init {
-            System.loadLibrary("sqrec_native_abi")
-        }
     }
 
     private external fun nativeCreate(sampleRateHz: Int, queueBlockCapacity: Int, maxBlockFrames: Int): Long
