@@ -159,79 +159,127 @@ impl<S: JournalSink> JournalWriter<S> {
     }
 }
 
-
 /// Reject duplicate JSON object keys before serde_json::Value collapses them.
-/// Escaped spellings are decoded before comparison (e.g. "x" and "\u0078").
+/// Escaped spellings are decoded before comparison (e.g. "x" and "\\u0078").
 fn has_duplicate_json_keys(bytes: &[u8]) -> bool {
-    struct Scanner<'a> { bytes: &'a [u8], pos: usize }
+    struct Scanner<'a> {
+        bytes: &'a [u8],
+        pos: usize,
+    }
+
     impl Scanner<'_> {
         fn ws(&mut self) {
-            while self.pos < self.bytes.len() && self.bytes[self.pos].is_ascii_whitespace() { self.pos += 1; }
+            while self.pos < self.bytes.len() && self.bytes[self.pos].is_ascii_whitespace() {
+                self.pos += 1;
+            }
         }
+
         fn string_end(&self, start: usize) -> Option<usize> {
-            if self.bytes.get(start) != Some(&b'"') { return None; }
+            if self.bytes.get(start) != Some(&b'"') {
+                return None;
+            }
             let mut i = start + 1;
             while i < self.bytes.len() {
                 match self.bytes[i] {
                     b'"' => return Some(i + 1),
-                    b'\\' => i = i.checked_add(2)?,
+                    b'\\\\' => i = i.checked_add(2)?,
                     byte if byte < 0x20 => return None,
                     _ => i += 1,
                 }
             }
             None
         }
+
         fn value(&mut self) -> bool {
             self.ws();
             match self.bytes.get(self.pos).copied() {
                 Some(b'{') => self.object(),
                 Some(b'[') => self.array(),
-                Some(b'"') => { let Some(end) = self.string_end(self.pos) else { return false }; self.pos = end; true }
+                Some(b'"') => {
+                    let Some(end) = self.string_end(self.pos) else {
+                        return false;
+                    };
+                    self.pos = end;
+                    true
+                }
                 Some(_) => {
                     while self.pos < self.bytes.len()
                         && !matches!(self.bytes[self.pos], b',' | b']' | b'}')
-                        && !self.bytes[self.pos].is_ascii_whitespace() { self.pos += 1; }
+                        && !self.bytes[self.pos].is_ascii_whitespace()
+                    {
+                        self.pos += 1;
+                    }
                     true
                 }
                 None => false,
             }
         }
+
         fn object(&mut self) -> bool {
-            self.pos += 1; self.ws();
-            if self.bytes.get(self.pos) == Some(&b'}') { self.pos += 1; return false; }
+            self.pos += 1;
+            self.ws();
+            if self.bytes.get(self.pos) == Some(&b'}') {
+                self.pos += 1;
+                return false;
+            }
             let mut keys = std::collections::HashSet::<String>::new();
             loop {
                 self.ws();
                 let start = self.pos;
-                let Some(end) = self.string_end(start) else { return false };
-                let Ok(key) = serde_json::from_slice::<String>(&self.bytes[start..end]) else { return false };
-                if !keys.insert(key) { return true; }
-                self.pos = end; self.ws();
-                if self.bytes.get(self.pos) != Some(&b':') { return false; }
+                let Some(end) = self.string_end(start) else {
+                    return false;
+                };
+                let Ok(key) = serde_json::from_slice::<String>(&self.bytes[start..end]) else {
+                    return false;
+                };
+                if !keys.insert(key) {
+                    return true;
+                }
+                self.pos = end;
+                self.ws();
+                if self.bytes.get(self.pos) != Some(&b':') {
+                    return false;
+                }
                 self.pos += 1;
-                if !self.value() { return false; }
+                if !self.value() {
+                    return false;
+                }
                 self.ws();
                 match self.bytes.get(self.pos) {
                     Some(b',') => self.pos += 1,
-                    Some(b'}') => { self.pos += 1; return false; }
+                    Some(b'}') => {
+                        self.pos += 1;
+                        return false;
+                    }
                     _ => return false,
                 }
             }
         }
+
         fn array(&mut self) -> bool {
-            self.pos += 1; self.ws();
-            if self.bytes.get(self.pos) == Some(&b']') { self.pos += 1; return false; }
+            self.pos += 1;
+            self.ws();
+            if self.bytes.get(self.pos) == Some(&b']') {
+                self.pos += 1;
+                return false;
+            }
             loop {
-                if !self.value() { return false; }
+                if !self.value() {
+                    return false;
+                }
                 self.ws();
                 match self.bytes.get(self.pos) {
                     Some(b',') => self.pos += 1,
-                    Some(b']') => { self.pos += 1; return false; }
+                    Some(b']') => {
+                        self.pos += 1;
+                        return false;
+                    }
                     _ => return false,
                 }
             }
         }
     }
+
     Scanner { bytes, pos: 0 }.value()
 }
 
@@ -504,10 +552,17 @@ pub fn verify_journal(bytes: &[u8]) -> JournalVerification {
                 previous_digest,
             );
         }
-        if validate_payload(&body[76..payload_end], read_u16_le(body, 6)) == Err(JournalError::DuplicateJsonKey) {
-            return verification(JournalVerificationStatus::Corrupt, Some(JournalVerificationError::DuplicateJsonKey), offset, expected_sequence - 1, previous_digest);
+        let payload_validation = validate_payload(&body[76..payload_end], read_u16_le(body, 6));
+        if payload_validation == Err(JournalError::DuplicateJsonKey) {
+            return verification(
+                JournalVerificationStatus::Corrupt,
+                Some(JournalVerificationError::DuplicateJsonKey),
+                offset,
+                expected_sequence - 1,
+                previous_digest,
+            );
         }
-        if validate_payload(&body[76..payload_end], read_u16_le(body, 6)).is_err() {
+        if payload_validation.is_err() {
             return verification(
                 JournalVerificationStatus::Corrupt,
                 Some(JournalVerificationError::PayloadSchemaMismatch),
@@ -666,7 +721,10 @@ mod tests {
         bytes.extend_from_slice(duplicate);
         let digest = calculate_record_digest(&[0; 32], &bytes[4..]);
         bytes.extend_from_slice(&digest);
-        assert_eq!(verify_journal(&bytes).error, Some(JournalVerificationError::DuplicateJsonKey));
+        assert_eq!(
+            verify_journal(&bytes).error,
+            Some(JournalVerificationError::DuplicateJsonKey)
+        );
     }
 
     #[test]
