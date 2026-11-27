@@ -312,6 +312,10 @@ mod tests {
             OsPromotionOps.rename_stage(stage, dest)
         }
         fn sync_parent(&self, parent: &Path) -> Result<(), StoreError> {
+            // Deliberately inject after the test's same-directory rename. On Windows
+            // OsPromotionOps uses MOVEFILE_WRITE_THROUGH and treats parent fsync as
+            // platform-provided; this mock must independently exercise the ambiguous
+            // post-rename durability error contract.
             if matches!(self.0, FaultPoint::ParentSync) {
                 return Err(StoreError::Io(io::Error::other(
                     "injected directory sync failure",
