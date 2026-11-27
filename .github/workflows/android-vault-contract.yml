@@ -25,6 +25,9 @@ on:
       - "shared/domain/**"
       - "shared/vault-keystore-android/**"
       - ".github/workflows/android-vault-contract.yml"
+      - "docs/architecture/**"
+      - "docs/decisions/**"
+      - "docs/security/**"
 
 permissions:
   contents: read
