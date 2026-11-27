@@ -4,7 +4,7 @@
 
 ## Architecture
 
-- **Kotlin Multiplatform (KMP):** platform-independent domain and workflow contracts.
+- **Kotlin Multiplatform (KMP):** platform-independent domain, Vault v1/v2 metadata, lifecycle, and workflow contracts. The shared capability selector is a compiled Gradle module (not an orphan source tree).
 - **Rust:** portable, performance-sensitive audio and processing core behind a versioned C ABI.
 - **Platform adapters:** Android, Wear OS, iOS/iPadOS, watchOS, Windows, macOS, and Linux own OS-specific capture, lifecycle, storage, secure-key, accessibility, and UI integration. Java/JVM integrations use a deliberate JVM API rather than Android-only APIs.
 - **Cross-platform Vault:** SQVE v1 remains immutable; owner-approved SQVE v2 is separately versioned with platform-specific recipient/key-provider records and authenticated migration. See [platform compatibility](docs/architecture/platform-compatibility.md), [ADR 0002](docs/decisions/0002-cross-platform-sqve-v2.md), and [SQVE v2 design](docs/security/sqve-v2-envelope-design.md).
