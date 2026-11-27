@@ -1,7 +1,6 @@
 package com.alinor.sqrecorder.domain
 
-@JvmInline
-public value class ToolId(public val value: String) {
+public data class ToolId(public val value: String) {
     public fun isValid(): Boolean {
         val parts = value.split('/')
         return parts.size == 2 && parts.all { part ->
