@@ -216,7 +216,15 @@ pub extern "system" fn Java_com_alinor_sqrecorder_capture_JniCaptureQueue_native
     detail: jint,
 ) -> jint {
     let raw = handle(raw_handle);
-    if raw.is_null() {
+    // Reject negative Java signed integers before converting them to ABI u32/u64.
+    // Otherwise -1 would become a large unsigned value and cross the language boundary.
+    if raw.is_null()
+        || !(1..=5).contains(&event_type)
+        || sequence <= 0
+        || timestamp_ns <= 0
+        || epoch <= 0
+        || detail < 0
+    {
         return SqStatusV1::InvalidArgument as jint;
     }
     let event = SqCaptureEventV1 {
