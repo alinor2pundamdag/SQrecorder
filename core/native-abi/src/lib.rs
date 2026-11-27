@@ -7,7 +7,9 @@
 
 pub mod bounded_capture;
 pub mod capture_ffi;
-pub use bounded_capture::{BoundedPcmQueue, CaptureError, CaptureStatus, PcmMetadata};
+pub use bounded_capture::{
+    BoundedPcmQueue, CaptureError, CaptureEventMetadata, CaptureStatus, PcmMetadata,
+};
 
 /// Native ABI major version.
 pub const ABI_MAJOR_V1: u16 = 1;
