@@ -254,7 +254,6 @@ public class AndroidVaultKeyAccess(
         const val DEK_BYTES = 32
         const val AUTH_WINDOW_SECONDS = 30
         const val AUTH_WINDOW_NANOS = AUTH_WINDOW_SECONDS * 1_000_000_000L
-        val OAEP_LABEL = "SQREC-VAULT-DEK-v1".toByteArray(Charsets.UTF_8)
     }
 }
 
