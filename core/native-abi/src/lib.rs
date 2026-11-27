@@ -353,6 +353,7 @@ mod vault_ffi {
     #[cfg(test)]
     mod tests {
         use super::*;
+        use zeroize::Zeroize;
 
         #[test]
         fn opaque_handle_copy_wrap_import_and_destroy_lifecycle() {
