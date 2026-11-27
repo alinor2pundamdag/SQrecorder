@@ -38,7 +38,10 @@ trait PromotionOps {
 struct OsPromotionOps;
 impl PromotionOps for OsPromotionOps {
     fn write_and_sync_stage(&self, stage: &Path, bytes: &[u8]) -> Result<(), StoreError> {
-        let mut file = OpenOptions::new().write(true).create_new(true).open(stage)?;
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(stage)?;
         file.write_all(bytes)?;
         file.sync_all()?;
         Ok(())
@@ -82,7 +85,10 @@ where
     if !parent.is_dir() {
         return Err(StoreError::InvalidPath);
     }
-    let name = dest.file_name().ok_or(StoreError::InvalidPath)?.to_string_lossy();
+    let name = dest
+        .file_name()
+        .ok_or(StoreError::InvalidPath)?
+        .to_string_lossy();
     let stage = parent.join(format!(
         ".{name}.sqstage-{}-{}",
         std::process::id(),
@@ -208,45 +214,76 @@ mod tests {
     }
 
     #[derive(Clone, Copy)]
-    enum FaultPoint { PartialStageWrite, FileSync, Rename, ParentSync }
+    enum FaultPoint {
+        PartialStageWrite,
+        FileSync,
+        Rename,
+        ParentSync,
+    }
     struct FaultOps(FaultPoint);
     impl PromotionOps for FaultOps {
         fn write_and_sync_stage(&self, stage: &Path, bytes: &[u8]) -> Result<(), StoreError> {
             match self.0 {
                 FaultPoint::PartialStageWrite => {
-                    let mut f = OpenOptions::new().write(true).create_new(true).open(stage)?;
+                    let mut f = OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(stage)?;
                     f.write_all(&bytes[..bytes.len().min(3)])?;
-                    Err(StoreError::Io(io::Error::new(io::ErrorKind::WriteZero, "injected partial write")))
+                    Err(StoreError::Io(io::Error::new(
+                        io::ErrorKind::WriteZero,
+                        "injected partial write",
+                    )))
                 }
                 FaultPoint::FileSync => {
-                    let mut f = OpenOptions::new().write(true).create_new(true).open(stage)?;
+                    let mut f = OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(stage)?;
                     f.write_all(bytes)?;
-                    Err(StoreError::Io(io::Error::new(io::ErrorKind::Other, "injected fsync failure")))
+                    Err(StoreError::Io(io::Error::new(
+                        io::ErrorKind::Other,
+                        "injected fsync failure",
+                    )))
                 }
                 _ => OsPromotionOps.write_and_sync_stage(stage, bytes),
             }
         }
         fn rename_stage(&self, stage: &Path, dest: &Path) -> Result<(), StoreError> {
             if matches!(self.0, FaultPoint::Rename) {
-                return Err(StoreError::Io(io::Error::new(io::ErrorKind::Other, "injected rename failure")));
+                return Err(StoreError::Io(io::Error::new(
+                    io::ErrorKind::Other,
+                    "injected rename failure",
+                )));
             }
             OsPromotionOps.rename_stage(stage, dest)
         }
         fn sync_parent(&self, parent: &Path) -> Result<(), StoreError> {
             if matches!(self.0, FaultPoint::ParentSync) {
-                return Err(StoreError::Io(io::Error::new(io::ErrorKind::Other, "injected directory sync failure")));
+                return Err(StoreError::Io(io::Error::new(
+                    io::ErrorKind::Other,
+                    "injected directory sync failure",
+                )));
             }
             OsPromotionOps.sync_parent(parent)
         }
     }
     #[test]
     fn fault_injection_preserves_old_final_before_rename() {
-        for point in [FaultPoint::PartialStageWrite, FaultPoint::FileSync, FaultPoint::Rename] {
+        for point in [
+            FaultPoint::PartialStageWrite,
+            FaultPoint::FileSync,
+            FaultPoint::Rename,
+        ] {
             let d = td();
             let final_path = d.join("final");
             fs::write(&final_path, b"old").unwrap();
             let result = durable_promote_with_ops(
-                &FaultOps(point), &final_path, b"replacement", |_| Ok(()), || Ok(())
+                &FaultOps(point),
+                &final_path,
+                b"replacement",
+                |_| Ok(()),
+                || Ok(()),
             );
             assert!(result.is_err());
             assert_eq!(fs::read(&final_path).unwrap(), b"old");
@@ -258,21 +295,46 @@ mod tests {
         let d = td();
         let final_path = d.join("final");
         let result = durable_promote_with_ops(
-            &FaultOps(FaultPoint::ParentSync), &final_path, b"promoted", |_| Ok(()), || Ok(())
+            &FaultOps(FaultPoint::ParentSync),
+            &final_path,
+            b"promoted",
+            |_| Ok(()),
+            || Ok(()),
         );
-        assert!(matches!(result, Err(StoreError::PromotionDurabilityUnknown)));
+        assert!(matches!(
+            result,
+            Err(StoreError::PromotionDurabilityUnknown)
+        ));
         assert_eq!(fs::read(&final_path).unwrap(), b"promoted");
-        assert_eq!(inspect_recovery(&final_path, &d.join("not-the-stage")), RecoveryState::FinalPresent);
+        assert_eq!(
+            inspect_recovery(&final_path, &d.join("not-the-stage")),
+            RecoveryState::FinalPresent
+        );
         fs::remove_dir_all(d).unwrap();
     }
 
     #[test]
     fn recovery_reconciliation_never_silently_discards_evidence() {
-        assert_eq!(reconciliation_action(RecoveryState::FinalPresent, true), ReconciliationAction::AlreadyCommitted);
-        assert_eq!(reconciliation_action(RecoveryState::FinalPresent, false), ReconciliationAction::AppendMissingJournalCommit);
-        assert_eq!(reconciliation_action(RecoveryState::StagedOnly, false), ReconciliationAction::ValidateAndRecoverStage);
-        assert_eq!(reconciliation_action(RecoveryState::BothPresent, true), ReconciliationAction::PreserveAndInvestigateBoth);
-        assert_eq!(reconciliation_action(RecoveryState::NeitherPresent, false), ReconciliationAction::ReportMissingArtifact);
+        assert_eq!(
+            reconciliation_action(RecoveryState::FinalPresent, true),
+            ReconciliationAction::AlreadyCommitted
+        );
+        assert_eq!(
+            reconciliation_action(RecoveryState::FinalPresent, false),
+            ReconciliationAction::AppendMissingJournalCommit
+        );
+        assert_eq!(
+            reconciliation_action(RecoveryState::StagedOnly, false),
+            ReconciliationAction::ValidateAndRecoverStage
+        );
+        assert_eq!(
+            reconciliation_action(RecoveryState::BothPresent, true),
+            ReconciliationAction::PreserveAndInvestigateBoth
+        );
+        assert_eq!(
+            reconciliation_action(RecoveryState::NeitherPresent, false),
+            ReconciliationAction::ReportMissingArtifact
+        );
     }
     #[test]
     fn staged_recovery_is_not_deleted() {
