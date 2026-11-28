@@ -298,3 +298,13 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Added a host test that rejects journal timestamp regression before writing bytes, then confirms the next valid append preserves a valid sequence/digest chain; added a sink test for overflowed PCM offset.
 - Commits: service/recovery `1d2d86b70f006fcbda05b369c3d5e05a1e2ea6d3`; sink `b338609dc6f63dce991f11ffa7930dcb969255df`; sink test `a500b84040c6f66c3ed0df1f6a905924de8d5e67`; journal test `adf90909c88c0b989c29576e56731c1598d1a3cd`.
 - **Exact-head CI not run/not verified** at implementation head `adf90909c88c0b989c29576e56731c1598d1a3cd`: workflow lookup returned zero PR runs and combined status had no checks. No compilation/test pass is claimed. These fixes reduce failure/recovery ambiguity but do not close the authenticated recovery, fault-matrix, physical-device or release gates.
+
+
+## SQJ recovery scanner lifecycle hardening — 2026-11-28
+
+- The Android SQJ scanner previously validated record framing, canonical payloads, timestamps and the SHA-256 chain, but treated any occurrence of `FILE_FINALIZED` as terminal success regardless of lifecycle order. Because the chain digest is unkeyed, structural transition validation is also required; a recomputed chain must not bless a premature or duplicate finalization record.
+- Added scanner transition checks: session-created must be first/unique; capture-start, stop-request, stop-complete, encryption-start, encryption-complete and file-finalized must occur in valid order and at most once; integrity/recovery/migration events cannot precede session creation or follow finalization; no record is accepted after file-finalized.
+- Expanded host tests to exercise the full normal lifecycle and reject premature/post-finalization records, in addition to digest tampering and timestamp regression tests.
+- Commits: scanner `fb0824a89ab9417d437224d81d88c3b7f2d2dc20`; lifecycle tests `53b040d370debc9ac1832930b41a55aac5e03300`; terminal-event tests `765e27918701d61b50ff9b2551e88701cc1a5d54`.
+- This is fail-closed scanner hardening, not authenticated recovery. The Android SQJ remains unkeyed SHA-256 chained metadata, read-only startup scan; signed anchor/checkpoint binding, decrypt-and-verify recovery, journal resume/idempotent finalization, and crash-cut tests remain release blockers.
+- Exact-head CI must run on the integrated candidate after this change. No compile/test pass is claimed from source edits alone.
