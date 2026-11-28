@@ -40,8 +40,8 @@ public class RecorderActivity : Activity() {
   startCapture()
  }
  private fun startCapture() {
-  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-   status.text = "Encrypted capture requires Android 12/API 31 or newer. Plaintext fallback is disabled."
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+   status.text = "Encrypted capture requires Android 6/API 23 or newer. Plaintext fallback is disabled."
    return
   }
   val intent = Intent(this, CaptureForegroundService::class.java).setAction(CaptureForegroundService.ACTION_START)
