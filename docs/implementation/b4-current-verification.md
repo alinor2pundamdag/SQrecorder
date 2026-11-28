@@ -78,3 +78,12 @@ This file records the current verification state; it does not itself complete a 
 - Downloaded and inspected JUnit artifact `15267478455`. The failure is an `IllegalArgumentException` at `SqveV2EncryptedWavSink.finish()` line 83: fixture passed an odd PCM byte count (`2,097,171`), invalid for the configured 16-bit PCM stream. The sink's even-byte validation is correct; no production code change was made to weaken it.
 - Corrected fixture to `2 * 1,048,576 + 18` bytes and expected final encrypted chunk length to 62 bytes; tamper verification uses the corrected PCM count. Test commit: `da15fc0b16a5284fbef6c23ac4591b0e26fb3940`.
 - Exact-head CI for the correction commit is **pending/unobserved** at evidence time. This fix does not close emulator, physical-device, durable recovery, fault-matrix, or independent security-review gates. PR remains draft/open/unmerged.
+
+
+## ORD-G-003 governance bootstrap + exact CI reconciliation — 2026-11-28
+
+- Full 16-section repository disclosure committed at `docs/audit/ORD-G-003-disclosure.md`; append-only state ledger at `docs/PROJECT_STATE.md`. Bootstrap commit: `80abe5ba44d1a991a5654c211c78133777b3aff9`; report/ledger revision: `89a4b786e386983183c451162a1050f9a45351b1`. Six governance files that were absent at audited source SHA `450fabc9263368a9e366df834e1aad9c3815f425` now exist. Canonical ORD-G-001, master plan and A1–A33 remain unavailable/UNKNOWN; bootstrap did not fabricate them or change contracts.
+- Source SHA `450fabc9263368a9e366df834e1aad9c3815f425` exact CI: Rust `46156388703` SUCCESS; cross-platform `46156388734` SUCCESS, 6/6 jobs; Android `46156388675` FAILURE in API23 connected test after app assemble/unit and API36 bridge succeeded.
+- Exact failure: API23 emulator test APK install/Package Manager became unavailable; `pm install-create ... Could not access the Package Manager. Is the system running?`; uninstall returned `DELETE_FAILED_INTERNAL_ERROR`; API23 reports 0 tests started. This is a device-test failure; whether runner/emulator instability or product test defect remains unclassified until retry.
+- Reran only failed Android job (no source/config change): retry job `141020651929` queued. Do not mark API23 gate green until it completes and logs are inspected.
+- Governance-only branch head `89a4b786e386983183c451162a1050f9a45351b1` had no combined statuses at query time. Updating this evidence file will trigger path-filtered validation workflows on the next evidence commit; verify exact resulting SHA. PR #7/#2 remain draft/open/unmerged.
