@@ -127,3 +127,9 @@ The fixed-length profile above cannot be used for an active take because its fin
 - Fixed-length mode (`flags=0`) retains declared count/length checks. A parser must require the flag and both sentinels to agree.
 
 This pre-release profile addition enables encrypted live capture without plaintext staging. It requires deterministic vectors, crash/recovery tests and independent cryptographic review before production acceptance. V1 remains unchanged.
+
+### Android minimum-API recipient suite
+
+Android Keystore documents ECDH `PURPOSE_AGREE_KEY` as API 31+, and MGF1 digest selection for RSA OAEP as API 35+. To preserve the app's declared API 23 minimum without silently changing V2 parameters, V2 suite `0x0003` is explicitly defined for Android API 23–30: RSA-3072, OAEP digest SHA-256, MGF1 digest SHA-1 (the platform's documented default), empty OAEP label. The ciphertext is exactly 384 bytes. The key remains an Android Keystore-generated, authentication-required private key; only the public key is used to wrap.
+
+Suite 3 is a compatibility profile requiring independent cryptographic review and Android API 23 emulator/device conformance. It is not a downgrade to SQVE v1 and must never be mislabeled as suite 1. A provider must fail closed if it cannot enforce the exact RSA parameters.
