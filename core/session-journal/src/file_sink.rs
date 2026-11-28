@@ -11,9 +11,7 @@ use std::{
     path::Path,
 };
 
-use crate::{
-    JournalSink, JournalSinkError, JournalVerificationStatus, verify_journal,
-};
+use crate::{JournalSink, JournalSinkError, JournalVerificationStatus, verify_journal};
 
 #[derive(Debug)]
 pub enum FileJournalOpenError {
@@ -93,8 +91,8 @@ impl JournalSink for FileJournalSink {
 mod tests {
     use super::*;
     use crate::{
-        JournalRecordInput, JournalRecordType, JournalWriter, JOURNAL_DIGEST_BYTES,
-        JournalVerificationStatus,
+        JOURNAL_DIGEST_BYTES, JournalRecordInput, JournalRecordType, JournalVerificationStatus,
+        JournalWriter,
     };
     use std::{
         fs,
@@ -106,10 +104,8 @@ mod tests {
     fn test_path() -> (std::path::PathBuf, std::path::PathBuf) {
         loop {
             let n = TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-            let dir = std::env::temp_dir().join(format!(
-                "sqj-file-sink-{}-{n}",
-                std::process::id()
-            ));
+            let dir =
+                std::env::temp_dir().join(format!("sqj-file-sink-{}-{n}", std::process::id()));
             match fs::create_dir(&dir) {
                 Ok(()) => return (dir.clone(), dir.join("session.sqj")),
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
