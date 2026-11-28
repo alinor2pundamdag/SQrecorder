@@ -34,7 +34,7 @@ class SqjDurableCheckpointStoreTest {
             val digest = journalFile.readBytes().takeLast(32).toByteArray()
                 .joinToString("") { "%02x".format(it) }
             val anchor = fixture(sequence = 1L, digestHex = digest)
-            val store = SqjDurableCheckpointStore()
+            val store = testStore()
 
             val checkpoint = store.persistAfterJournalSync(journalFile, checkpointDirectory, anchor)
             val bytes = checkpoint.readBytes()
@@ -62,7 +62,7 @@ class SqjDurableCheckpointStoreTest {
             val stale = fixture(sequence = 2L, digestHex = digest)
             var rejected = false
             try {
-                SqjDurableCheckpointStore().persistAfterJournalSync(journalFile, File(root, "cp"), stale)
+                testStore().persistAfterJournalSync(journalFile, File(root, "cp"), stale)
             } catch (_: IllegalStateException) {
                 rejected = true
             }
@@ -85,7 +85,7 @@ class SqjDurableCheckpointStoreTest {
             }
             val digest = journalFile.readBytes().takeLast(32).toByteArray()
                 .joinToString("") { "%02x".format(it) }
-            val store = SqjDurableCheckpointStore()
+            val store = testStore()
             val original = store.persistAfterJournalSync(journalFile, cpDir, fixture(1L, digest)).readBytes()
             var rejected = false
             try {
@@ -145,7 +145,7 @@ class SqjDurableCheckpointStoreTest {
                 authenticationEpoch = epoch,
                 monotonicTimestampNs = timestamp,
             )
-            val store = SqjDurableCheckpointStore()
+            val store = testStore()
             val verifier = AndroidJournalAnchorVerifier(
                 JournalAnchorPublicKeyResolver { requested -> if (requested == keyId) pair.public.encoded else null },
             )
@@ -204,7 +204,7 @@ class SqjDurableCheckpointStoreTest {
             val verifier = AndroidJournalAnchorVerifier(JournalAnchorPublicKeyResolver { null })
             assertEquals(
                 SqacVerificationResult.INVALID_CHECKPOINT,
-                SqjDurableCheckpointStore().verifyPersisted(journal, oversized, verifier),
+                testStore().verifyPersisted(journal, oversized, verifier),
             )
         } finally {
             root.deleteRecursively()
@@ -253,6 +253,11 @@ class SqjDurableCheckpointStoreTest {
         } finally {
             root.deleteRecursively()
         }
+    }
+
+
+    private fun testStore() = SqjDurableCheckpointStore { source, target ->
+        Files.createLink(target.toPath(), source.toPath())
     }
 
     private fun fixture(
