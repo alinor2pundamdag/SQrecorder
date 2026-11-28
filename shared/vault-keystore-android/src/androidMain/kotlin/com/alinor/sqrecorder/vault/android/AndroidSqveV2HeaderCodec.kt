@@ -28,6 +28,7 @@ public class AndroidSqveV2HeaderCodec(
         val suite = when (recipient.suite) {
             VaultV2WrapSuite.RSA_OAEP_SHA256_MGF1_SHA256_EMPTY_LABEL -> RSA_WRAP_SUITE
             VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM -> ECDH_WRAP_SUITE
+            VaultV2WrapSuite.RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL -> RSA3072_SHA1_WRAP_SUITE
         }
         val wrapped = try {
             SqveBase64.decodeCanonical(recipient.wrappedDekBase64)
@@ -97,6 +98,7 @@ public class AndroidSqveV2HeaderCodec(
         const val CONTENT_SUITE_AES_GCM = 1
         const val RSA_WRAP_SUITE = 1
         const val ECDH_WRAP_SUITE = 2
+        const val RSA3072_SHA1_WRAP_SUITE = 3
         const val FLAG_STREAMING = 1
         const val CHUNK_BYTES = 1_048_576
         const val DEK_BYTES = 32
