@@ -64,7 +64,7 @@ class VaultV2ContractsTest {
         val recipient = VaultV2RecipientWrap(
             suite = VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM,
             recipientKeyId = "apple-key-v2",
-            wrappedDekBase64 = "A".repeat(64),
+            wrappedDekBase64 = "A".repeat(84),
             ephemeralPublicKeyBase64 = "AQ==",
             wrapNonceHex = "01".repeat(12),
         )
