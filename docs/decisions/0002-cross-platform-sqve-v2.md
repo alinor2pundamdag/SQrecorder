@@ -57,3 +57,7 @@ This is an implementation baseline for deterministic vector generation, **not** 
 ## Live-capture length semantics
 
 SQVE v2 now includes an authenticated streaming-length flag for live capture: header `flags=0x0001` and both declared length/count fields set to the all-ones u64 sentinel; actual values are committed in the authenticated 56-byte footer. The fixed-length mode remains `flags=0`. This avoids plaintext staging or fabricated capture lengths and is required before integrating the microphone sink. The profile is pre-release and must receive independent cryptographic review, golden vectors, cross-provider conformance, and crash/recovery tests. No V1 behavior changes.
+
+## Android API 23 V2 recipient compatibility
+
+SQVE v2 recipient suite `0x0003` is explicitly defined for Android API 23–30: RSA-3072/OAEP-SHA256/MGF1-SHA1/empty label, exactly 384 wrapped-DEK ciphertext bytes. It is a distinct suite identifier, not a V1 fallback or a silent parameter downgrade. API 31+ uses the V2 ECDH-P256/HKDF-SHA256/AES-GCM suite where supported. The provider must fail closed if exact suite parameters are unavailable. Independent cryptographic review and API23 emulator/physical-device conformance remain mandatory.
