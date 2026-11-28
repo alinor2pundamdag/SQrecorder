@@ -476,9 +476,17 @@ impl<W: Write> Writer<W> {
         record[..8].copy_from_slice(&index.to_be_bytes());
         record[8..12].copy_from_slice(&(expected as u32).to_be_bytes());
         record[12..16].copy_from_slice(&ciphertext_len.to_be_bytes());
-        self.output.as_mut().ok_or(Error::Write)?.write_all(&record).map_err(|_| Error::Write)?;
+        self.output
+            .as_mut()
+            .ok_or(Error::Write)?
+            .write_all(&record)
+            .map_err(|_| Error::Write)?;
         self.output.write_all(plaintext).map_err(|_| Error::Write)?;
-        self.output.as_mut().ok_or(Error::Write)?.write_all(&tag).map_err(|_| Error::Write)?;
+        self.output
+            .as_mut()
+            .ok_or(Error::Write)?
+            .write_all(&tag)
+            .map_err(|_| Error::Write)?;
         self.hash.update(record);
         self.hash.update(&*plaintext);
         self.hash.update(tag);
@@ -577,13 +585,21 @@ impl<W: Write> StreamingWriter<W> {
         record[4..12].copy_from_slice(&index.to_be_bytes());
         record[12..16].copy_from_slice(&(size as u32).to_be_bytes());
         record[16..20].copy_from_slice(&cipher_len.to_be_bytes());
-        self.output.as_mut().ok_or(Error::Write)?.write_all(&record).map_err(|_| Error::Write)?;
+        self.output
+            .as_mut()
+            .ok_or(Error::Write)?
+            .write_all(&record)
+            .map_err(|_| Error::Write)?;
         self.output
             .as_mut()
             .ok_or(Error::Write)?
             .write_all(&self.buffer[..size])
             .map_err(|_| Error::Write)?;
-        self.output.as_mut().ok_or(Error::Write)?.write_all(&tag).map_err(|_| Error::Write)?;
+        self.output
+            .as_mut()
+            .ok_or(Error::Write)?
+            .write_all(&tag)
+            .map_err(|_| Error::Write)?;
         self.hash.update(record);
         self.hash.update(&self.buffer[..size]);
         self.hash.update(tag);
@@ -612,7 +628,11 @@ impl<W: Write> StreamingWriter<W> {
         footer[8..16].copy_from_slice(&self.next_index.to_be_bytes());
         footer[16..24].copy_from_slice(&self.written.to_be_bytes());
         footer[24..56].copy_from_slice(&digest);
-        self.output.as_mut().ok_or(Error::Write)?.write_all(&footer).map_err(|_| Error::Write)?;
+        self.output
+            .as_mut()
+            .ok_or(Error::Write)?
+            .write_all(&footer)
+            .map_err(|_| Error::Write)?;
         self.buffer.zeroize();
         self.output.take().ok_or(Error::Write)
     }
