@@ -6,7 +6,6 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyPermanentlyInvalidatedException
 import android.security.keystore.KeyProperties
 import android.security.keystore.UserNotAuthenticatedException
-import android.util.Base64
 import com.alinor.sqrecorder.domain.VaultAuthContext
 import com.alinor.sqrecorder.domain.VaultFileKeyHandle
 import com.alinor.sqrecorder.domain.VaultV2KeyAccess
@@ -91,8 +90,8 @@ public class AndroidSqveV2KeyAccess(
                 return VaultV2RecipientWrap(
                     suite = VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM,
                     recipientKeyId = recipientKeyId,
-                    wrappedDekBase64 = Base64.encodeToString(canonicalPayload, Base64.NO_WRAP),
-                    ephemeralPublicKeyBase64 = Base64.encodeToString(ephemeralDer, Base64.NO_WRAP),
+                    wrappedDekBase64 = SqveBase64.encodeNoWrap(canonicalPayload),
+                    ephemeralPublicKeyBase64 = SqveBase64.encodeNoWrap(ephemeralDer),
                     wrapNonceHex = nonce.toHex(),
                 )
             } finally {
@@ -398,11 +397,11 @@ private fun validateFileContext(fileId: ByteArray, fileSalt: ByteArray) {
 
 private fun decodeCanonicalBase64(value: String): ByteArray {
     val bytes = try {
-        Base64.decode(value, Base64.NO_WRAP)
+        SqveBase64.decodeCanonical(value)
     } catch (e: IllegalArgumentException) {
         throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP, e)
     }
-    if (Base64.encodeToString(bytes, Base64.NO_WRAP) != value) {
+    if (SqveBase64.encodeNoWrap(bytes) != value) {
         bytes.fill(0)
         throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
     }
