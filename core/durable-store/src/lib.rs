@@ -291,10 +291,8 @@ mod tests {
     fn td() -> PathBuf {
         loop {
             let sequence = TEST_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-            let path = std::env::temp_dir().join(format!(
-                "sqstage-test-{}-{sequence}",
-                std::process::id(),
-            ));
+            let path = std::env::temp_dir()
+                .join(format!("sqstage-test-{}-{sequence}", std::process::id(),));
             // Exclusive creation prevents parallel tests from sharing a directory,
             // and therefore one test's cleanup cannot delete another test's fixture.
             match fs::create_dir(&path) {
