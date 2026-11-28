@@ -78,8 +78,10 @@ public class CaptureForegroundService : Service() {
   var partial: File? = null
   var success = false
   var pump: CaptureQueuePump? = null
+  var journal: CaptureSessionJournal? = null
   var producerPcm: ByteBuffer? = null
-  var session = SessionSnapshot.create(SessionId(java.util.UUID.randomUUID().toString()), SystemClock.elapsedRealtimeNanos())
+  val sessionUuid = java.util.UUID.randomUUID()
+  var session = SessionSnapshot.create(SessionId(sessionUuid.toString()), SystemClock.elapsedRealtimeNanos())
   fun reduce(event: SessionEvent) {
    when (val result = SessionLifecycle.reduce(session, event)) {
     is TransitionOutcome.Applied -> session = result.snapshot
@@ -110,9 +112,10 @@ public class CaptureForegroundService : Service() {
    recorder = active
    val directory = File(filesDir, "recordings")
    check(directory.exists() || directory.mkdirs()) { "Private recordings directory unavailable" }
-   // UUID plus explicit truncate prevents timestamp collisions from reusing
-   // stale tail bytes in a previous .part file.
-   partial = File(directory, "capture-" + java.util.UUID.randomUUID() + ".sqve.part")
+   journal = CaptureSessionJournal.create(File(directory, "session-$sessionUuid.sqj"), sessionUuid)
+   journal!!.append(CaptureSessionJournal.RECORD_SESSION_CREATED, SystemClock.elapsedRealtimeNanos())
+   // Session UUID binds the encrypted artifact name to its durable SQJ file.
+   partial = File(directory, "capture-$sessionUuid.sqve.part")
    val nativeVault = JniVaultNativeKeyBridge()
    vaultNative = nativeVault
    // Capture only needs the recipient's public key. This verifier deliberately
@@ -134,7 +137,9 @@ public class CaptureForegroundService : Service() {
    headerBytes.fill(0)
    active.startRecording()
    check(active.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord start failed" }
-   reduce(SessionEvent.CaptureStarted(SystemClock.elapsedRealtimeNanos(), 1L))
+   val captureStartedNs = SystemClock.elapsedRealtimeNanos()
+   journal!!.append(CaptureSessionJournal.RECORD_CAPTURE_STARTED, captureStartedNs, mapOf("captureEpoch" to 1L, "sampleRateHz" to rate.toLong()))
+   reduce(SessionEvent.CaptureStarted(captureStartedNs, 1L))
 
    // Route AudioRecord through the fixed native queue. Disk writes are isolated
    // to the consumer thread; overflow/contention fails closed and retains .part.
@@ -143,10 +148,25 @@ public class CaptureForegroundService : Service() {
     queueBlockCapacity = QUEUE_BLOCK_CAPACITY,
     maxBlockFrames = MAX_CAPTURE_BLOCK_FRAMES,
    )
-   pump = CaptureQueuePump(queue, rate, encryptedSink!!, 1L) { failure ->
-    android.util.Log.e(TAG, "PCM sink failed; requesting controlled capture stop", failure)
-    requestStop(StopReason.CAPTURE_FAILURE)
-   }
+   pump = CaptureQueuePump(
+    queue, rate, encryptedSink!!, 1L,
+    onConsumerFailure = { failure ->
+     android.util.Log.e(TAG, "PCM sink failed; requesting controlled capture stop", failure)
+     requestStop(StopReason.CAPTURE_FAILURE)
+    },
+    onCaptureEvent = { event ->
+     journal!!.append(
+      CaptureSessionJournal.RECORD_INTEGRITY_INCIDENT,
+      event.monotonicTimestampNs,
+      mapOf(
+       "captureEpoch" to event.captureEpoch,
+       "detailCode" to event.detailCode.toLong(),
+       "eventSequence" to event.eventSequence,
+       "nativeEventType" to event.eventType.toLong(),
+      ),
+     )
+    },
+   )
    pump!!.start()
    val pcm = ByteBuffer.allocateDirect(MAX_CAPTURE_BLOCK_BYTES)
    producerPcm = pcm
@@ -174,14 +194,20 @@ public class CaptureForegroundService : Service() {
     pump!!.submit(pcm, count, count / 2, SystemClock.elapsedRealtimeNanos())
     bytes = Math.addExact(bytes, count.toLong())
    }
-   reduce(SessionEvent.StopRequested(SystemClock.elapsedRealtimeNanos(), stopReason))
+   val stopRequestedNs = SystemClock.elapsedRealtimeNanos()
+   journal!!.append(CaptureSessionJournal.RECORD_CAPTURE_STOP_REQUESTED, stopRequestedNs, mapOf("stopReasonCode" to stopReason.ordinal.toLong()))
+   reduce(SessionEvent.StopRequested(stopRequestedNs, stopReason))
    stopRecorderIfRecording(active)
    pump!!.stopAndDrain()
    pump = null
-   reduce(SessionEvent.CaptureStopped(SystemClock.elapsedRealtimeNanos()))
+   val captureStoppedNs = SystemClock.elapsedRealtimeNanos()
+   journal!!.append(CaptureSessionJournal.RECORD_CAPTURE_STOPPED, captureStoppedNs, mapOf("pcmBytes" to bytes))
+   reduce(SessionEvent.CaptureStopped(captureStoppedNs))
    check(bytes > 0L && bytes % 2L == 0L) { "No complete PCM frames captured; encrypted partial retained" }
+   journal!!.append(CaptureSessionJournal.RECORD_VAULT_ENCRYPTION_STARTED, SystemClock.elapsedRealtimeNanos(), mapOf("pcmBytes" to bytes))
    val encryptedBytes = encryptedSink!!.finish(bytes)
    encryptedSink!!.verifyFinished(bytes)
+   journal!!.append(CaptureSessionJournal.RECORD_VAULT_ENCRYPTION_COMPLETED, SystemClock.elapsedRealtimeNanos(), mapOf("encryptedBytes" to encryptedBytes))
    encryptedSink!!.close()
    encryptedSink = null
    nativeVault.destroyFileKeyHandle(fileKeyHandle)
@@ -191,6 +217,7 @@ public class CaptureForegroundService : Service() {
    // Same-filesystem atomic promotion only; never silently fall back to a copy.
    Files.move(partial.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE)
    FileChannel.open(destination.parentFile!!.toPath(), StandardOpenOption.READ).use { it.force(true) }
+   journal!!.append(CaptureSessionJournal.RECORD_FILE_FINALIZED, SystemClock.elapsedRealtimeNanos(), mapOf("encryptedBytes" to encryptedBytes))
    reduce(SessionEvent.FinalizationSucceeded(SystemClock.elapsedRealtimeNanos(), encryptedBytes))
    success = true
   } catch (failure: Exception) {
@@ -198,6 +225,9 @@ public class CaptureForegroundService : Service() {
     if (session.phase == SessionPhase.FINALIZING) reduce(SessionEvent.FinalizationFailed(SystemClock.elapsedRealtimeNanos(), SessionFailureCode.FINALIZATION_FAILED))
     else if (session.phase !in setOf(SessionPhase.FINALIZED, SessionPhase.FAILED, SessionPhase.RECOVERED)) reduce(SessionEvent.Failed(SystemClock.elapsedRealtimeNanos(), SessionFailureCode.CAPTURE_PIPELINE_FAILED))
    } catch (_: Exception) { }
+   try { journal?.append(CaptureSessionJournal.RECORD_INTEGRITY_INCIDENT, SystemClock.elapsedRealtimeNanos(), mapOf("failureCode" to 1L)) } catch (journalFailure: Exception) {
+    android.util.Log.e(TAG, "SQJ failure; preserve journal and encrypted partial for recovery", journalFailure)
+   }
    android.util.Log.e(TAG, "Capture/finalization failed; preserve partial artifact", failure)
   } finally {
    try { if (active?.recordingState == AudioRecord.RECORDSTATE_RECORDING) active.stop() } catch (_: Exception) {}
@@ -222,6 +252,11 @@ public class CaptureForegroundService : Service() {
    }
    vaultKeyHandle = null
    vaultNative = null
+   try { journal?.close() } catch (journalFailure: Exception) {
+    success = false
+    android.util.Log.e(TAG, "SQJ close failed; capture must not be considered release-accepted", journalFailure)
+   }
+   journal = null
    captureThread = null
    android.util.Log.i(TAG, if (success) "Capture finalized" else "Capture incomplete; recovery file may exist")
    if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE) else stopForeground(true)
