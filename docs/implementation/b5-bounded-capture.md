@@ -116,3 +116,19 @@ This checkpoint supersedes prior queued/pending Android status entries for the s
 - Rust contract Run #161 (`46023778553`) **PASS**; cross-platform matrix Run #120 (`46023778521`) **PASS**; Android Vault contract Run #186 (`46023778575`) **PASS**; PR-triggered Android Run #187 (`46023790335`) **PASS**. Each is completed/successful and references the exact source SHA.
 - B5 implementation-slice CI wait is **CLOSED** for this SHA. CI does not close secure Vault/SQJ finalization, encrypted durable promotion/recovery, crash/ENOSPC/force-stop tests, or physical-device acceptance. The app capture consumer remains plaintext staging in this prototype; do not classify it as production-secure.
 - The following evidence-only commit advances the branch and requires fresh exact-head CI. PR #5 and PR #6 remain draft/open/unmerged.
+
+
+## Exact-head CI verification — 2026-11-28 (UTC)
+
+- Current B5 source/evidence SHA before this refresh: `1841a0b9411b0a0e1530cc4f8ab64672c886e38a`.
+- Rust contract Run #163 (`46107684334`): **PASS**.
+- Cross-platform matrix Run #122 (`46107684245`): **PASS**.
+- Android Vault contract Run #190 (`46107684282`): **PASS**.
+- PR-triggered Android Vault Run #189 (`46107683486`): **PASS**.
+- All four GitHub Actions runs are completed/successful on the exact same head SHA. The CI wait for this B5 source slice is closed for that commit; this refresh itself advances the branch and must receive fresh exact-head CI.
+
+## Source reconciliation at this checkpoint
+
+- The latest source now **does** wire Android `AudioRecord` → reusable direct PCM buffer → bounded native JNI queue → single-consumer `CaptureQueuePump` → WAV staging. Earlier statements in this document saying the JNI adapter/producer integration was absent are historical and superseded by the implementation checkpoints above.
+- The queue/pump validates metadata continuity and drains before native finish. The consumer still writes **plaintext app-private WAV staging**; this is not Vault-secure or release-ready output.
+- Outstanding implementation: replace the plaintext sink with the canonical Rust/Vault encrypted writer; persist capture/integrity events and session checkpoints to SQJ; hash and idempotently finalize; use durable-store stage/verify/promote/reconcile; implement startup recovery and user-visible integrity/recovery states; add fault-injection for sink errors, queue overrun, process death, force-stop and ENOSPC. CI and emulator runs do not satisfy physical-device acceptance.
