@@ -1,6 +1,5 @@
 package com.alinor.sqrecorder.vault.android
 
-import android.util.Base64
 import com.alinor.sqrecorder.domain.VaultFileKeyHandle
 import com.alinor.sqrecorder.domain.VaultV2RecipientWrap
 import com.alinor.sqrecorder.domain.VaultV2WrapSuite
@@ -19,8 +18,8 @@ class AndroidSqveV2HeaderCodecTest {
         val recipient = VaultV2RecipientWrap(
             suite = VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM,
             recipientKeyId = "device:primary",
-            wrappedDekBase64 = Base64.encodeToString(payload, Base64.NO_WRAP),
-            ephemeralPublicKeyBase64 = Base64.encodeToString(der, Base64.NO_WRAP),
+            wrappedDekBase64 = SqveBase64.encodeNoWrap(payload),
+            ephemeralPublicKeyBase64 = SqveBase64.encodeNoWrap(der),
             wrapNonceHex = wrapNonce.joinToString("") { "%02x".format(it.toInt() and 0xff) },
         )
         val header = AndroidSqveV2HeaderCodec(fake).serializeStreamingHeader(
