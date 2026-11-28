@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 class AndroidSqveV2HeaderCodecTest {
     @Test
     fun streamingHeaderMatchesIndependentCanonicalV2Vector() {
-        val fake = AndroidSqveV2HeaderCodecTest.FixedDekBridge()
+        val fake = FixedDekBridge()
         val der = ByteArray(91) { 0x30 }
         val wrapNonce = ByteArray(12) { 0x77 }
         val ciphertextAndTag = ByteArray(48) { 0x77 }
@@ -40,24 +40,20 @@ class AndroidSqveV2HeaderCodecTest {
             MessageDigest.getInstance("SHA-256").digest(header),
         )
     }
-}
 
-    companion object {
-        internal class FixedDekBridge : VaultNativeKeyBridge {
-            override fun generateFileKeyHandle() = VaultFileKeyHandle("9")
-            override fun destroyFileKeyHandle(handle: VaultFileKeyHandle) = Unit
-            override fun copyFileKeyForWrapping(handle: VaultFileKeyHandle) = ByteArray(32) { 0x55 }
-            override fun importUnwrappedFileKey(dek: ByteArray) = VaultFileKeyHandle("10")
-            override fun encryptChunk(
-                handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, plaintext: ByteArray,
-            ) = ByteArray(plaintext.size + 16)
-            override fun decryptChunk(
-                handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, ciphertextAndTag: ByteArray,
-            ) = ByteArray(ciphertextAndTag.size - 16)
-        
-        }
+    internal class FixedDekBridge : VaultNativeKeyBridge {
+        override fun generateFileKeyHandle() = VaultFileKeyHandle("9")
+        override fun destroyFileKeyHandle(handle: VaultFileKeyHandle) = Unit
+        override fun copyFileKeyForWrapping(handle: VaultFileKeyHandle) = ByteArray(32) { 0x55 }
+        override fun importUnwrappedFileKey(dek: ByteArray) = VaultFileKeyHandle("10")
+        override fun encryptChunk(
+            handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, plaintext: ByteArray,
+        ) = ByteArray(plaintext.size + 16)
+        override fun decryptChunk(
+            handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, ciphertextAndTag: ByteArray,
+        ) = ByteArray(ciphertextAndTag.size - 16)
     }
-
+}
 
 class AndroidSqveV2RsaSuiteTest {
     @Test
@@ -67,7 +63,9 @@ class AndroidSqveV2RsaSuiteTest {
             recipientKeyId = "android-v2-rsa3072-oaep256-mgf1sha1-" + "b".repeat(64),
             wrappedDekBase64 = SqveBase64.encodeNoWrap(ByteArray(384) { 0x42 }),
         )
-        val header = AndroidSqveV2HeaderCodec(FixedDekBridge()).serializeStreamingHeader(
+        val header = AndroidSqveV2HeaderCodec(
+            AndroidSqveV2HeaderCodecTest.FixedDekBridge(),
+        ).serializeStreamingHeader(
             VaultFileKeyHandle("9"),
             ByteArray(16) { 0x11 },
             ByteArray(32) { 0x22 },
@@ -75,9 +73,12 @@ class AndroidSqveV2RsaSuiteTest {
             recipient,
         )
         assertEquals(3, ((header[90].toInt() and 0xff) shl 8) or (header[91].toInt() and 0xff))
-        assertEquals(384, ((header[94].toInt() and 0xff) shl 24) or
-            ((header[95].toInt() and 0xff) shl 16) or
-            ((header[96].toInt() and 0xff) shl 8) or (header[97].toInt() and 0xff))
-        assertEquals(32, header.size - 90 - 8 - 100 - 384) // MAC size after one 100-byte key ID
+        assertEquals(
+            384,
+            ((header[94].toInt() and 0xff) shl 24) or
+                ((header[95].toInt() and 0xff) shl 16) or
+                ((header[96].toInt() and 0xff) shl 8) or (header[97].toInt() and 0xff),
+        )
+        assertEquals(32, header.size - 90 - 8 - 100 - 384)
     }
 }
