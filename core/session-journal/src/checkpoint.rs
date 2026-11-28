@@ -204,4 +204,61 @@ mod tests {
         anchor.sequence = 0;
         assert_eq!(encode_checkpoint(&anchor), Err(CheckpointCodecError::InvalidMetadata));
     }
+    struct AcceptSignature;
+    impl P256Sha256SignatureProvider for AcceptSignature {
+        fn verify(&self, _key: &[u8], _message: &[u8], _signature: &[u8])
+            -> Result<bool, crate::AnchorCryptoProviderError> { Ok(true) }
+    }
+
+    #[derive(Default)]
+    struct JournalBytes(Vec<u8>);
+    impl crate::JournalSink for JournalBytes {
+        fn append_bytes(&mut self, bytes: &[u8]) -> Result<(), crate::JournalSinkError> {
+            self.0.extend_from_slice(bytes);
+            Ok(())
+        }
+        fn sync(&mut self) -> Result<(), crate::JournalSinkError> { Ok(()) }
+    }
+
+    #[test]
+    fn checkpoint_signature_must_bind_exact_complete_journal_head() {
+        use crate::{JournalRecordInput, JournalRecordType, JournalWriter};
+        let mut writer = JournalWriter::new(JournalBytes::default());
+        let receipt = writer.append(JournalRecordInput {
+            sequence: 1,
+            monotonic_timestamp_ns: 100,
+            session_uuid: [0x41; 16],
+            record_type: JournalRecordType::SessionCreated,
+            canonical_payload: br#"{"eventCode":1,"schemaVersion":1}"#,
+            previous_digest: [0; 32],
+        }).unwrap();
+        let journal = writer.into_sink().0;
+
+        let public_key = vec![0x30, 0x04, 0x02, 0x02, 0x11, 0x11];
+        let mut registry_writer = crate::AnchorKeyRegistryWriter::new(JournalBytes::default());
+        let retained = registry_writer.append_key(&public_key).unwrap();
+        let registry = registry_writer.into_sink().0;
+        let anchor = JournalSignatureAnchor {
+            format_version: 1,
+            sequence: receipt.sequence,
+            digest: receipt.digest,
+            signature_algorithm_id: crate::anchor_verifier::JOURNAL_ANCHOR_SIGNATURE_ID.into(),
+            signing_key_id: retained.key_id,
+            signature_der: vec![0x30, 0x06, 0x02, 0x01, 0x01, 0x02, 0x01, 0x01],
+            authentication_epoch: 1,
+            monotonic_timestamp_ns: 100,
+        };
+        assert_eq!(verify_checkpoint_binding(&anchor, &journal, &registry, &AcceptSignature),
+            BoundCheckpointVerification::Valid);
+
+        let mut stale = anchor.clone();
+        stale.digest[0] ^= 0x80;
+        assert_eq!(verify_checkpoint_binding(&stale, &journal, &registry, &AcceptSignature),
+            BoundCheckpointVerification::JournalDigestMismatch);
+        stale = anchor;
+        stale.sequence = 2;
+        assert_eq!(verify_checkpoint_binding(&stale, &journal, &registry, &AcceptSignature),
+            BoundCheckpointVerification::JournalSequenceMismatch);
+    }
+
 }
