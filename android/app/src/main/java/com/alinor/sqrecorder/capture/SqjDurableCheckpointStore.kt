@@ -7,7 +7,6 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.nio.file.StandardOpenOption
 
 /**
@@ -55,8 +54,12 @@ internal class SqjDurableCheckpointStore {
                 output.write(encoded)
                 output.fd.sync()
             }
-            // No replacement: an existing checkpoint is evidence, never overwritten.
-            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
+            // Hard-link publication is atomic and no-clobber on the same
+            // filesystem. Never rely on ATOMIC_MOVE's provider-specific
+            // behavior when a target name already exists.
+            android.system.Os.link(temp.absolutePath, target.absolutePath)
+            syncDirectory(checkpointDirectory)
+            Files.delete(temp.toPath())
             syncDirectory(checkpointDirectory)
         } catch (failure: Exception) {
             // If rename succeeded but directory sync failed, preserve target as
