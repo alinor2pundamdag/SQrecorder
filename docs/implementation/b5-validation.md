@@ -49,3 +49,11 @@
 The Android capture owner now calls `SqveV2EncryptedWavSink.verifyFinished()` after writing the streaming footer and before any final-name promotion. The verifier rechecks the authenticated header MAC, chunk order/length and per-chunk GCM tags/AAD, canonical WAV RIFF/data length, footer count/actual plaintext length, SHA-256 over header+records+ciphertext+tags, and exact EOF. Promotion uses same-filesystem `ATOMIC_MOVE` only (no copy fallback), then syncs the parent directory. Any verification or promotion exception leaves the capture incomplete and must not emit a successful-finalization event.
 
 **Still release-blocking:** this does not yet bind the artifact to a durable SQJ session journal, store event/checkpoint/final-hash records, provide authenticated startup reconciliation after process death, or demonstrate ENOSPC/force-stop/torn-footer/atomic-rename crash cuts. Exact-head CI and physical device tests are required. Treat this as an implementation checkpoint, not release acceptance.
+
+## SQJ lifecycle integration checkpoint — 2026-11-28
+
+The candidate now includes an Android SQJ v1 append adapter matching the Rust journal record layout/digest domain, fsyncs each record, latches ambiguous write/sync failures, routes native integrity events into durable SQJ records, binds the journal filename and encrypted artifact to one session UUID, and performs a read-only startup scan of journal chain/torn records and orphaned .part/final artifacts. Scanner never truncates or auto-promotes.
+
+Implementation commits: dce042e12cab (durable writer), ad60aeb5aeb8 (native event callback), 1711126a91e5 (service lifecycle records), dc8370ab4b3c (read-only scanner), dac254834874 (startup inspection), 2a8539c2c017 (SQJ unit tests).
+
+Still not release-complete: journal startup reconciliation does not yet perform authenticated V2 unwrap/decrypt/recovery or append a validated RecoveryCompleted record; crash-cut and physical-device testing remain outstanding. Current user-authenticated decrypt verifier is intentionally not wired into service capture. Exact-head CI, iOS provider, independent crypto review and release gate matrix remain open.
