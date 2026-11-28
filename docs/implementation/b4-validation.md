@@ -329,3 +329,12 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 
 
 - Follow-up regression test added: a signed checkpoint is accepted only when sequence+digest bind to the exact fully verified journal head; stale digest and stale sequence are rejected before crypto-provider acceptance. Test commit: f427057e871eb7e279b02af7584c4aae773f0ba8. Rust formatting/build/tests and exact-head CI remain not verified.
+
+
+## SQJ append-state and scanner I/O fail-closed audit — 2026-11-28
+
+- Root-cause audit found that append previously performed the durable write and only then incremented the in-memory sequence with checked arithmetic. At sequence exhaustion, the record could be synced before the increment threw, leaving writer state ambiguous and a possible retry path against already-persisted bytes.
+- Moved checked next-sequence calculation before payload serialization and any disk write. Overflow now rejects before mutation; after a successful sync, the prevalidated next sequence is assigned without a post-commit arithmetic failure.
+- Hardened scanner readFully: a zero-progress FileChannel read now returns an explicit I/O fault rather than potentially spinning forever during startup recovery. Recovery remains read-only and preserves journal bytes.
+- Commit: 0a7806884c0384cf791365dc722763e82bdbb382.
+- **Not verified:** Kotlin compilation, unit tests, Rust/KMP/Android CI, physical-device behavior. Exact-head CI and the signed durable checkpoint platform integration remain open gates.
