@@ -8,7 +8,7 @@ use crate::{
         JournalAnchorVerificationResult, JournalSignatureAnchor, P256Sha256SignatureProvider,
         verify_journal_anchor,
     },
-    verify_journal, JournalVerificationStatus,
+
 };
 
 const MAGIC: &[u8; 4] = b"SQAC";
@@ -50,7 +50,7 @@ pub fn encode_checkpoint(anchor: &JournalSignatureAnchor) -> Result<Vec<u8>, Che
         .and_then(|n| n.checked_add(signature.len()))
         .ok_or(CheckpointCodecError::InvalidLength)?;
     let mut bytes = Vec::new();
-    bytes.try_reserve_exact(total).map_err(|_| CheckpointCodecError::AllocationFailed)?;
+
     bytes.extend_from_slice(MAGIC);
     bytes.extend_from_slice(&VERSION.to_le_bytes());
     bytes.extend_from_slice(&anchor.sequence.to_le_bytes());
@@ -81,13 +81,11 @@ pub fn decode_checkpoint(bytes: &[u8]) -> Result<JournalSignatureAnchor, Checkpo
     let algorithm_len = usize::from(read_u16(bytes, 62));
     let key_id_len = usize::from(read_u16(bytes, 64));
     let signature_len = usize::from(read_u16(bytes, 66));
-    if algorithm_len == 0 || algorithm_len > MAX_ALGORITHM_BYTES
-        || key_id_len == 0 || key_id_len > MAX_KEY_ID_BYTES
-        || signature_len == 0 || signature_len > MAX_SIGNATURE_BYTES
+
     {
         return Err(CheckpointCodecError::InvalidLength);
     }
-    let expected = FIXED_BYTES.checked_add(algorithm_len)
+
         .and_then(|n| n.checked_add(key_id_len))
         .and_then(|n| n.checked_add(signature_len))
         .ok_or(CheckpointCodecError::InvalidLength)?;
@@ -104,9 +102,9 @@ pub fn decode_checkpoint(bytes: &[u8]) -> Result<JournalSignatureAnchor, Checkpo
         sequence: read_u64(bytes, 6),
         digest,
         signature_algorithm_id: core::str::from_utf8(&bytes[algorithm_start..key_start])
-            .map_err(|_| CheckpointCodecError::InvalidMetadata)?.to_owned(),
+
         signing_key_id: core::str::from_utf8(&bytes[key_start..signature_start])
-            .map_err(|_| CheckpointCodecError::InvalidMetadata)?.to_owned(),
+
         signature_der: bytes[signature_start..].to_vec(),
         authentication_epoch: read_u64(bytes, 46),
         monotonic_timestamp_ns: read_u64(bytes, 54),
@@ -143,7 +141,7 @@ pub fn verify_checkpoint_binding<P: P256Sha256SignatureProvider>(
 }
 
 fn validate_anchor(anchor: &JournalSignatureAnchor) -> Result<(), CheckpointCodecError> {
-    if anchor.format_version != VERSION || anchor.sequence == 0
+
         || anchor.signature_algorithm_id.is_empty()
         || anchor.signature_algorithm_id.len() > MAX_ALGORITHM_BYTES
         || anchor.signing_key_id.is_empty()
@@ -160,7 +158,7 @@ fn read_u16(bytes: &[u8], offset: usize) -> u16 {
     u16::from_le_bytes([bytes[offset], bytes[offset + 1]])
 }
 fn read_u64(bytes: &[u8], offset: usize) -> u64 {
-    u64::from_le_bytes(bytes[offset..offset + 8].try_into().expect("bounded fixed field"))
+
 }
 
 #[cfg(test)]
@@ -189,25 +187,24 @@ mod tests {
     #[test]
     fn checkpoint_rejects_truncation_and_trailing_data() {
         let encoded = encode_checkpoint(&fixture()).unwrap();
-        assert_eq!(decode_checkpoint(&encoded[..encoded.len() - 1]), Err(CheckpointCodecError::InvalidLength));
+
         let mut trailing = encoded;
         trailing.push(0);
-        assert_eq!(decode_checkpoint(&trailing), Err(CheckpointCodecError::InvalidLength));
+
     }
 
     #[test]
     fn checkpoint_rejects_wrong_magic_and_zero_sequence() {
         let mut encoded = encode_checkpoint(&fixture()).unwrap();
         encoded[0] = b'X';
-        assert_eq!(decode_checkpoint(&encoded), Err(CheckpointCodecError::InvalidMagic));
+
         let mut anchor = fixture();
         anchor.sequence = 0;
-        assert_eq!(encode_checkpoint(&anchor), Err(CheckpointCodecError::InvalidMetadata));
+
     }
     struct AcceptSignature;
     impl P256Sha256SignatureProvider for AcceptSignature {
-        fn verify(&self, _key: &[u8], _message: &[u8], _signature: &[u8])
-            -> Result<bool, crate::AnchorCryptoProviderError> { Ok(true) }
+
     }
 
     #[derive(Default)]
@@ -217,21 +214,14 @@ mod tests {
             self.0.extend_from_slice(bytes);
             Ok(())
         }
-        fn sync(&mut self) -> Result<(), crate::JournalSinkError> { Ok(()) }
+
     }
 
     #[test]
     fn checkpoint_signature_must_bind_exact_complete_journal_head() {
         use crate::{JournalRecordInput, JournalRecordType, JournalWriter};
         let mut writer = JournalWriter::new(JournalBytes::default());
-        let receipt = writer.append(JournalRecordInput {
-            sequence: 1,
-            monotonic_timestamp_ns: 100,
-            session_uuid: [0x41; 16],
-            record_type: JournalRecordType::SessionCreated,
-            canonical_payload: br#"{"eventCode":1,"schemaVersion":1}"#,
-            previous_digest: [0; 32],
-        }).unwrap();
+
         let journal = writer.into_sink().0;
 
         let public_key = vec![0x30, 0x04, 0x02, 0x02, 0x11, 0x11];
@@ -248,17 +238,14 @@ mod tests {
             authentication_epoch: 1,
             monotonic_timestamp_ns: 100,
         };
-        assert_eq!(verify_checkpoint_binding(&anchor, &journal, &registry, &AcceptSignature),
-            BoundCheckpointVerification::Valid);
+
 
         let mut stale = anchor.clone();
         stale.digest[0] ^= 0x80;
-        assert_eq!(verify_checkpoint_binding(&stale, &journal, &registry, &AcceptSignature),
-            BoundCheckpointVerification::JournalDigestMismatch);
+
         stale = anchor;
         stale.sequence = 2;
-        assert_eq!(verify_checkpoint_binding(&stale, &journal, &registry, &AcceptSignature),
-            BoundCheckpointVerification::JournalSequenceMismatch);
+
     }
 
 }
