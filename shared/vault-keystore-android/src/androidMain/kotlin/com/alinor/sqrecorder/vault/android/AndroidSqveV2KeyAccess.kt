@@ -19,18 +19,21 @@ import java.security.MessageDigest
 import java.security.PublicKey
 import java.security.SecureRandom
 import java.security.spec.ECGenParameterSpec
+import java.security.spec.MGF1ParameterSpec
 import java.security.spec.X509EncodedKeySpec
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
 import javax.crypto.Mac
 import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.OAEPParameterSpec
+import javax.crypto.spec.PSource
 import javax.crypto.spec.SecretKeySpec
 
 /**
  * V2-only ECDH-P256/HKDF-SHA256/AES-256-GCM recipient wrapping.
  * It never calls the V1 OAEP path or substitutes cryptographic parameters.
- * The provider capability is conservatively gated to API 31+ pending device
- * conformance on older Android releases.
+ * API 31+ uses non-exportable Android Keystore ECDH; API 23–30 uses the
+ * separately identified RSA-3072 OAEP/MGF1-SHA1 compatibility suite.
  */
 public class AndroidSqveV2KeyAccess(
     private val native: VaultNativeKeyBridge,
@@ -41,15 +44,20 @@ public class AndroidSqveV2KeyAccess(
 
     override fun currentPublicV2RecipientKeyId(): String {
         requireV2Platform()
-        return keyId(publicKey(currentAlias(createIfMissing = true)))
+        val alias = if (Build.VERSION.SDK_INT < ECDH_API) currentRsaAlias(true) else currentAlias(true)
+        return keyId(publicKey(alias), alias)
     }
 
     /** Rotate explicitly; old aliases remain available to decrypt prior files. */
     public fun rotateV2RecipientKey(): String {
         requireV2Platform()
-        val alias = ALIAS_PREFIX + Math.addExact(currentVersion(), 1L)
-        generateRecipientKey(alias)
-        return keyId(publicKey(alias))
+        val alias = if (Build.VERSION.SDK_INT < ECDH_API) {
+            RSA_ALIAS_PREFIX + Math.addExact(currentRsaVersion(), 1L)
+        } else {
+            ALIAS_PREFIX + Math.addExact(currentVersion(), 1L)
+        }
+        if (alias.startsWith(RSA_ALIAS_PREFIX)) generateRsaRecipientKey(alias) else generateRecipientKey(alias)
+        return keyId(publicKey(alias), alias)
     }
 
     override fun wrapFileKeyForV2(
@@ -63,7 +71,11 @@ public class AndroidSqveV2KeyAccess(
         if (!recipientKeyId.isAsciiSafeId()) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
         }
-        val recipientPublic = publicKey(aliasForKeyId(recipientKeyId))
+        val recipientAlias = aliasForKeyId(recipientKeyId)
+        val recipientPublic = publicKey(recipientAlias)
+        if (recipientAlias.startsWith(RSA_ALIAS_PREFIX)) {
+            return wrapFileKeyWithRsaV2(fileKeyHandle, recipientKeyId, recipientPublic)
+        }
         val ephemeral = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC).apply {
             initialize(ECGenParameterSpec(CURVE), SecureRandom())
         }.generateKeyPair()
@@ -118,20 +130,30 @@ public class AndroidSqveV2KeyAccess(
     ): VaultFileKeyHandle {
         requireV2Platform()
         validateFileContext(fileId, fileSalt)
-        val ephemeralBase64 = wrap.ephemeralPublicKeyBase64
-            ?: throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
-        val nonceHex = wrap.wrapNonceHex
-            ?: throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
-        if (wrap.suite != VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM ||
-            !wrap.recipientKeyId.isAsciiSafeId() ||
-            !nonceHex.isLowerHex(NONCE_BYTES * 2)
-        ) throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
-
+        if (!wrap.recipientKeyId.isAsciiSafeId()) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+        }
         val now = SystemClock.elapsedRealtimeNanos()
         if (!isCurrentVaultAuthContext(authContext, now, authVerifier)) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.AUTH_CONTEXT_INVALID)
         }
         val alias = aliasForKeyId(wrap.recipientKeyId)
+        if (wrap.suite == VaultV2WrapSuite.RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL) {
+            if (!alias.startsWith(RSA_ALIAS_PREFIX) || wrap.ephemeralPublicKeyBase64 != null ||
+                wrap.wrapNonceHex != null
+            ) throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+            return unwrapRsaV2(wrap, alias)
+        }
+        if (wrap.suite != VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM ||
+            alias.startsWith(RSA_ALIAS_PREFIX)
+        ) throw VaultKeyAccessException(VaultKeyAccessFailure.UNSUPPORTED_PLATFORM)
+        val ephemeralBase64 = wrap.ephemeralPublicKeyBase64
+            ?: throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+        val nonceHex = wrap.wrapNonceHex
+            ?: throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+        if (!nonceHex.isLowerHex(NONCE_BYTES * 2)) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+        }
         val canonicalPayload = decodeCanonicalBase64(wrap.wrappedDekBase64)
         val parsed = try {
             parseCanonicalEcdhPayload(canonicalPayload)
