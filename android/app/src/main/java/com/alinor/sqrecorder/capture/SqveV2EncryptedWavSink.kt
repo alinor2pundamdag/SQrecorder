@@ -47,7 +47,7 @@ internal class SqveV2EncryptedWavSink(
 
     fun writePcm(bytes: ByteArray, offset: Int, length: Int) {
         check(!closed) { "encrypted WAV sink is closed" }
-        require(offset >= 0 && length >= 0 && offset + length <= bytes.size)
+        require(offset >= 0 && length >= 0 && offset.toLong() + length.toLong() <= bytes.size.toLong())
         var cursor = offset
         var remaining = length
         while (remaining > 0) {
@@ -226,11 +226,18 @@ internal class SqveV2EncryptedWavSink(
             require(dek.size == 32)
             prk = hmacSha256(fileSalt, dek)
             headerKey = hmacSha256(prk, HEADER_MAC_INFO + byteArrayOf(1))
-            val actual = hmacSha256(headerKey, encoded.copyOfRange(0, macAt))
-            require(MessageDigest.isEqual(actual, encoded.copyOfRange(macAt, encoded.size))) {
-                "SQVE v2 header MAC verification failed"
+            val macInput = encoded.copyOfRange(0, macAt)
+            val actual = hmacSha256(headerKey, macInput)
+            val stored = encoded.copyOfRange(macAt, encoded.size)
+            try {
+                require(MessageDigest.isEqual(actual, stored)) {
+                    "SQVE v2 header MAC verification failed"
+                }
+            } finally {
+                macInput.fill(0)
+                actual.fill(0)
+                stored.fill(0)
             }
-            actual.fill(0)
         } finally {
             dek.fill(0)
             prk?.fill(0)
