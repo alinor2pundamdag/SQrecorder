@@ -591,6 +591,87 @@ impl<W: Write> StreamingWriter<W> {
     }
 }
 
+fn verify_streaming_after_header<R: Read + Seek>(
+    input: &mut R,
+    key: &VaultFileKey,
+    header: Header,
+    header_bytes: &[u8],
+    file_len: u64,
+) -> Result<Header, Error> {
+    let mut hash = Sha256::new();
+    hash.update(header_bytes);
+    let mut ciphertext = Vec::new();
+    ciphertext.try_reserve_exact(CHUNK_BYTES).map_err(|_| Error::Allocation)?;
+    ciphertext.resize(CHUNK_BYTES, 0);
+    let mut next_index = 0u64;
+    let mut plaintext_total = 0u64;
+    let mut saw_short_chunk = false;
+    let mut footer = [0u8; FOOTER_BYTES];
+
+    loop {
+        let mut prefix = [0u8; 4];
+        input.read_exact(&mut prefix).map_err(|_| Error::Read)?;
+        if &prefix == b"SQVF" {
+            footer[..4].copy_from_slice(&prefix);
+            input.read_exact(&mut footer[4..]).map_err(|_| Error::Read)?;
+            break;
+        }
+        if &prefix != b"SQVC" || saw_short_chunk {
+            return Err(Error::MalformedChunk);
+        }
+        let mut record = [0u8; 20];
+        record[..4].copy_from_slice(&prefix);
+        input.read_exact(&mut record[4..]).map_err(|_| Error::Read)?;
+        let index = u64::from_be_bytes(record[4..12].try_into().unwrap());
+        let plain_len = u32::from_be_bytes(record[12..16].try_into().unwrap()) as usize;
+        let cipher_len = u32::from_be_bytes(record[16..20].try_into().unwrap()) as usize;
+        if index != next_index || plain_len == 0 || plain_len > CHUNK_BYTES
+            || cipher_len != plain_len + GCM_TAG_BYTES
+        {
+            return Err(Error::MalformedChunk);
+        }
+        saw_short_chunk = plain_len < CHUNK_BYTES;
+        input.read_exact(&mut ciphertext[..plain_len]).map_err(|_| Error::Read)?;
+        let mut tag = [0u8; GCM_TAG_BYTES];
+        input.read_exact(&mut tag).map_err(|_| Error::Read)?;
+        hash.update(record);
+        hash.update(&ciphertext[..plain_len]);
+        hash.update(tag);
+        decrypt_chunk(
+            key,
+            &header,
+            index,
+            plain_len as u32,
+            &mut ciphertext[..plain_len],
+            &tag,
+        )?;
+        ciphertext[..plain_len].zeroize();
+        tag.zeroize();
+        plaintext_total = plaintext_total.checked_add(plain_len as u64).ok_or(Error::LengthOverflow)?;
+        next_index = next_index.checked_add(1).ok_or(Error::LengthOverflow)?;
+    }
+
+    if u16::from_be_bytes(footer[4..6].try_into().unwrap()) != VERSION
+        || u16::from_be_bytes(footer[6..8].try_into().unwrap()) as usize != FOOTER_BYTES
+        || u64::from_be_bytes(footer[8..16].try_into().unwrap()) != next_index
+        || u64::from_be_bytes(footer[16..24].try_into().unwrap()) != plaintext_total
+        || expected_chunks(plaintext_total) != next_index
+    {
+        return Err(Error::MalformedFooter);
+    }
+    let digest = hash.finalize();
+    if !constant_time_eq(&digest, &footer[24..56]) {
+        return Err(Error::DigestMismatch);
+    }
+    if input.read(&mut [0u8; 1]).map_err(|_| Error::Read)? != 0 {
+        return Err(Error::TrailingData);
+    }
+    if input.stream_position().map_err(|_| Error::Read)? != file_len {
+        return Err(Error::TrailingData);
+    }
+    Ok(header)
+}
+
 /// Reads and authenticates a complete V2 envelope, including every chunk tag,
 /// footer digest, exact file length and EOF. Plaintext is zeroized per chunk
 /// and never returned by this verifier.
@@ -619,6 +700,9 @@ pub fn verify_authenticated_stream<R: Read + Seek>(
         .read_exact(&mut header_bytes[FIXED_HEADER_BYTES..])
         .map_err(|_| Error::Read)?;
     let header = parse_header(&header_bytes, key)?;
+    if header.streaming {
+        return verify_streaming_after_header(input, key, header, &header_bytes, file_len);
+    }
     let expected_len = (header_len as u64)
         .checked_add(header.plaintext_len)
         .and_then(|n| {
