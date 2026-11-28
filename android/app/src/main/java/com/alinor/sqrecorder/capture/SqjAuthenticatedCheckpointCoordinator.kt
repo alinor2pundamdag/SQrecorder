@@ -21,13 +21,14 @@ internal class SqjAuthenticatedCheckpointCoordinator(
     private val signer: JournalAnchorSigner,
     private val verifier: AndroidJournalAnchorVerifier,
     private val store: SqjDurableCheckpointStore = SqjDurableCheckpointStore(),
+    private val monotonicNowNs: () -> Long = { SystemClock.elapsedRealtimeNanos() },
 ) {
     fun anchorDurableHead(
         journalFile: File,
         checkpointDirectory: File,
         authContext: VaultAuthContext,
     ): File {
-        check(authContext.validate(SystemClock.elapsedRealtimeNanos())) {
+        check(authContext.validate(monotonicNowNs())) {
             "Refusing to checkpoint without a current authenticated Vault context"
         }
         val scan = CaptureSessionJournal.scan(journalFile)
