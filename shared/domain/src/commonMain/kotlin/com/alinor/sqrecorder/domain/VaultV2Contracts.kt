@@ -65,12 +65,17 @@ public data class VaultV2EnvelopeContract(
         ) return VaultV2ContractError.INVALID_HEADER_MAC_ENCODING
         if (recipients.isEmpty()) return VaultV2ContractError.MISSING_RECIPIENT
         if (recipients.size > MAX_RECIPIENTS) return VaultV2ContractError.INVALID_WRAPPED_DEK
-        if (recipients.any { !it.recipientKeyId.isSafeId() }) {
+        if (recipients.any { !it.recipientKeyId.isSafeV2RecipientId() }) {
             return VaultV2ContractError.INVALID_RECIPIENT_ID
         }
         if (recipients.map { it.recipientKeyId }.distinct().size != recipients.size) {
             return VaultV2ContractError.DUPLICATE_RECIPIENT
         }
+        // V2 wire records are strictly sorted by the raw ASCII recipient ID.
+        if (recipients.zipWithNext().any { (left, right) ->
+                left.recipientKeyId >= right.recipientKeyId
+            }
+        ) return VaultV2ContractError.NONCANONICAL_RECIPIENT_ORDER
         for (recipient in recipients) {
             if (recipient.wrappedDekBase64.length > MAX_WRAPPED_DEK_BASE64_BYTES ||
                 !recipient.wrappedDekBase64.isCanonicalBase64()
@@ -167,6 +172,13 @@ private fun String.isLowerHex(expected: Int): Boolean =
 private fun String.isSafeId(): Boolean =
     isNotEmpty() && length <= 128 &&
         all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '-' || it == '_' || it == '.' }
+
+private fun String.isSafeV2RecipientId(): Boolean =
+    isNotEmpty() && length <= 128 &&
+        all {
+            it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' ||
+                it == '-' || it == '_' || it == '.' || it == ':'
+        }
 
 private fun String.isCanonicalUuid(): Boolean =
     length == 36 &&
