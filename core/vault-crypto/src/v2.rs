@@ -428,4 +428,30 @@ mod tests {
         assert_ne!(chunk_aad(&h,0,3), chunk_aad(&h,1,3));
         assert_eq!(decrypt_chunk(&key,&h,1,3,&mut bad,&tag),Err(Error::MalformedChunk));
     }
+
+    #[test]
+    fn hmac_sha256_matches_rfc_4231_case_1() {
+        let key = [0x0bu8; 20];
+        let digest = crate::hmac_sha256(&key, b"Hi There");
+        assert_eq!(digest, [
+            0xf7,0xbc,0x83,0xf4,0x30,0x53,0x84,0x24,0xb1,0x32,0x98,0xe6,0xaa,0x6f,0xb1,0x43,
+            0xef,0x4d,0x59,0xa1,0x49,0x46,0x17,0x59,0x97,0x47,0x9d,0xbc,0x2d,0x1a,0x3c,0xd8
+        ]);
+    }
+
+    #[test]
+    fn v2_stream_writer_verifier_round_trip() {
+        let key = VaultFileKey::from_bytes(&[0x55;32]).unwrap();
+        let mut source = std::io::Cursor::new(b"SQV".to_vec());
+        let encoded = encrypt_stream(&mut source, Vec::new(), sample(), key).unwrap();
+        let mut file = std::io::Cursor::new(encoded);
+        let verify_key = VaultFileKey::from_bytes(&[0x55;32]).unwrap();
+        assert_eq!(verify_authenticated_stream(&mut file, &verify_key).unwrap(), sample());
+        let mut tampered = file.into_inner();
+        let header_len = u32::from_be_bytes(tampered[6..10].try_into().unwrap()) as usize;
+        tampered[header_len + 16] ^= 1;
+        let mut bad = std::io::Cursor::new(tampered);
+        let bad_key = VaultFileKey::from_bytes(&[0x55;32]).unwrap();
+        assert!(verify_authenticated_stream(&mut bad, &bad_key).is_err());
+    }
 }
