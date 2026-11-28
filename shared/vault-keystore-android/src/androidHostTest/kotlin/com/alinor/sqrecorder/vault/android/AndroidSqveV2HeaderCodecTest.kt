@@ -52,4 +52,25 @@ private class FixedDekBridge : VaultNativeKeyBridge {
     override fun decryptChunk(
         handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, ciphertextAndTag: ByteArray,
     ) = ByteArray(ciphertextAndTag.size - 16)
+
+    @Test
+    fun api23RsaSuiteSerializesExplicitSuiteAnd384ByteCiphertext() {
+        val recipient = VaultV2RecipientWrap(
+            suite = VaultV2WrapSuite.RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL,
+            recipientKeyId = "android-v2-rsa3072-oaep256-mgf1sha1-" + "b".repeat(64),
+            wrappedDekBase64 = SqveBase64.encodeNoWrap(ByteArray(384) { 0x42 }),
+        )
+        val header = AndroidSqveV2HeaderCodec(FixedDekBridge()).serializeStreamingHeader(
+            VaultFileKeyHandle("9"),
+            ByteArray(16) { 0x11 },
+            ByteArray(32) { 0x22 },
+            byteArrayOf(1, 2, 3, 4),
+            recipient,
+        )
+        assertEquals(3, ((header[90].toInt() and 0xff) shl 8) or (header[91].toInt() and 0xff))
+        assertEquals(384, ((header[94].toInt() and 0xff) shl 24) or
+            ((header[95].toInt() and 0xff) shl 16) or
+            ((header[96].toInt() and 0xff) shl 8) or (header[97].toInt() and 0xff))
+        assertEquals(32, header.size - 90 - 8 - 100 - 384) // MAC size after one 100-byte key ID
+    }
 }
