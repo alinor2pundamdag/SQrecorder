@@ -11,6 +11,8 @@ on:
       - "shared/capability-system/**"
       - "shared/vault-keystore-android/**"
       - "core/native-abi/**"
+      - "protocols/native-abi/**"
+      - "tests/contract/**"
       - "core/session-journal/**"
       - "core/durable-store/**"
       - "core/windows-durable-rename/**"
@@ -29,11 +31,14 @@ on:
   pull_request:
     paths:
       - "build.gradle.kts"
+      - "protocols/native-abi/**"
+      - "tests/contract/**"
       - "android/**"
       - "settings.gradle.kts"
       - "shared/domain/**"
       - "shared/capability-system/**"
       - "shared/vault-keystore-android/**"
+      - "core/native-abi/**"
       - "core/session-journal/**"
       - "core/durable-store/**"
       - "core/windows-durable-rename/**"

@@ -1,0 +1,134 @@
+# B5 native bounded PCM ingress — implementation slice
+
+## Implemented
+- Added `core/native-abi/src/bounded_capture.rs` and `core/native-abi/src/capture_ffi.rs`; the safe queue is exported through an operational C ABI handle/lifecycle and PCM ingress/egress API.
+- Queue capacity and each slot's PCM storage are allocated at construction; submissions copy into fixed slots and do not grow queue storage. Aggregate queue allocation is capped at 8 MiB (also bounded per-block and by slot count).
+- Validates supported rate (48 kHz/44.1 kHz), mono S16, frame/payload agreement, and block capacity.
+- Queue overflow and producer lock contention fail closed, expose a terminal failure/integrity flag, and never silently overwrite/drop. The producer uses `try_lock` so it does not wait behind the consumer; contention is a controlled integrity failure.
+- Stop transition requires draining queued PCM before terminal `Stopped`.
+- Unit tests cover FIFO payload integrity, overflow fail-closed behavior, invalid payload shape, drain-before-stop, and rejection of configurations exceeding the memory budget.
+- Exact-head verification on PR head `9200621807e4eb22c0106a8058cfa073e93cc591` (2026-11-27): Rust contract Run #72 (`45996507523`) **PASS** — lockfile metadata, rustfmt, workspace tests, and Clippy. Android Vault contract Run #97 (`45996507513`) **PASS** — JDK/SDK/Gradle setup, pinned Rust Android targets, 16 KB-aligned JNI libraries, Vault adapter/host contracts, app assembly/unit tests, and API 36 emulator native Vault bridge. All reported job steps succeeded.
+
+## Boundary / not yet complete
+- C ABI v1 functions implement ABI info, create/start, validated PCM submit/read, bounded event push/read, request-stop, drained finish, state, and destroy. A fixed 64-entry metadata-only event ring preserves order; event overflow fails closed and requires event drain before successful finish. Header declarations and PCM/event round-trip tests are included.
+- The Android PR #4 service remains a plaintext app-private prototype. This queue does not make that service production-secure.
+- Exact current PR #5 head `9b5507ebf5da893741ad1207365cbfeea602b4a0`: Rust contract Run #92 (`46008909465`) **PASS** — lockfile, rustfmt, workspace tests (including C ABI lifecycle/PCM round-trip, producer-contention fail-closed, and slot-zeroization tests), and Clippy. Android Vault Run #117 (`46008909415`) is pending/queued at this checkpoint; do not mark its gate passed until its job result is returned. Physical-device gates remain outstanding.
+
+
+## Current integration boundary
+
+- C ABI is implemented and CI-tested, but there is no JNI capture bridge or Kotlin adapter wired into Android `AudioRecord` yet. The Android PR #4 service still writes plaintext app-private WAV directly and does not use this queue; this is a release-blocking security/integration gap.
+- Canonical Rust WAV writing, authenticated Vault chunk encryption, SQJ event/checkpoint writes, durable-store promotion/reconciliation, capture-recovery UX, and crash/ENOSPC end-to-end tests remain open.
+- Queue producer contention is explicitly fail-closed; this is not a measured real-time audio certification. Event ABI returns unsupported rather than pretending to persist events.
+
+## Latest Android workflow status
+
+- Android Vault contract Run #117 (`46008909415`) was cancelled before a job was provisioned on source head `9b5507ebf5da893741ad1207365cbfeea602b4a0`; it is **not a pass**.
+- The earlier Android Run #97 passed on the earlier bounded-queue-only SHA, before the operational C ABI and contention/zeroization hardening. It is historical and does not validate this integrated source revision.
+- Triggering a fresh Android contract run on the updated evidence/source commit is required before this B5 slice has a current Android CI attestation.
+
+## Current exact-head verification — 2026-11-27
+
+- PR #5 evidence/source head before this doc refresh: `a32c46dc69964582b81e7db9aa936f3ec7979a91`.
+- Rust contract Run #95 (`46009272259`) passed on that exact commit: lockfile, rustfmt, full workspace tests, and Clippy.
+- Android Vault Run #120 (`46009272161`) remains pending with no job provisioned in the latest poll; no Android acceptance is claimed. Earlier Run #117 was cancelled before provisioning.
+- This documentation refresh creates a new commit and therefore requires its own exact-head Rust + Android workflow checks. The queue/C ABI implementation is not release-complete until that current CI is green and all remaining integration gates below are closed.
+
+## Bounded event queue addition
+
+- Added a preallocated 64-event metadata ring; it performs no heap allocation per event.
+- C ABI event push/read now operate on the ring. Queue overflow is a terminal integrity failure, and finish requires both PCM blocks and events to be drained.
+- Rust tests cover ordered event readback, event overflow fail-closed behavior, and the stop/drain contract. Exact-head CI for this latest event implementation is pending; earlier Run #100 does not include this event-queue commit.
+
+## JNI adapter verification checkpoint
+
+- Exact source head before this evidence update: `935a3bbea544b5eef55f15b9889dd36e71b90a8f`.
+- Rust contract Run #121 (`46011685859`) **PASS**: formatting, C/C++ ABI contract compile+execute, workspace tests, and Clippy. This includes the native JNI bridge and bounded queue/event implementation.
+- Android Run #145 (`46011462549`) was executing against earlier head `d2f3ae9d6fc3c34cc03537b3df338149e4889891`; it includes the first metadata tests that exposed native-library eager loading. The load-on-instance correction is at `935a3bbea544b5eef55f15b9889dd36e71b90a8f`.
+- Android exact-head Run #146 (`46011685760`) is pending/queued at this checkpoint. Its result is required before claiming the Kotlin metadata fix passes.
+- Cross-platform Run #80 (`46011685808`) is in progress on the exact pre-evidence head; Rust jobs passed, macOS/Windows KMP jobs remain active.
+
+
+## Authoritative latest re-verification — 2026-11-27 22:08 +08:00
+
+This section supersedes earlier "JNI not yet implemented" statements above.
+
+- PR #5 latest inspected head: `316b1d2ebf713f3951eeae784ba24317ca414171`; still draft/open/unmerged.
+- Kotlin `JniCaptureQueue`, native Rust JNI bridge `capture_jni.rs`, metadata decoders/tests, C/C++ ABI layout contract tests, and the bounded 64-event ring are now present in PR #5. Rust JNI bridge exposes PCM submit/read, event push/read, stop/drain, state, and destroy. The previous documentation claim that no JNI/Kotlin adapter exists is stale.
+- Rust contract Run #128 (`46013102032`) **PASS on the exact latest head**: lockfile, rustfmt, C/C++ ABI layout compile+execute, workspace tests, and Clippy.
+- Cross-platform Run #87 (`46013102042`) is not complete: Linux KMP/Rust jobs passed; Windows KMP was in progress; macOS KMP and Rust jobs were queued; Windows Rust job passed compile/tests (Clippy skipped by workflow condition). Do not call the matrix green yet.
+- Android Vault Run #153 (`46013102060`) is pending and has no provisioned job in latest poll. Earlier Android run results are not an exact-head pass.
+- **Integration remains incomplete:** `CaptureForegroundService.kt` on PR #4 still reads from Android `AudioRecord` and writes plaintext PCM directly to a `.wav.part` file. It does not instantiate/use `JniCaptureQueue`; consequently the bounded native queue is not on the actual capture path. This must be fixed before release.
+- Durable-store source exists and has promotion/recovery primitives, but the complete recording pipeline does not yet connect capture → bounded queue → canonical WAV → Vault-encrypted chunks/file → SQJ signed journal/checkpoint → durable promotion → startup recovery. Existing stage/promote code alone does not prove end-to-end crash safety.
+- The event ring is implemented at the native ABI slice; event persistence into SQJ and durable recovery is still outstanding.
+- Release-critical remaining work: integrate actual AudioRecord producer/consumer and backpressure/overflow stop; remove plaintext recording path; canonical WAV writer and encrypted Vault integration; journal event/finalization/hash and idempotency; durable store promotion/reconciliation with encrypted artifact; crash-cut/ENOSPC/force-stop/recovery tests; UI recovery/integrity reporting; complete exact-head Android + cross-platform CI and review.
+- Physical-device testing is intentionally deferred until these software and security gates are complete. CI/emulator is not a substitute for the eventual physical-device matrix.
+
+
+## Follow-up verification and JNI boundary correction — 2026-11-27 22:25 +08:00
+
+- Live PR metadata confirmed latest pre-correction source head `f0b221888acef807ec2f4196b747a302582ff980`.
+- Exact-head CI on that source: Rust Run #129 PASS; cross-platform Run #88 PASS; Android Vault Run #154 PASS. All three workflows completed successfully; Android included 16 KB JNI build, app assembly/unit tests, and API 36 emulator Vault bridge. This does not close physical-device or end-to-end secure capture gates.
+- Source audit found a JNI signed-to-unsigned validation gap in `nativePushEvent`: negative Java `jint/jlong` fields could be cast to large unsigned ABI values before rejection. Corrected by validating supported event type 1–5, positive sequence/timestamp/epoch, and nonnegative detail code before conversion.
+- Added Rust unit tests for accepted event metadata, negative-value rejection, and unknown event types. Implementation commit: `95028ef2711d1825601c4df5a6f72283aa2f946b`; tests commit: `3424bbe58e3a0fde9de9db764d02fbbc7f1eff73`.
+- Latest head after correction: `3424bbe58e3a0fde9de9db764d02fbbc7f1eff73`. GitHub check-runs and workflow-run queries returned zero records for this exact SHA at the time of this update. Therefore the JNI correction and new tests are **NOT VERIFIED by CI yet**; prior Run #129/#88/#154 do not attest this new head.
+- Android `CaptureForegroundService.kt` on PR #4 still writes plaintext app-private WAV directly and does not instantiate the JNI queue. The JNI adapter exists, but actual AudioRecord producer/consumer integration is still open. Do not call the capture path production-secure.
+- Remaining release blockers: bounded queue integration with AudioRecord and controlled backpressure; canonical WAV writer; Vault-encrypted output; SQJ journal/checkpoint/finalization/hash; durable promotion/recovery; crash-cut/ENOSPC/force-stop tests; recovery/integrity UI; final exact-head CI and required device matrix.
+
+
+## AudioRecord → native queue integration checkpoint — 2026-11-27 22:32 +08:00
+
+- Integrated Android `AudioRecord` producer into `JniCaptureQueue` in PR #5; direct file writes were removed from the capture thread.
+- Added `CaptureQueuePump`: single consumer drains PCM and metadata event ring, validates sample format/rate, capture epoch, sequence and frame-index continuity, then writes to the current WAV staging sink. Producer uses a reusable direct buffer; native queue remains fixed-capacity. Consumer parks briefly when idle and is unparked on successful submit.
+- Producer and consumer sequence/frame counters are independent (corrected before the current CI head); queue failures stop capture and preserve the partial artifact rather than marking the take successful.
+- Exact integration source head `8049e6fb234fc16fcc16da19cbd72cbf33320633`: Rust Run #140 (`46016618916`) **PASS**; cross-platform Run #99 (`46016618871`) **IN PROGRESS**; Android Run #165 (`46016618940`) **PENDING** with no job provisioned at last poll. A prior Android run #158 is still executing on earlier head `1ffa277ea47ce59d9ef0d53d400a73be2af45679` and cannot attest the integrated service.
+- This integration does **not** make the capture path production-secure: the consumer still writes plaintext app-private WAV staging. SQVE Vault encryption, SQJ durable event/checkpoint, durable promotion/recovery, crash/ENOSPC/force-stop tests, and recovery/integrity UI remain release blockers.
+- The queue is fail-closed on producer contention/overflow; no real-time physical-device performance or losslessness claim is made before measurement and device testing.
+- The evidence update creates a new commit, so its exact-head CI must also pass before this slice is accepted.
+
+
+## Exact-head CI closure for AudioRecord→native queue slice — 2026-11-27
+
+- Current integrated Android source head: `77b0a6d452487105472c0f01df5b6124d430fe59`.
+- Rust Run #145 (`46017423473`) **PASS**.
+- Cross-platform Run #104 (`46017427127`) **PASS**; all six Linux/macOS/Windows Rust and KMP jobs succeeded.
+- Android Run #170 (`46017423435`) **PASS**; 16 KB JNI build, Vault adapter host tests, app assembly/unit tests, and API 36 native Vault bridge all succeeded on this exact head.
+- This confirms build/CI integration only. It does not exercise real microphone/audio-route behavior, queue contention/overflow under sustained hardware capture, or physical device acceptance.
+- This head still uses plaintext app-private WAV staging as the consumer sink. Vault finalization, SQJ event durability, atomic encrypted promotion/recovery, crash/ENOSPC/force-stop recovery and UI remain release blockers.
+- Evidence update commit will advance the branch head and requires a fresh exact-head CI run.
+
+
+## Latest exact-head verification — 2026-11-27 14:47 UTC
+
+This checkpoint supersedes prior queued/pending Android status entries for the same current PR head.
+
+- PR #5 exact source SHA: `8d81411310990262ffef723a57f0c144faf01793`.
+- Rust contract Run #153: **PASS**.
+- Cross-platform Run #112: **PASS** (all six Rust/KMP jobs).
+- Android Vault Run #178: **PASS** (JNI 16 KB alignment, Vault host contracts, app assembly/unit tests, API 36 emulator native Vault bridge).
+- GitHub Actions API confirms all three runs completed successfully for this exact SHA.
+- This is CI/build verification, not physical-device acceptance or release sign-off. B5 still fails its release gate while secure Vault/SQJ finalization and durable recovery are not connected end-to-end and the consumer sink is plaintext app-private WAV.
+
+
+## Reconciled exact-head CI — 2026-11-27 23:xx UTC
+
+- Live GitHub Actions API verification resolved the prior pending-run status. Current PR #5/#6 shared B5 source head at this checkpoint: `01a3501b9ddacb4a73ee5b37ad3baee2574c89c0`.
+- Rust contract Run #161 (`46023778553`) **PASS**; cross-platform matrix Run #120 (`46023778521`) **PASS**; Android Vault contract Run #186 (`46023778575`) **PASS**; PR-triggered Android Run #187 (`46023790335`) **PASS**. Each is completed/successful and references the exact source SHA.
+- B5 implementation-slice CI wait is **CLOSED** for this SHA. CI does not close secure Vault/SQJ finalization, encrypted durable promotion/recovery, crash/ENOSPC/force-stop tests, or physical-device acceptance. The app capture consumer remains plaintext staging in this prototype; do not classify it as production-secure.
+- The following evidence-only commit advances the branch and requires fresh exact-head CI. PR #5 and PR #6 remain draft/open/unmerged.
+
+
+## Exact-head CI verification — 2026-11-28 (UTC)
+
+- Current B5 source/evidence SHA before this refresh: `1841a0b9411b0a0e1530cc4f8ab64672c886e38a`.
+- Rust contract Run #163 (`46107684334`): **PASS**.
+- Cross-platform matrix Run #122 (`46107684245`): **PASS**.
+- Android Vault contract Run #190 (`46107684282`): **PASS**.
+- PR-triggered Android Vault Run #189 (`46107683486`): **PASS**.
+- All four GitHub Actions runs are completed/successful on the exact same head SHA. The CI wait for this B5 source slice is closed for that commit; this refresh itself advances the branch and must receive fresh exact-head CI.
+
+## Source reconciliation at this checkpoint
+
+- The latest source now **does** wire Android `AudioRecord` → reusable direct PCM buffer → bounded native JNI queue → single-consumer `CaptureQueuePump` → WAV staging. Earlier statements in this document saying the JNI adapter/producer integration was absent are historical and superseded by the implementation checkpoints above.
+- The queue/pump validates metadata continuity and drains before native finish. The consumer still writes **plaintext app-private WAV staging**; this is not Vault-secure or release-ready output.
+- Outstanding implementation: replace the plaintext sink with the canonical Rust/Vault encrypted writer; persist capture/integrity events and session checkpoints to SQJ; hash and idempotently finalize; use durable-store stage/verify/promote/reconcile; implement startup recovery and user-visible integrity/recovery states; add fault-injection for sink errors, queue overrun, process death, force-stop and ENOSPC. CI and emulator runs do not satisfy physical-device acceptance.

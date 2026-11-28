@@ -5,11 +5,14 @@ on:
     branches:
       - batch-1-foundation
       - b4-hardening-approved-foundation
+      - android-b5-capture
     paths:
       - Cargo.toml
       - Cargo.lock
       - rust-toolchain.toml
       - core/**
+      - protocols/native-abi/**
+      - tests/contract/**
       - shared/domain/**
       - shared/capability-system/**
       - .github/workflows/rust-contract-validation.yml
@@ -20,11 +23,15 @@ on:
   pull_request:
     branches:
       - main
+      - b4-hardening-approved-foundation
+      - android-b5-capture
     paths:
       - Cargo.toml
       - Cargo.lock
       - rust-toolchain.toml
       - core/**
+      - protocols/native-abi/**
+      - tests/contract/**
       - .github/workflows/rust-contract-validation.yml
       - docs/architecture/**
       - docs/decisions/**
@@ -59,6 +66,13 @@ jobs:
         run: cargo metadata --locked --format-version 1 > "$RUNNER_TEMP/cargo-metadata.json"
       - name: Check Rust formatting
         run: cargo fmt --all -- --check
+      - name: Compile and execute native ABI C and C++ layout contracts
+        shell: bash
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -Iprotocols/native-abi tests/contract/native_abi_layout.c -o "$RUNNER_TEMP/native-abi-c"
+          "$RUNNER_TEMP/native-abi-c"
+          c++ -std=c++17 -Wall -Wextra -Werror -Iprotocols/native-abi tests/contract/native_abi_layout.cpp -o "$RUNNER_TEMP/native-abi-cpp"
+          "$RUNNER_TEMP/native-abi-cpp"
       - name: Workspace tests
         run: cargo test --workspace --locked
       - name: Clippy
