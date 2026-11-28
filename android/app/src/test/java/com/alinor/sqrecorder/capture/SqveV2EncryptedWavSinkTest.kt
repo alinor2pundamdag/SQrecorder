@@ -1,6 +1,7 @@
 package com.alinor.sqrecorder.capture
 
 import android.util.Base64
+import java.io.File
 import com.alinor.sqrecorder.domain.VaultFileKeyHandle
 import com.alinor.sqrecorder.domain.VaultV2RecipientWrap
 import com.alinor.sqrecorder.domain.VaultV2WrapSuite
