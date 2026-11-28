@@ -108,3 +108,11 @@ This checkpoint supersedes prior queued/pending Android status entries for the s
 - Android Vault Run #178: **PASS** (JNI 16 KB alignment, Vault host contracts, app assembly/unit tests, API 36 emulator native Vault bridge).
 - GitHub Actions API confirms all three runs completed successfully for this exact SHA.
 - This is CI/build verification, not physical-device acceptance or release sign-off. B5 still fails its release gate while secure Vault/SQJ finalization and durable recovery are not connected end-to-end and the consumer sink is plaintext app-private WAV.
+
+
+## Reconciled exact-head CI — 2026-11-27 23:xx UTC
+
+- Live GitHub Actions API verification resolved the prior pending-run status. Current PR #5/#6 shared B5 source head at this checkpoint: `01a3501b9ddacb4a73ee5b37ad3baee2574c89c0`.
+- Rust contract Run #161 (`46023778553`) **PASS**; cross-platform matrix Run #120 (`46023778521`) **PASS**; Android Vault contract Run #186 (`46023778575`) **PASS**; PR-triggered Android Run #187 (`46023790335`) **PASS**. Each is completed/successful and references the exact source SHA.
+- B5 implementation-slice CI wait is **CLOSED** for this SHA. CI does not close secure Vault/SQJ finalization, encrypted durable promotion/recovery, crash/ENOSPC/force-stop tests, or physical-device acceptance. The app capture consumer remains plaintext staging in this prototype; do not classify it as production-secure.
+- The following evidence-only commit advances the branch and requires fresh exact-head CI. PR #5 and PR #6 remain draft/open/unmerged.
