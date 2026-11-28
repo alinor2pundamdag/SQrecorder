@@ -1,16 +1,14 @@
 package com.alinor.sqrecorder.capture
 
 import android.util.Log
-import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.LockSupport
 
 /**
- * Single-consumer bridge between the native bounded queue and the current WAV
- * staging sink. This is an integration slice only: the sink is still plaintext
- * app-private staging and must be replaced by the Vault/SQJ finalization path.
+ * Single-consumer bridge between the native bounded queue and the encrypted
+ * V2 WAV sink. Plaintext PCM exists only in bounded memory, not in a staging file.
  *
  * AudioRecord's producer never waits for disk I/O; native submit is bounded and
  * fail-closed. Any queue/sink error is surfaced to the capture owner, which
@@ -19,7 +17,7 @@ import java.util.concurrent.locks.LockSupport
 internal class CaptureQueuePump(
     private val queue: JniCaptureQueue,
     private val sampleRateHz: Int,
-    private val output: RandomAccessFile,
+    private val output: SqveV2EncryptedWavSink,
     private val captureEpoch: Long,
     private val onConsumerFailure: (Throwable) -> Unit = {},
 ) : AutoCloseable {
@@ -122,13 +120,13 @@ internal class CaptureQueuePump(
                 check(byteCount <= stagingBytes.size.toLong() && byteCount % 2L == 0L)
                 pcm.position(0)
                 pcm.get(stagingBytes, 0, byteCount.toInt())
-                output.write(stagingBytes, 0, byteCount.toInt())
+                output.writePcm(stagingBytes, 0, byteCount.toInt())
                 consumerFrameIndex = Math.addExact(consumerFrameIndex, metadata.frameCount.toLong())
                 consumerSequence = Math.addExact(consumerSequence, 1)
             }
         } catch (failure: Throwable) {
             val firstFailure = consumerFailure.compareAndSet(null, failure)
-            Log.e(TAG, "Bounded PCM sink failed; staging artifact must remain recoverable", failure)
+            Log.e(TAG, "Bounded encrypted PCM sink failed; encrypted partial must remain recoverable", failure)
             // Notify capture control immediately. The producer may be blocked in
             // AudioRecord.READ_BLOCKING; stopping it is required to unblock read
             // and enter the single capture-thread drain/finalization path.
