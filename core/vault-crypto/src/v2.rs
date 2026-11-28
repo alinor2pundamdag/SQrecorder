@@ -198,6 +198,11 @@ fn validate(header: &Header) -> Result<(), Error> {
         {
             return Err(Error::UnsupportedSuite);
         }
+        if item.suite == WRAP_SUITE_ECDH_P256_HKDF_SHA256_AES_GCM
+            && parse_ecdh_wrapped_dek(&item.wrapped).is_err()
+        {
+            return Err(Error::InvalidRecipient);
+        }
         prior = Some(&item.key_id);
     }
     Ok(())
@@ -632,7 +637,12 @@ mod tests {
             recipients: vec![RecipientWrap {
                 suite: WRAP_SUITE_ECDH_P256_HKDF_SHA256_AES_GCM,
                 key_id: "device:primary".into(),
-                wrapped: vec![0x77; 64],
+                wrapped: encode_ecdh_wrapped_dek(
+                    &[0x30; 91],
+                    &[0x77; 12],
+                    &[0x77; 48],
+                )
+                .unwrap(),
             }],
         }
     }
