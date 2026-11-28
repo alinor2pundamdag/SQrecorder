@@ -127,6 +127,33 @@ pub enum Error {
     RandomUnavailable,
 }
 impl Header {
+    /// Create a V2 header for live capture where final WAV length is not known.
+    pub fn new_random_streaming(recipients: Vec<RecipientWrap>) -> Result<Self, Error> {
+        let mut file_id = [0u8; 16];
+        let mut file_salt = [0u8; 32];
+        let mut nonce_prefix = [0u8; 4];
+        if getrandom::fill(&mut file_id).is_err()
+            || getrandom::fill(&mut file_salt).is_err()
+            || getrandom::fill(&mut nonce_prefix).is_err()
+        {
+            file_id.zeroize();
+            file_salt.zeroize();
+            nonce_prefix.zeroize();
+            return Err(Error::RandomUnavailable);
+        }
+        let header = Self {
+            file_id,
+            file_salt,
+            nonce_prefix,
+            plaintext_len: u64::MAX,
+            chunk_count: u64::MAX,
+            streaming: true,
+            recipients,
+        };
+        validate(&header)?;
+        Ok(header)
+    }
+
     /// Build a fresh per-file V2 header using the OS CSPRNG. DEK generation
     /// remains separately owned by VaultFileKey::generate().
     pub fn new_random(plaintext_len: u64, recipients: Vec<RecipientWrap>) -> Result<Self, Error> {
@@ -472,6 +499,94 @@ impl<W: Write> Writer<W> {
         footer[16..24].copy_from_slice(&self.header.plaintext_len.to_be_bytes());
         footer[24..56].copy_from_slice(&digest);
         self.output.write_all(&footer).map_err(|_| Error::Write)?;
+        Ok(self.output)
+    }
+}
+
+
+pub struct StreamingWriter<W: Write> {
+    output: W,
+    key: VaultFileKey,
+    header: Header,
+    hash: Sha256,
+    buffer: Vec<u8>,
+    buffered: usize,
+    next_index: u64,
+    written: u64,
+}
+
+impl<W: Write> StreamingWriter<W> {
+    pub fn new(mut output: W, header: Header, key: VaultFileKey) -> Result<Self, Error> {
+        if !header.streaming {
+            return Err(Error::InvalidHeader);
+        }
+        let encoded = serialize_header(&header, &key)?;
+        output.write_all(&encoded).map_err(|_| Error::Write)?;
+        let mut hash = Sha256::new();
+        hash.update(&encoded);
+        let mut buffer = Vec::new();
+        buffer.try_reserve_exact(CHUNK_BYTES).map_err(|_| Error::Allocation)?;
+        buffer.resize(CHUNK_BYTES, 0);
+        Ok(Self {
+            output, key, header, hash, buffer, buffered: 0, next_index: 0, written: 0,
+        })
+    }
+
+    pub fn write_plaintext(&mut self, mut bytes: &[u8]) -> Result<(), Error> {
+        while !bytes.is_empty() {
+            let available = CHUNK_BYTES - self.buffered;
+            let take = available.min(bytes.len());
+            self.buffer[self.buffered..self.buffered + take].copy_from_slice(&bytes[..take]);
+            self.buffered += take;
+            bytes = &bytes[take..];
+            if self.buffered == CHUNK_BYTES {
+                self.emit_chunk(CHUNK_BYTES)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn emit_chunk(&mut self, size: usize) -> Result<(), Error> {
+        if size == 0 || size > CHUNK_BYTES || self.next_index == u64::MAX {
+            return Err(Error::ChunkLength);
+        }
+        let index = self.next_index;
+        let aad = chunk_aad(&self.header, index, size as u32);
+        let nonce = chunk_nonce(self.header.nonce_prefix, index);
+        let tag = encrypt_chunk_in_place(&self.key, nonce, &aad, &mut self.buffer[..size])?;
+        let cipher_len = u32::try_from(size + GCM_TAG_BYTES).map_err(|_| Error::LengthOverflow)?;
+        let mut record = [0u8; 20];
+        record[..4].copy_from_slice(b"SQVC");
+        record[4..12].copy_from_slice(&index.to_be_bytes());
+        record[12..16].copy_from_slice(&(size as u32).to_be_bytes());
+        record[16..20].copy_from_slice(&cipher_len.to_be_bytes());
+        self.output.write_all(&record).map_err(|_| Error::Write)?;
+        self.output.write_all(&self.buffer[..size]).map_err(|_| Error::Write)?;
+        self.output.write_all(&tag).map_err(|_| Error::Write)?;
+        self.hash.update(record);
+        self.hash.update(&self.buffer[..size]);
+        self.hash.update(tag);
+        self.written = self.written.checked_add(size as u64).ok_or(Error::LengthOverflow)?;
+        self.next_index = self.next_index.checked_add(1).ok_or(Error::LengthOverflow)?;
+        self.buffer[..size].zeroize();
+        self.buffered = 0;
+        Ok(())
+    }
+
+    pub fn finish(mut self) -> Result<W, Error> {
+        if self.buffered > 0 {
+            self.emit_chunk(self.buffered)?;
+        }
+        let digest = self.hash.finalize();
+        let mut footer = [0u8; FOOTER_BYTES];
+        footer[..4].copy_from_slice(b"SQVF");
+        footer[4..6].copy_from_slice(&VERSION.to_be_bytes());
+        footer[6..8].copy_from_slice(&(FOOTER_BYTES as u16).to_be_bytes());
+        footer[8..16].copy_from_slice(&self.next_index.to_be_bytes());
+        footer[16..24].copy_from_slice(&self.written.to_be_bytes());
+        footer[24..56].copy_from_slice(&digest);
+        self.output.write_all(&footer).map_err(|_| Error::Write)?;
+        self.buffer.zeroize();
         Ok(self.output)
     }
 }
