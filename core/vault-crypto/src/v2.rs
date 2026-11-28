@@ -1002,6 +1002,15 @@ mod tests {
         writer.write_plaintext(b"stream-").unwrap();
         writer.write_plaintext(b"capture").unwrap();
         let encoded = writer.finish().unwrap();
+        // Independently generated Python hashlib/hmac + cryptography AESGCM
+        // vector for streaming flag/sentinels, SQVC framing and actual footer.
+        assert_eq!(
+            crate::sha256(&encoded),
+            [
+                0x45, 0xdf, 0x50, 0x3d, 0x98, 0x9d, 0xdd, 0xf1, 0x13, 0xca, 0x6d, 0xcc, 0x7b, 0x39, 0x3f, 0x7c,
+                0x5b, 0x14, 0x1e, 0x9e, 0xaa, 0xbd, 0xe1, 0xdf, 0x00, 0xf5, 0x40, 0x4c, 0xf2, 0x79, 0xd8, 0x86,
+            ]
+        );
         let mut reader = std::io::Cursor::new(encoded);
         let verify_key = VaultFileKey::from_bytes(&[0x66; 32]).unwrap();
         assert_eq!(
