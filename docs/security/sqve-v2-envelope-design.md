@@ -133,3 +133,8 @@ This pre-release profile addition enables encrypted live capture without plainte
 Android Keystore documents ECDH `PURPOSE_AGREE_KEY` as API 31+, and MGF1 digest selection for RSA OAEP as API 35+. To preserve the app's declared API 23 minimum without silently changing V2 parameters, V2 suite `0x0003` is explicitly defined for Android API 23–30: RSA-3072, OAEP digest SHA-256, MGF1 digest SHA-1 (the platform's documented default), empty OAEP label. The ciphertext is exactly 384 bytes. The key remains an Android Keystore-generated, authentication-required private key; only the public key is used to wrap.
 
 Suite 3 is a compatibility profile requiring independent cryptographic review and Android API 23 emulator/device conformance. It is not a downgrade to SQVE v1 and must never be mislabeled as suite 1. A provider must fail closed if it cannot enforce the exact RSA parameters.
+
+
+### Candidate verification record (2026-11-28)
+
+The controlled B4+B5 PR head was checked through GitHub Actions and commit-status APIs. The queried head had zero workflow runs and no reported commit statuses. This is an absence of CI evidence, not a passing or failing result. Re-run all relevant Rust, cross-platform and Android gates on the newly updated exact PR head; maintain draft/unmerged state until CI, recovery, device and independent-review gates are complete.
