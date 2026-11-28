@@ -2,7 +2,7 @@ name: SQRecorder cross-platform contract matrix
 
 on:
   push:
-    branches: [main, b4-hardening-approved-foundation, android-b5-capture]
+    branches: [main, b4-hardening-approved-foundation, android-b5-capture, b4-b5-controlled-validation-candidate]
     paths:
       - "shared/domain/**"
       - "shared/capability-system/**"
