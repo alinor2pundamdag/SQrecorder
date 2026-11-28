@@ -37,6 +37,53 @@ pub fn rename_write_through(
     }
 }
 
+/// Atomically promotes a new file without replacing an existing destination.
+#[cfg(windows)]
+pub fn rename_write_through_new(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> std::io::Result<()> {
+    use std::{iter::once, os::windows::ffi::OsStrExt};
+    use windows_sys::Win32::{
+        Foundation::GetLastError,
+        Storage::FileSystem::{MOVEFILE_WRITE_THROUGH, MoveFileExW},
+    };
+
+    let source_wide: Vec<u16> = source.as_os_str().encode_wide().chain(once(0)).collect();
+    let destination_wide: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(once(0))
+        .collect();
+    // SAFETY: paths are NUL-terminated UTF-16 buffers alive for the call.
+    // Omitting REPLACE_EXISTING is the atomic no-clobber guarantee.
+    let succeeded = unsafe {
+        MoveFileExW(
+            source_wide.as_ptr(),
+            destination_wide.as_ptr(),
+            MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if succeeded == 0 {
+        Err(std::io::Error::from_raw_os_error(
+            unsafe { GetLastError() } as i32
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(windows))]
+pub fn rename_write_through_new(
+    source: &std::path::Path,
+    destination: &std::path::Path,
+) -> std::io::Result<()> {
+    // Same-directory hard-link creation is atomic and fails if destination exists.
+    // Remove the stage name only after the destination link is durable in the FS.
+    std::fs::hard_link(source, destination)?;
+    std::fs::remove_file(source)
+}
+
 #[cfg(not(windows))]
 pub fn rename_write_through(
     source: &std::path::Path,

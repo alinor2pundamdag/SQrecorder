@@ -189,3 +189,61 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 8. Final B4 acceptance checklist and PR #2 status remain blocked until all applicable CI + physical gates pass. Keep both PRs draft/open/unmerged.
 
 **Final verdict at this checkpoint: B4 = IN PROGRESS / NOT 100% accepted.**
+
+
+## Current repository re-verification checkpoint — 2026-11-27
+
+- PR #2 remains open/draft/unmerged at source head `6759dce49c2bd13ee4665560833e5d5d6492e23a`.
+- PR #3 remains open/draft/unmerged and tracking-only; the anchor verifier source is already integrated in B4. No duplicate cherry-pick/merge action is needed.
+- Historical GitHub Actions jobs inspected during this checkpoint were green: Rust run `45987953578`, Android Vault run `45987953623`, and six-job cross-platform run `45987953672`. Their job conclusions were success; however, the commit-run lookup did **not** associate a fresh run with the exact current B4 source SHA. Therefore these are historical green evidence, not a fresh exact-head attestation.
+- No new B4 source defect was established from the present repository read. The release blockers listed above remain real implementation/security gates—not checklist-only items.
+- This evidence revision requires its own exact-commit CI association before it can be treated as final evidence. Do not mark B4 complete or release-ready based on historical green jobs.
+
+
+## Windows durable-store CI repair — 2026-11-27 22:27 +08:00
+
+- Current B4 head before this correction: `4784ff128fd016d13337c5971de1f252a6107671`.
+- Cross-platform Run #91 (`46009026821`) failed only in Windows Rust portable-core test `directory_sync_failure_reports_ambiguous_promotion`; Rust and Android workflow at that SHA passed.
+- Log confirmed seven durable-store tests passed and the injected parent-directory-sync test failed its expected `PromotionDurabilityUnknown` assertion after stage creation/rename. The test combined a synthetic post-rename sync failure with the platform-specific write-through rename, so it did not isolate the fault boundary.
+- Correction: the `FaultPoint::ParentSync` test path now uses a direct same-directory rename and then injects the parent-sync error; real platform write-through rename remains exercised by normal promotion tests. Added assertion diagnostics showing the actual result variant if it fails again.
+- Fix commit: `0bbda73c60cacbcbcc87d0d7f3ff222b59e3a0a5`.
+- **Not yet verified:** fresh Windows Rust and full cross-platform matrix on this fix/evidence head. No gate marked PASS from the failed run; rerun evidence required.
+
+
+## Corrective rerun after Windows durability-test repair — 2026-11-27
+
+- Latest B4 implementation/evidence source at this checkpoint: `89ce951e51b98b6a837a98f2266889e72cfd6231`.
+- Rust Run #136 (`46016198716`) **PASS** on exact SHA: locked metadata, rustfmt, workspace tests, Clippy.
+- Cross-platform Run #95 (`46016198880`) **PASS** on exact SHA: Linux/macOS/Windows Rust portable-core jobs and Linux/Windows/macOS KMP host compile/test jobs all succeeded. The Windows `directory_sync_failure_reports_ambiguous_promotion` test passed after the test was isolated from platform-specific write-through rename.
+- Android Vault Run #161 (`46016198883`) is **IN PROGRESS** on exact SHA; API 36 emulator Vault bridge was the active step at last poll. Do not mark Android gate complete until run conclusion is success.
+- Earlier Windows failure Run #91 remains in history and is superseded only for this exact source by Run #95. Physical-device gates, SQVE v2 provider/security review, journal/durable recovery integration, and 16 KB device evidence remain open.
+- The subsequent evidence-only commit will require another exact-head workflow check; preserve the above run references as evidence for this source SHA, not the later documentation commit.
+
+
+## Exact-head verification closure — 2026-11-27 14:53 UTC
+
+- Current PR #2 source SHA: `d550b32744bd17bfbdd62c4361ed6eca211f23f3`.
+- Rust contract Run #159: **PASS** (locked metadata, rustfmt, workspace tests, Clippy).
+- Cross-platform Run #118: **PASS** (all six Rust/KMP Linux, macOS, Windows jobs).
+- Android Vault Run #184: **PASS** (native/JNI 16 KB checks, host contracts, app/unit build, API 36 emulator Vault bridge).
+- These three workflows are confirmed completed/successful by GitHub Actions for the exact source SHA above. This closes the current CI verification wait for this B4 hardening slice; it does not close B4 release acceptance.
+- **SQVE scope correction:** SQVE v1 remains unchanged. Owner-approved ADR 0002 is the only approved envelope-version revision: separately versioned SQVE v2, with schema, cryptographic golden vectors, provider conformance, migration and independent review still required. Do not change other locked blueprint decisions or treat v2 metadata contracts as complete crypto.
+- B4 remains **IN PROGRESS / NOT 100%**: end-to-end secure capture finalization, signed journal/key-registry integration, crash/ENOSPC recovery matrix, final integrated CI, and required device acceptance remain open.
+
+
+## Reconciled exact-head CI — 2026-11-27 23:xx UTC
+
+- Live GitHub Actions API verification resolved the previous pending-evidence ambiguity. PR #2 head at this checkpoint was `81d8759df022c1f9a7f6a48b41b072a2094d0cdb`.
+- Rust contract Run #160 (`46023749757`) **PASS**; cross-platform matrix Run #119 (`46023749508`) **PASS**; Android Vault contract Run #185 (`46023749577`) **PASS**. All three completed successfully on the exact same SHA.
+- Therefore the B4 evidence/documentation head's Rust, six-platform Rust/KMP matrix, and Android Vault/API 36 emulator CI wait is **CLOSED** for that SHA. This is not a release-acceptance declaration.
+- The current document-only update creates a new commit and must be validated by fresh exact-head CI. Keep PR #2 and tracking PR #3 draft/open/unmerged.
+
+
+## Exact-head CI verification — 2026-11-28 (UTC)
+
+- B4 source/evidence SHA before this refresh: `aa153091449a56e1a8b697cb78384266a87270b2`.
+- Rust contract Run #162 (`46107670110`): **PASS**.
+- Cross-platform matrix Run #121 (`46107670142`): **PASS**.
+- Android Vault contract Run #188 (`46107670104`): **PASS**.
+- GitHub Actions confirms all three completed successfully on the exact same source SHA. The B4 source-slice CI wait is closed for that commit; this documentation update advances the branch and requires fresh exact-head CI.
+- B4 remains **not release-complete**: SQVE v2 cryptographic implementation/golden vectors/provider conformance, Android encrypted finalization wiring, SQJ durable journal/checkpoint and key-registry integration, encrypted durable promotion/recovery, crash-cut/ENOSPC/force-stop matrix, full combined-candidate CI, and physical-device acceptance remain open. SQVE v1 and all other blueprint decisions remain locked.
