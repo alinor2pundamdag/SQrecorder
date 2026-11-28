@@ -1128,11 +1128,18 @@ mod tests {
         let header = Header::new_random_streaming(sample().recipients).unwrap();
         let plaintext = vec![0x5c; CHUNK_BYTES + 1];
         let mut writer = StreamingWriter::new(Vec::new(), header.clone(), key).unwrap();
-        writer.write_plaintext(&plaintext[..CHUNK_BYTES - 13]).unwrap();
-        writer.write_plaintext(&plaintext[CHUNK_BYTES - 13..]).unwrap();
+        writer
+            .write_plaintext(&plaintext[..CHUNK_BYTES - 13])
+            .unwrap();
+        writer
+            .write_plaintext(&plaintext[CHUNK_BYTES - 13..])
+            .unwrap();
         let encoded = writer.finish().unwrap();
         let mut reader = std::io::Cursor::new(encoded);
         let verify_key = VaultFileKey::from_bytes(&[0x6a; 32]).unwrap();
-        assert_eq!(verify_authenticated_stream(&mut reader, &verify_key).unwrap(), header);
+        assert_eq!(
+            verify_authenticated_stream(&mut reader, &verify_key).unwrap(),
+            header
+        );
     }
 }
