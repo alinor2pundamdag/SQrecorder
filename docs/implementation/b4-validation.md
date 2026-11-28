@@ -287,3 +287,14 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Commits: verifier `16241e828fa1529ad124a0b10b3269e5c434de0f`; test `85f14fab1bfce40297bb70b5b3386bd94148fca1`.
 - **CI: NOT RUN / NOT VERIFIED** for current SHA `85f14fab1bfce40297bb70b5b3386bd94148fca1`: Actions workflow lookup returned zero runs and combined commit status returned no checks. The connected GitHub actions expose failed-job rerun, but not workflow dispatch; no run was triggered here. Do not claim this Kotlin patch compiled or passed.
 - PR #7 remains draft/open/unmerged. This source audit is a correctness hardening delta, not a gate closure. Exact-head CI, emulator and physical-device crash/storage testing, authenticated recovery/reconciliation, independent crypto review, and full B4/B5 acceptance remain open.
+
+
+## Follow-on integration audit — SQJ timestamp ordering and orphan recovery — 2026-11-28
+
+- Found a real ordering edge in Android capture: native integrity events are consumed/drained after the lifecycle thread can append `CAPTURE_STOP_REQUESTED`. The native event's original monotonic timestamp may therefore be earlier than the journal's latest record timestamp, causing the SQJ writer to reject an otherwise valid drain append and fail capture finalization.
+- Corrected the append contract: SQJ record timestamp uses append-time `SystemClock.elapsedRealtimeNanos()`; original native event time is retained as the explicit `eventTimestampNs` payload field. This preserves source evidence while maintaining nondecreasing durable journal record order.
+- Startup recovery inspection previously logged an unfinished session only when a partial/final artifact existed. It now reports every valid non-finalized journal, including a crash after durable session creation but before stage creation; finalized journal + missing final or lingering partial is also reported as an artifact/journal mismatch. Still read-only; no auto-delete, truncate, decrypt or promote.
+- Hardened encrypted sink range validation against signed-int overflow in `offset + length`, and zeroizes temporary header-MAC input/actual/stored buffers on both success and failure paths.
+- Added a host test that rejects journal timestamp regression before writing bytes, then confirms the next valid append preserves a valid sequence/digest chain; added a sink test for overflowed PCM offset.
+- Commits: service/recovery `1d2d86b70f006fcbda05b369c3d5e05a1e2ea6d3`; sink `b338609dc6f63dce991f11ffa7930dcb969255df`; sink test `a500b84040c6f66c3ed0df1f6a905924de8d5e67`; journal test `adf90909c88c0b989c29576e56731c1598d1a3cd`.
+- **Exact-head CI not run/not verified** at implementation head `adf90909c88c0b989c29576e56731c1598d1a3cd`: workflow lookup returned zero PR runs and combined status had no checks. No compilation/test pass is claimed. These fixes reduce failure/recovery ambiguity but do not close the authenticated recovery, fault-matrix, physical-device or release gates.
