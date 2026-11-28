@@ -38,11 +38,17 @@ internal class SqjDurableCheckpointStore {
         val encoded = encodeCanonicalSqac(anchor)
         val target = File(checkpointDirectory, "sqac-${anchor.sequence.toString().padStart(20, '0')}.checkpoint")
         if (target.exists()) {
-            check(target.length() == encoded.size.toLong()) {
+            val existing = try {
+                readCheckpointBounded(target)
+            } catch (failure: Exception) {
+                encoded.fill(0)
+                throw IllegalStateException("Existing checkpoint is malformed; preserve it", failure)
+            }
+            check(existing.size == encoded.size) {
+                existing.fill(0)
                 encoded.fill(0)
                 error("Existing checkpoint length conflicts with canonical encoding; preserve it")
             }
-            val existing = target.readBytes()
             val identical = existing.contentEquals(encoded)
             existing.fill(0)
             encoded.fill(0)
@@ -94,11 +100,8 @@ internal class SqjDurableCheckpointStore {
         checkpointFile: File,
         verifier: AndroidJournalAnchorVerifier,
     ): SqacVerificationResult {
-        if (!checkpointFile.isFile || checkpointFile.length() !in 69L..340L) {
-            return SqacVerificationResult.INVALID_CHECKPOINT
-        }
         val bytes = try {
-            checkpointFile.readBytes()
+            readCheckpointBounded(checkpointFile)
         } catch (_: Exception) {
             return SqacVerificationResult.INVALID_CHECKPOINT
         }
@@ -187,6 +190,19 @@ internal class SqjDurableCheckpointStore {
         }
         return output.toString()
     }
+
+
+    private fun readCheckpointBounded(file: File): ByteArray =
+        FileChannel.open(file.toPath(), StandardOpenOption.READ).use { channel ->
+            val size = channel.size()
+            check(size in 69L..340L) { "SQAC size outside canonical bounds" }
+            val buffer = ByteBuffer.allocate(size.toInt())
+            while (buffer.hasRemaining()) {
+                val count = channel.read(buffer)
+                check(count > 0) { "SQAC read made no progress" }
+            }
+            buffer.array()
+        }
 
     private fun readTerminalDigest(file: File): ByteArray {
         val length = file.length()
