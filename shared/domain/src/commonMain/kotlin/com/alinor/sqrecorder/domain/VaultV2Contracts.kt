@@ -16,6 +16,7 @@ public enum class VaultV2CipherSuite {
 public enum class VaultV2WrapSuite {
     RSA_OAEP_SHA256_MGF1_SHA256_EMPTY_LABEL,
     ECDH_P256_HKDF_SHA256_AES256_GCM,
+    RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL,
 }
 
 public data class VaultV2RecipientWrap(
@@ -112,6 +113,12 @@ public data class VaultV2EnvelopeContract(
                         recipient.wrapNonceHex != null
                     ) return VaultV2ContractError.INVALID_RSA_WRAP
                 }
+                VaultV2WrapSuite.RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL -> {
+                    if (recipient.wrappedDekBase64.length != RSA3072_CIPHERTEXT_BASE64_LENGTH ||
+                        recipient.ephemeralPublicKeyBase64 != null ||
+                        recipient.wrapNonceHex != null
+                    ) return VaultV2ContractError.INVALID_RSA_WRAP
+                }
                 VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM -> {
                     if (recipient.wrappedDekBase64.length < MIN_ECDH_WRAPPED_DEK_BASE64_LENGTH ||
                         recipient.ephemeralPublicKeyBase64.isNullOrEmpty() ||
@@ -132,6 +139,7 @@ public data class VaultV2EnvelopeContract(
         public const val GCM_NONCE_BYTES: Int = 12
         public const val CHUNK_SIZE_BYTES: Int = 1_048_576
         public const val MIN_RSA_2048_CIPHERTEXT_BASE64: Int = 344
+        public const val RSA3072_CIPHERTEXT_BASE64_LENGTH: Int = 512
         public const val MIN_ECDH_WRAPPED_DEK_BASE64_LENGTH: Int = 84
         public const val MAX_WRAPPED_DEK_BASE64_BYTES: Int = 16_384
         public const val MAX_RECIPIENTS: Int = 16
