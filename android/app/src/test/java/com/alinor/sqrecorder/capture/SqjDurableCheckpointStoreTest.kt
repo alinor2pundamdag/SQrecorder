@@ -189,6 +189,27 @@ class SqjDurableCheckpointStoreTest {
         }
     }
 
+
+    @Test
+    fun rejectsOversizedCheckpointBeforeReadOrSignatureWork() {
+        val root = createTempDir(prefix = "sqrec-sqac-large-")
+        val journal = File(root, "journal.sqj")
+        val oversized = File(root, "oversized.checkpoint")
+        try {
+            CaptureSessionJournal.create(journal, UUID.randomUUID()).use { writer ->
+                writer.append(CaptureSessionJournal.RECORD_SESSION_CREATED, 1L)
+            }
+            oversized.writeBytes(ByteArray(1024 * 1024) { 0x41 })
+            val verifier = AndroidJournalAnchorVerifier(JournalAnchorPublicKeyResolver { null })
+            assertEquals(
+                SqacVerificationResult.INVALID_CHECKPOINT,
+                SqjDurableCheckpointStore().verifyPersisted(journal, oversized, verifier),
+            )
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     private fun fixture(
         sequence: Long,
         digestHex: String,
