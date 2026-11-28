@@ -284,21 +284,25 @@ pub fn staging_path(d: &Path, t: &str) -> Result<PathBuf, StoreError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{
-        fs,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static TEST_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
     fn td() -> PathBuf {
-        let p = std::env::temp_dir().join(format!(
-            "sqstage-{}-{}",
-            std::process::id(),
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&p).unwrap();
-        p
+        loop {
+            let sequence = TEST_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "sqstage-test-{}-{sequence}",
+                std::process::id(),
+            ));
+            // Exclusive creation prevents parallel tests from sharing a directory,
+            // and therefore one test's cleanup cannot delete another test's fixture.
+            match fs::create_dir(&path) {
+                Ok(()) => return path,
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("create isolated durable-store test directory: {error}"),
+            }
+        }
     }
     #[test]
     fn promotes_then_journal_commits() {
