@@ -16,7 +16,7 @@ public class RecorderActivity : Activity() {
  override fun onCreate(savedInstanceState: Bundle?) {
   super.onCreate(savedInstanceState)
   status = TextView(this).apply {
-   text = "SQRecorder • Offline audio capture\nWAV · 48 kHz mono PCM"
+   text = "SQRecorder • Offline encrypted audio capture\nSQVE v2 · WAV payload · 48 kHz mono PCM"
    textSize = 18f; contentDescription = "Recorder status and capture format"
    setPadding(32, 32, 32, 24)
   }
@@ -25,7 +25,7 @@ public class RecorderActivity : Activity() {
    text = "Stop and finalize"
    setOnClickListener {
     startService(Intent(this@RecorderActivity, CaptureForegroundService::class.java).setAction(CaptureForegroundService.ACTION_STOP))
-    status.text = "Stop requested · finalizing WAV"
+    status.text = "Stop requested · finalizing encrypted SQVE"
    }
   }
   setContentView(LinearLayout(this).apply {
@@ -40,6 +40,10 @@ public class RecorderActivity : Activity() {
   startCapture()
  }
  private fun startCapture() {
+  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+   status.text = "Encrypted capture requires Android 12/API 31 or newer. Plaintext fallback is disabled."
+   return
+  }
   val intent = Intent(this, CaptureForegroundService::class.java).setAction(CaptureForegroundService.ACTION_START)
   try {
    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(intent) else startService(intent)
