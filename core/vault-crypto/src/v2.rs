@@ -577,13 +577,13 @@ impl<W: Write> StreamingWriter<W> {
         record[4..12].copy_from_slice(&index.to_be_bytes());
         record[12..16].copy_from_slice(&(size as u32).to_be_bytes());
         record[16..20].copy_from_slice(&cipher_len.to_be_bytes());
-        self.output.write_all(&record).map_err(|_| Error::Write)?;
+        self.output.as_mut().ok_or(Error::Write)?.write_all(&record).map_err(|_| Error::Write)?;
         self.output
             .as_mut()
             .ok_or(Error::Write)?
             .write_all(&self.buffer[..size])
             .map_err(|_| Error::Write)?;
-        self.output.write_all(&tag).map_err(|_| Error::Write)?;
+        self.output.as_mut().ok_or(Error::Write)?.write_all(&tag).map_err(|_| Error::Write)?;
         self.hash.update(record);
         self.hash.update(&self.buffer[..size]);
         self.hash.update(tag);
