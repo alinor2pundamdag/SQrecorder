@@ -308,3 +308,11 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Commits: scanner `fb0824a89ab9417d437224d81d88c3b7f2d2dc20`; lifecycle tests `53b040d370debc9ac1832930b41a55aac5e03300`; terminal-event tests `765e27918701d61b50ff9b2551e88701cc1a5d54`.
 - This is fail-closed scanner hardening, not authenticated recovery. The Android SQJ remains unkeyed SHA-256 chained metadata, read-only startup scan; signed anchor/checkpoint binding, decrypt-and-verify recovery, journal resume/idempotent finalization, and crash-cut tests remain release blockers.
 - Exact-head CI must run on the integrated candidate after this change. No compile/test pass is claimed from source edits alone.
+
+
+## Empty-journal crash cut — 2026-11-28
+
+- Final scanner edge: an exclusively created but zero-byte SQJ (power loss before the first durable `SESSION_CREATED` record) was previously reported as a valid empty chain. It now returns invalid/damaged-tail with an explicit missing-first-record reason; startup will preserve and surface it as recovery evidence.
+- Added a host test for create/close-without-append and scanner rejection.
+- Commits: scanner `fd383e4e7b63ecf89b79945a2adc899e87f4937b`; test `8ac7e160b04cfaeb12704ef639c995f49d768a5f`.
+- Exact-head CI and all release/device gates remain pending. This is another fail-closed recovery correctness fix, not acceptance.
