@@ -32,6 +32,59 @@ pub struct RecipientWrap {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+/// Decoded ECDH recipient record payload, before platform private-key unwrap.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EcdhWrappedDek {
+    pub ephemeral_spki_der: Vec<u8>,
+    pub nonce: [u8; 12],
+    /// Exactly 32 bytes of AES-GCM ciphertext followed by its 16-byte tag.
+    pub ciphertext_and_tag: [u8; 48],
+}
+
+/// Canonical recipient `wrappedBytes` encoding from the locked V2 wire profile.
+pub fn encode_ecdh_wrapped_dek(
+    ephemeral_spki_der: &[u8],
+    nonce: &[u8],
+    ciphertext_and_tag: &[u8],
+) -> Result<Vec<u8>, Error> {
+    if ephemeral_spki_der.is_empty() || ephemeral_spki_der.len() > 2_048
+        || nonce.len() != 12 || ciphertext_and_tag.len() != 48 {
+        return Err(Error::InvalidRecipient);
+    }
+    let der_len = u16::try_from(ephemeral_spki_der.len()).map_err(|_| Error::LengthOverflow)?;
+    let total = 2usize.checked_add(ephemeral_spki_der.len())
+        .and_then(|n| n.checked_add(nonce.len()))
+        .and_then(|n| n.checked_add(ciphertext_and_tag.len()))
+        .ok_or(Error::LengthOverflow)?;
+    if total > WRAPPED_MAX_BYTES { return Err(Error::InvalidRecipient); }
+    let mut encoded = Vec::new();
+    encoded.try_reserve_exact(total).map_err(|_| Error::Allocation)?;
+    encoded.extend_from_slice(&der_len.to_be_bytes());
+    encoded.extend_from_slice(ephemeral_spki_der);
+    encoded.extend_from_slice(nonce);
+    encoded.extend_from_slice(ciphertext_and_tag);
+    Ok(encoded)
+}
+
+pub fn parse_ecdh_wrapped_dek(bytes: &[u8]) -> Result<EcdhWrappedDek, Error> {
+    if bytes.len() < 2 + 1 + 12 + 48 || bytes.len() > WRAPPED_MAX_BYTES {
+        return Err(Error::InvalidRecipient);
+    }
+    let der_len = u16::from_be_bytes(bytes[..2].try_into().unwrap()) as usize;
+    if der_len == 0 || der_len > 2_048 {
+        return Err(Error::InvalidRecipient);
+    }
+    let nonce_at = 2usize.checked_add(der_len).ok_or(Error::LengthOverflow)?;
+    let ciphertext_at = nonce_at.checked_add(12).ok_or(Error::LengthOverflow)?;
+    let end = ciphertext_at.checked_add(48).ok_or(Error::LengthOverflow)?;
+    if end != bytes.len() { return Err(Error::InvalidRecipient); }
+    Ok(EcdhWrappedDek {
+        ephemeral_spki_der: bytes[2..nonce_at].to_vec(),
+        nonce: bytes[nonce_at..ciphertext_at].try_into().unwrap(),
+        ciphertext_and_tag: bytes[ciphertext_at..end].try_into().unwrap(),
+    })
+}
+
 pub struct Header {
     pub file_id: [u8; 16],
     pub file_salt: [u8; 32],
