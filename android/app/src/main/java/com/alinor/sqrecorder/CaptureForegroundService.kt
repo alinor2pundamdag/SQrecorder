@@ -74,6 +74,7 @@ public class CaptureForegroundService : Service() {
   var partial: File? = null
   var success = false
   var pump: CaptureQueuePump? = null
+  var producerPcm: ByteBuffer? = null
   var session = SessionSnapshot.create(SessionId(java.util.UUID.randomUUID().toString()), SystemClock.elapsedRealtimeNanos())
   fun reduce(event: SessionEvent) {
    when (val result = SessionLifecycle.reduce(session, event)) {
@@ -144,6 +145,7 @@ public class CaptureForegroundService : Service() {
    }
    pump!!.start()
    val pcm = ByteBuffer.allocateDirect(MAX_CAPTURE_BLOCK_BYTES)
+   producerPcm = pcm
    var bytes = 0L
    while (!stopping.get()) {
     if (StatFs(filesDir.absolutePath).availableBytes < MIN_FREE_BYTES) {
@@ -195,6 +197,11 @@ public class CaptureForegroundService : Service() {
     android.util.Log.e(TAG, "Native queue did not drain cleanly; preserve partial artifact", pumpFailure)
    }
    pump = null
+   producerPcm?.let { buffer ->
+    buffer.clear()
+    while (buffer.hasRemaining()) buffer.put(0)
+   }
+   producerPcm = null
    try { encryptedSink?.close() } catch (_: Exception) {}
    encryptedSink = null
    vaultKeyHandle?.let { handle ->
