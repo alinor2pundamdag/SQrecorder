@@ -56,9 +56,15 @@ internal class SqjDurableCheckpointStore {
             return target
         }
 
-        check(checkpointDirectory.isDirectory || checkpointDirectory.mkdirs()) {
+        val checkpointParent = checkpointDirectory.absoluteFile.parentFile
+        check(checkpointParent?.isDirectory == true) {
+            "Checkpoint parent must exist before durable checkpoint creation"
+        }
+        val createdDirectory = !checkpointDirectory.exists()
+        check(checkpointDirectory.isDirectory || checkpointDirectory.mkdir()) {
             "Checkpoint directory unavailable"
         }
+        if (createdDirectory) syncDirectory(checkpointParent)
         val temp = File(checkpointDirectory, ".${target.name}.${java.util.UUID.randomUUID()}.tmp")
         var tempCreated = false
         try {
@@ -201,6 +207,7 @@ internal class SqjDurableCheckpointStore {
                 val count = channel.read(buffer)
                 check(count > 0) { "SQAC read made no progress" }
             }
+            check(channel.size() == size) { "SQAC changed during bounded read" }
             buffer.array()
         }
 
