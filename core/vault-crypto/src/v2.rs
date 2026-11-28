@@ -47,18 +47,26 @@ pub fn encode_ecdh_wrapped_dek(
     nonce: &[u8],
     ciphertext_and_tag: &[u8],
 ) -> Result<Vec<u8>, Error> {
-    if ephemeral_spki_der.is_empty() || ephemeral_spki_der.len() > 2_048
-        || nonce.len() != 12 || ciphertext_and_tag.len() != 48 {
+    if ephemeral_spki_der.is_empty()
+        || ephemeral_spki_der.len() > 2_048
+        || nonce.len() != 12
+        || ciphertext_and_tag.len() != 48
+    {
         return Err(Error::InvalidRecipient);
     }
     let der_len = u16::try_from(ephemeral_spki_der.len()).map_err(|_| Error::LengthOverflow)?;
-    let total = 2usize.checked_add(ephemeral_spki_der.len())
+    let total = 2usize
+        .checked_add(ephemeral_spki_der.len())
         .and_then(|n| n.checked_add(nonce.len()))
         .and_then(|n| n.checked_add(ciphertext_and_tag.len()))
         .ok_or(Error::LengthOverflow)?;
-    if total > WRAPPED_MAX_BYTES { return Err(Error::InvalidRecipient); }
+    if total > WRAPPED_MAX_BYTES {
+        return Err(Error::InvalidRecipient);
+    }
     let mut encoded = Vec::new();
-    encoded.try_reserve_exact(total).map_err(|_| Error::Allocation)?;
+    encoded
+        .try_reserve_exact(total)
+        .map_err(|_| Error::Allocation)?;
     encoded.extend_from_slice(&der_len.to_be_bytes());
     encoded.extend_from_slice(ephemeral_spki_der);
     encoded.extend_from_slice(nonce);
@@ -77,7 +85,9 @@ pub fn parse_ecdh_wrapped_dek(bytes: &[u8]) -> Result<EcdhWrappedDek, Error> {
     let nonce_at = 2usize.checked_add(der_len).ok_or(Error::LengthOverflow)?;
     let ciphertext_at = nonce_at.checked_add(12).ok_or(Error::LengthOverflow)?;
     let end = ciphertext_at.checked_add(48).ok_or(Error::LengthOverflow)?;
-    if end != bytes.len() { return Err(Error::InvalidRecipient); }
+    if end != bytes.len() {
+        return Err(Error::InvalidRecipient);
+    }
     Ok(EcdhWrappedDek {
         ephemeral_spki_der: bytes[2..nonce_at].to_vec(),
         nonce: bytes[nonce_at..ciphertext_at].try_into().unwrap(),
@@ -724,13 +734,19 @@ mod tests {
         let encrypted = [0x34; 48];
         let bytes = encode_ecdh_wrapped_dek(&der, &nonce, &encrypted).unwrap();
         assert_eq!(&bytes[..2], &[0, 91]);
-        assert_eq!(parse_ecdh_wrapped_dek(&bytes).unwrap(), EcdhWrappedDek {
-            ephemeral_spki_der: der,
-            nonce,
-            ciphertext_and_tag: encrypted,
-        });
+        assert_eq!(
+            parse_ecdh_wrapped_dek(&bytes).unwrap(),
+            EcdhWrappedDek {
+                ephemeral_spki_der: der,
+                nonce,
+                ciphertext_and_tag: encrypted,
+            }
+        );
         let mut trailing = bytes;
         trailing.push(0);
-        assert_eq!(parse_ecdh_wrapped_dek(&trailing), Err(Error::InvalidRecipient));
+        assert_eq!(
+            parse_ecdh_wrapped_dek(&trailing),
+            Err(Error::InvalidRecipient)
+        );
     }
 }
