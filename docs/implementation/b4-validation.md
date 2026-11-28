@@ -237,3 +237,13 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Rust contract Run #160 (`46023749757`) **PASS**; cross-platform matrix Run #119 (`46023749508`) **PASS**; Android Vault contract Run #185 (`46023749577`) **PASS**. All three completed successfully on the exact same SHA.
 - Therefore the B4 evidence/documentation head's Rust, six-platform Rust/KMP matrix, and Android Vault/API 36 emulator CI wait is **CLOSED** for that SHA. This is not a release-acceptance declaration.
 - The current document-only update creates a new commit and must be validated by fresh exact-head CI. Keep PR #2 and tracking PR #3 draft/open/unmerged.
+
+
+## Exact-head CI verification — 2026-11-28 (UTC)
+
+- B4 source/evidence SHA before this refresh: `aa153091449a56e1a8b697cb78384266a87270b2`.
+- Rust contract Run #162 (`46107670110`): **PASS**.
+- Cross-platform matrix Run #121 (`46107670142`): **PASS**.
+- Android Vault contract Run #188 (`46107670104`): **PASS**.
+- GitHub Actions confirms all three completed successfully on the exact same source SHA. The B4 source-slice CI wait is closed for that commit; this documentation update advances the branch and requires fresh exact-head CI.
+- B4 remains **not release-complete**: SQVE v2 cryptographic implementation/golden vectors/provider conformance, Android encrypted finalization wiring, SQJ durable journal/checkpoint and key-registry integration, encrypted durable promotion/recovery, crash-cut/ENOSPC/force-stop matrix, full combined-candidate CI, and physical-device acceptance remain open. SQVE v1 and all other blueprint decisions remain locked.
