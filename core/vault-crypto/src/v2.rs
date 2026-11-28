@@ -476,17 +476,9 @@ impl<W: Write> Writer<W> {
         record[..8].copy_from_slice(&index.to_be_bytes());
         record[8..12].copy_from_slice(&(expected as u32).to_be_bytes());
         record[12..16].copy_from_slice(&ciphertext_len.to_be_bytes());
-        self.output
-            .as_mut()
-            .ok_or(Error::Write)?
-            .write_all(&record)
-            .map_err(|_| Error::Write)?;
+        self.output.write_all(&record).map_err(|_| Error::Write)?;
         self.output.write_all(plaintext).map_err(|_| Error::Write)?;
-        self.output
-            .as_mut()
-            .ok_or(Error::Write)?
-            .write_all(&tag)
-            .map_err(|_| Error::Write)?;
+        self.output.write_all(&tag).map_err(|_| Error::Write)?;
         self.hash.update(record);
         self.hash.update(&*plaintext);
         self.hash.update(tag);
@@ -620,7 +612,7 @@ impl<W: Write> StreamingWriter<W> {
         if self.buffered > 0 {
             self.emit_chunk(self.buffered)?;
         }
-        let digest = self.hash.finalize();
+        let digest = self.hash.clone().finalize();
         let mut footer = [0u8; FOOTER_BYTES];
         footer[..4].copy_from_slice(b"SQVF");
         footer[4..6].copy_from_slice(&VERSION.to_be_bytes());
