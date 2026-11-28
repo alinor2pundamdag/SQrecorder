@@ -180,9 +180,18 @@ internal class SqveV2EncryptedWavSink(
                 require(plaintext.size == plainLen)
                 if (index == 0L) {
                     require(plaintext.size >= 44)
-                    require(plaintext.copyOfRange(0, 4).contentEquals("RIFF".toByteArray(Charsets.US_ASCII)))
-                    require(plaintext.copyOfRange(8, 12).contentEquals("WAVE".toByteArray(Charsets.US_ASCII)))
-                    require(readLeU32(plaintext, 40) == pcmBytes)
+                    // Compare the complete canonical RIFF/WAVE header, not only
+                    // the signature and data length. This validates RIFF size,
+                    // fmt fields, sample rate, byte rate, block alignment, and
+                    // data length together before the staged artifact is trusted.
+                    val expectedWavHeader = PcmWavHeader.create(sampleRateHz, pcmBytes)
+                    try {
+                        require(plaintext.copyOfRange(0, expectedWavHeader.size).contentEquals(expectedWavHeader)) {
+                            "SQVE V2 plaintext WAV header does not match the finalized capture metadata"
+                        }
+                    } finally {
+                        expectedWavHeader.fill(0)
+                    }
                 }
             } finally {
                 plaintext.fill(0)
