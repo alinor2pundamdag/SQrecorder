@@ -1088,6 +1088,9 @@ mod tests {
         let encoded = serialize_header(&header, &key).unwrap();
         assert_eq!(parse_header(&encoded, &key).unwrap(), header);
         header.recipients[0].wrapped.pop();
-        assert_eq!(serialize_header(&header, &key), Err(Error::InvalidRecipient));
+        assert_eq!(
+            serialize_header(&header, &key),
+            Err(Error::InvalidRecipient)
+        );
     }
 }
