@@ -64,6 +64,11 @@ internal class CaptureQueuePump(
             consumerFailure.compareAndSet(null, error)
             throw error
         }
+        // Native submit copies the block into its bounded queue. Scrub the
+        // producer's reusable direct buffer immediately after that ownership transfer.
+        pcm.position(0)
+        repeat(byteCount) { pcm.put(0) }
+        pcm.position(0)
         producerFrameIndex = Math.addExact(producerFrameIndex, frameCount.toLong())
         producerSequence = Math.addExact(producerSequence, 1)
         LockSupport.unpark(consumer)
@@ -120,7 +125,7 @@ internal class CaptureQueuePump(
                 check(byteCount <= stagingBytes.size.toLong() && byteCount % 2L == 0L)
                 pcm.position(0)
                 pcm.get(stagingBytes, 0, byteCount.toInt())
-                output.writePcm(stagingBytes, 0, byteCount.toInt())
+                try {\n                    output.writePcm(stagingBytes, 0, byteCount.toInt())\n                } finally {\n                    stagingBytes.fill(0, 0, byteCount.toInt())\n                    pcm.position(0)\n                    repeat(byteCount.toInt()) { pcm.put(0) }\n                    pcm.position(0)\n                }
                 consumerFrameIndex = Math.addExact(consumerFrameIndex, metadata.frameCount.toLong())
                 consumerSequence = Math.addExact(consumerSequence, 1)
             }
@@ -138,6 +143,11 @@ internal class CaptureQueuePump(
                 }
             }
         } finally {
+            stagingBytes.fill(0)
+            pcm.clear()
+            while (pcm.hasRemaining()) pcm.put(0)
+            metadataBytes.fill(0)
+            eventBytes.fill(0)
             consumerDone.set(true)
         }
     }
