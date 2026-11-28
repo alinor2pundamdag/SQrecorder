@@ -65,21 +65,29 @@ pub enum Error {
 impl Header {
     /// Build a fresh per-file V2 header using the OS CSPRNG. DEK generation
     /// remains separately owned by VaultFileKey::generate().
-    pub fn new_random(plaintext_len: u64, recipients: Vec<RecipientWrap>) -> Result<Self, Error> {
+    pub fn new_random(
+        plaintext_len: u64,
+        recipients: Vec<RecipientWrap>,
+    ) -> Result<Self, Error> {
         let mut file_id = [0u8; 16];
         let mut file_salt = [0u8; 32];
         let mut nonce_prefix = [0u8; 4];
         if getrandom::fill(&mut file_id).is_err()
             || getrandom::fill(&mut file_salt).is_err()
-            || getrandom::fill(&mut nonce_prefix).is_err() {
+            || getrandom::fill(&mut nonce_prefix).is_err()
+        {
             file_id.zeroize();
             file_salt.zeroize();
             nonce_prefix.zeroize();
             return Err(Error::RandomUnavailable);
         }
         let header = Self {
-            file_id, file_salt, nonce_prefix, plaintext_len,
-            chunk_count: expected_chunks(plaintext_len), recipients,
+            file_id,
+            file_salt,
+            nonce_prefix,
+            plaintext_len,
+            chunk_count: expected_chunks(plaintext_len),
+            recipients,
         };
         validate(&header)?;
         Ok(header)
@@ -526,19 +534,24 @@ pub fn encrypt_stream<R: Read, W: Write>(
     buf.resize(CHUNK_BYTES, 0);
     for i in 0..count {
         let size = (len - i * CHUNK_BYTES as u64).min(CHUNK_BYTES as u64) as usize;
-        input.read_exact(&mut buf[..size]).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::UnexpectedEof {
+        if let Err(e) = input.read_exact(&mut buf[..size]) {
+            buf[..size].zeroize();
+            return Err(if e.kind() == std::io::ErrorKind::UnexpectedEof {
                 Error::InputLength
             } else {
                 Error::Read
-            }
-        })?;
+            });
+        }
         let result = writer.write_chunk(&mut buf[..size]);
         buf[..size].zeroize();
         result?;
     }
     let mut trailing = [0u8; 1];
-    if input.read(&mut trailing).map_err(|_| Error::Read)? != 0 {
+    let trailing_read = input.read(&mut trailing).map_err(|_| {
+        trailing.zeroize();
+        Error::Read
+    })?;
+    if trailing_read != 0 {
         trailing.zeroize();
         return Err(Error::InputLength);
     }
