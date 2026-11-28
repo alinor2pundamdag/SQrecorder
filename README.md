@@ -7,7 +7,7 @@
 - **Kotlin Multiplatform (KMP):** platform-independent domain, Vault v1/v2 metadata, lifecycle, and workflow contracts. The shared capability selector is a compiled Gradle module (not an orphan source tree).
 - **Rust:** portable, performance-sensitive audio and processing core behind a versioned C ABI.
 - **Platform adapters:** Android, Wear OS, iOS/iPadOS, watchOS, Windows, macOS, and Linux own OS-specific capture, lifecycle, storage, secure-key, accessibility, and UI integration. Java/JVM integrations use a deliberate JVM API rather than Android-only APIs.
-- **Cross-platform Vault:** SQVE v1 remains immutable; owner-approved SQVE v2 is separately versioned with platform-specific recipient/key-provider records and authenticated migration. See [platform compatibility](docs/architecture/platform-compatibility.md), [ADR 0002](docs/decisions/0002-cross-platform-sqve-v2.md), and [SQVE v2 design](docs/security/sqve-v2-envelope-design.md).
+- **Cross-platform Vault (LOCKED):** SQVE v2 is the sole current encrypted-write/capture-finalization target. SQVE v1 is immutable legacy read/verification compatibility only; no new V1 writes or downgrade. V2 production use remains gated on canonical wire schema, golden vectors, provider conformance, and independent security review. See [platform compatibility](docs/architecture/platform-compatibility.md), [ADR 0002](docs/decisions/0002-cross-platform-sqve-v2.md), and [SQVE v2 design](docs/security/sqve-v2-envelope-design.md).
 - **Evidence authority:** finalized source WAV, integrity metadata, and append-only session journal; derived media never silently replaces source evidence.
 
 Platform code must not leak into shared domain or Rust core. The core must not depend on UI frameworks or platform services.
