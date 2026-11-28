@@ -64,7 +64,7 @@ Serialize these fields in order:
 2. version `u16be = 2`
 3. total header length `u32be` (includes the final 32-byte MAC)
 4. content suite `u16be = 0x0001`
-5. flags `u16be = 0`
+5. flags `u16be`: `0x0000` fixed-length or `0x0001` streaming-capture; reject all other bits
 6. file ID (16 random bytes)
 7. file salt (32 random bytes)
 8. nonce prefix (4 random bytes)
@@ -115,3 +115,15 @@ Do not truncate SHA-256; reject any other footer length. The digest is SHA-256 o
 - Implement this profile in a new V2 module and parser; do not change V1 constants or reinterpret V1 bytes as V2.
 - Generate deterministic fixtures with fixed test-only keys/IDs/salt/nonces and independently reproduce them in Rust plus at least two platform providers. Test fixtures must never be used as production randomness.
 - Before shipping, a cryptography reviewer must confirm this serialization, HKDF domains, HMAC coverage, ECDH wrap profile, nonce uniqueness/recovery, and recipient rewrap semantics. If review changes any byte or cryptographic parameter, update the suite/version and vectors together; do not silently edit an already deployed suite.
+
+### V2 streaming-capture mode (required for live microphone capture)
+
+The fixed-length profile above cannot be used for an active take because its final WAV length is unknown at Start. Do not stage plaintext or claim a guessed length. V2 therefore defines the authenticated streaming flag `0x0001`:
+
+- Header plaintext length and chunk count are both `u64be = 0xffffffffffffffff` sentinels; the header MAC authenticates the flag and sentinels.
+- Chunk AAD binds those sentinel values exactly as serialized. Chunk indices remain consecutive; every chunk is authenticated before acceptance.
+- Streaming output emits full 1 MiB chunks as available; only the final chunk may be shorter. Zero-byte capture has zero chunk records.
+- The 56-byte footer carries actual plaintext length and chunk count. Verification streams to the footer, checks actual count/length against the chunk sequence, authenticates every GCM tag and the stream digest, then requires EOF.
+- Fixed-length mode (`flags=0`) retains declared count/length checks. A parser must require the flag and both sentinels to agree.
+
+This pre-release profile addition enables encrypted live capture without plaintext staging. It requires deterministic vectors, crash/recovery tests and independent cryptographic review before production acceptance. V1 remains unchanged.
