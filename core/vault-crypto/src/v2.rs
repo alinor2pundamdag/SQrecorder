@@ -716,4 +716,21 @@ mod tests {
         let bad_key = VaultFileKey::from_bytes(&[0x55; 32]).unwrap();
         assert!(verify_authenticated_stream(&mut bad, &bad_key).is_err());
     }
+
+    #[test]
+    fn ecdh_wrap_payload_has_exact_canonical_layout_and_rejects_tail() {
+        let der = vec![0x30; 91];
+        let nonce = [0x12; 12];
+        let encrypted = [0x34; 48];
+        let bytes = encode_ecdh_wrapped_dek(&der, &nonce, &encrypted).unwrap();
+        assert_eq!(&bytes[..2], &[0, 91]);
+        assert_eq!(parse_ecdh_wrapped_dek(&bytes).unwrap(), EcdhWrappedDek {
+            ephemeral_spki_der: der,
+            nonce,
+            ciphertext_and_tag: encrypted,
+        });
+        let mut trailing = bytes;
+        trailing.push(0);
+        assert_eq!(parse_ecdh_wrapped_dek(&trailing), Err(Error::InvalidRecipient));
+    }
 }
