@@ -148,7 +148,7 @@ pub fn parse_header(bytes: &[u8], key: &VaultFileKey) -> Result<Header, Error> {
         return Err(Error::InvalidHeader);
     }
     let mac_at = bytes.len() - HEADER_MAC_BYTES;
-    let salt: [u8; 32] = bytes[38..70.min(bytes.len())].get(0..32)
+    let salt: [u8; 32] = bytes[30..62]
         .ok_or(Error::InvalidHeader)?.try_into().map_err(|_| Error::InvalidHeader)?;
     let expected = sqve_v2_header_mac(key, &salt, &bytes[..mac_at]);
     if !constant_time_eq(&expected, &bytes[mac_at..]) { return Err(Error::Authentication); }
@@ -181,7 +181,7 @@ pub fn parse_header(bytes: &[u8], key: &VaultFileKey) -> Result<Header, Error> {
     let header = Header {
         file_id: bytes[14..30].try_into().unwrap(),
         file_salt: salt,
-        nonce_prefix: bytes[70-4..70].try_into().unwrap(),
+        nonce_prefix: bytes[62..66].try_into().unwrap(),
         plaintext_len,
         chunk_count,
         recipients,
