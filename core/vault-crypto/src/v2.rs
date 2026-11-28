@@ -59,7 +59,8 @@ pub enum Error {
     MalformedFooter,
     DigestMismatch,
     TrailingData,
-    Crypto(VaultCryptoError),\n    RandomUnavailable,
+    Crypto(VaultCryptoError),
+    RandomUnavailable,
 }
 impl Header {
     /// Build a fresh per-file V2 header using the OS CSPRNG. DEK generation
