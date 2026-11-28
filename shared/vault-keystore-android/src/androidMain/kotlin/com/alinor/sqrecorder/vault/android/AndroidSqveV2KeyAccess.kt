@@ -9,8 +9,6 @@ import android.security.keystore.UserNotAuthenticatedException
 import android.util.Base64
 import com.alinor.sqrecorder.domain.VaultAuthContext
 import com.alinor.sqrecorder.domain.VaultFileKeyHandle
-import com.alinor.sqrecorder.domain.VaultKeyAccessFailure
-import com.alinor.sqrecorder.domain.VaultKeyAccessException
 import com.alinor.sqrecorder.domain.VaultV2KeyAccess
 import com.alinor.sqrecorder.domain.VaultV2RecipientWrap
 import com.alinor.sqrecorder.domain.VaultV2WrapSuite
@@ -121,10 +119,13 @@ public class AndroidSqveV2KeyAccess(
     ): VaultFileKeyHandle {
         requireV2Platform()
         validateFileContext(fileId, fileSalt)
+        val ephemeralBase64 = wrap.ephemeralPublicKeyBase64
+            ?: throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+        val nonceHex = wrap.wrapNonceHex
+            ?: throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
         if (wrap.suite != VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM ||
             !wrap.recipientKeyId.isAsciiSafeId() ||
-            wrap.ephemeralPublicKeyBase64.isNullOrEmpty() ||
-            wrap.wrapNonceHex?.isLowerHex(NONCE_BYTES * 2) != true
+            !nonceHex.isLowerHex(NONCE_BYTES * 2)
         ) throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
 
         val now = SystemClock.elapsedRealtimeNanos()
@@ -142,8 +143,8 @@ public class AndroidSqveV2KeyAccess(
         val ephemeralDer = parsed.ephemeralDer
         val ciphertextAndTag = parsed.ciphertextAndTag
         val nonce = parsed.nonce
-        val separatelyEncodedEphemeral = decodeCanonicalBase64(wrap.ephemeralPublicKeyBase64)
-        val separatelyEncodedNonce = wrap.wrapNonceHex.hexToBytes()
+        val separatelyEncodedEphemeral = decodeCanonicalBase64(ephemeralBase64)
+        val separatelyEncodedNonce = nonceHex.hexToBytes()
         if (ephemeralDer.size !in MIN_SPKI_BYTES..MAX_SPKI_BYTES ||
             !ephemeralDer.contentEquals(separatelyEncodedEphemeral) ||
             !nonce.contentEquals(separatelyEncodedNonce)
