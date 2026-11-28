@@ -326,3 +326,6 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Commits: codec 8072345f434bbc1457a53bf61685b983a3a76edc; length-offset correction 0ae0e8cae04cea274795d764a55feec467aa8b9a; crate export 76fa8894f9e24bf891f8ae8b118f683f0ed32003.
 - Scope boundary: this is portable verification/encoding, not platform durable checkpoint writing, signer/key lifecycle integration, automatic recovery, or atomic checkpoint replacement. Android must persist only after SQJ record sync, then checkpoint file + parent directory sync; stale checkpoint/journal mismatch must remain evidence and fail closed.
 - Rust formatting, workspace tests, Clippy, Android integration, and exact-head CI are NOT RUN / NOT VERIFIED for the integrated head. PR remains draft/open/unmerged.
+
+
+- Follow-up regression test added: a signed checkpoint is accepted only when sequence+digest bind to the exact fully verified journal head; stale digest and stale sequence are rejected before crypto-provider acceptance. Test commit: f427057e871eb7e279b02af7584c4aae773f0ba8. Rust formatting/build/tests and exact-head CI remain not verified.
