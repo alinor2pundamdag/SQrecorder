@@ -9,6 +9,9 @@ extern "C" {
 
 #define SQ_ABI_MAJOR_V1 1u
 #define SQ_ABI_MINOR_V1 1u
+
+#define SQ_ABI_FEATURE_BOUNDED_PCM_QUEUE_V1 (1ull << 0)
+#define SQ_ABI_FEATURE_CAPTURE_EVENT_RING_V1 (1ull << 1)
 #define SQ_ABI_PCM_BLOCK_V1_SIZE 64u
 
 typedef struct sq_capture_engine sq_capture_engine;
@@ -78,6 +81,14 @@ typedef struct sq_pcm_block_v1 {
     uint32_t reserved1;
 } sq_pcm_block_v1;
 
+enum {
+    SQ_CAPTURE_EVENT_INPUT_OVERRUN = 1u,
+    SQ_CAPTURE_EVENT_AUDIO_ROUTE_CHANGED = 2u,
+    SQ_CAPTURE_EVENT_PERMISSION_REVOKED = 3u,
+    SQ_CAPTURE_EVENT_STORAGE_PRESSURE = 4u,
+    SQ_CAPTURE_EVENT_INTERRUPTED = 5u
+};
+
 typedef struct sq_capture_event_v1 {
     uint32_t struct_size;
     uint32_t event_type;
@@ -111,6 +122,12 @@ sq_status_v1 sq_capture_submit_pcm_v1(
 sq_status_v1 sq_capture_push_event_v1(
     sq_capture_engine *engine,
     const sq_capture_event_v1 *event);
+sq_status_v1 sq_capture_read_event_v1(
+    sq_capture_engine *engine, sq_capture_event_v1 *out_event);
+sq_status_v1 sq_capture_read_pcm_v1(
+    sq_capture_engine *engine, sq_pcm_block_v1 *out_block,
+    uint8_t *out_pcm, uint64_t capacity, uint64_t *out_written);
+sq_status_v1 sq_capture_finish_v1(sq_capture_engine *engine);
 sq_status_v1 sq_capture_request_stop_v1(sq_capture_engine *engine);
 sq_status_v1 sq_capture_get_state_v1(
     const sq_capture_engine *engine,

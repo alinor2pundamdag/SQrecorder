@@ -64,7 +64,7 @@ class VaultV2ContractsTest {
         val recipient = VaultV2RecipientWrap(
             suite = VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM,
             recipientKeyId = "apple-key-v2",
-            wrappedDekBase64 = "A".repeat(64),
+            wrappedDekBase64 = "A".repeat(84),
             ephemeralPublicKeyBase64 = "AQ==",
             wrapNonceHex = "01".repeat(12),
         )
@@ -91,6 +91,39 @@ class VaultV2ContractsTest {
         assertEquals(
             VaultV2ContractError.INVALID_HEADER_MAC_ENCODING,
             validV2().copy(headerMacBase64 = "B".repeat(43) + "=").validate(),
+        )
+    }
+
+    @Test
+    fun v2RecipientIdsUseCanonicalAsciiOrderAndPermitContractColon() {
+        val first = validV2().recipients.single().copy(recipientKeyId = "device:primary")
+        val next = first.copy(recipientKeyId = "z-device")
+        assertNull(validV2().copy(recipients = listOf(first, next)).validate())
+        assertEquals(
+            VaultV2ContractError.NONCANONICAL_RECIPIENT_ORDER,
+            validV2().copy(recipients = listOf(next, first)).validate(),
+        )
+    }
+
+    @Test
+    fun explicitApi23Rsa3072SuiteRequiresExactCiphertextSizeAndNoEcdhFields() {
+        val recipient = VaultV2RecipientWrap(
+            suite = VaultV2WrapSuite.RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL,
+            recipientKeyId = "android-v2-rsa3072-mgf1sha1",
+            wrappedDekBase64 = "A".repeat(VaultV2EnvelopeContract.RSA3072_CIPHERTEXT_BASE64_LENGTH),
+        )
+        assertNull(validV2().copy(recipients = listOf(recipient)).validate())
+        assertEquals(
+            VaultV2ContractError.INVALID_RSA_WRAP,
+            validV2().copy(
+                recipients = listOf(recipient.copy(wrappedDekBase64 = "A".repeat(508))),
+            ).validate(),
+        )
+        assertEquals(
+            VaultV2ContractError.INVALID_RSA_WRAP,
+            validV2().copy(
+                recipients = listOf(recipient.copy(ephemeralPublicKeyBase64 = "AQ==")),
+            ).validate(),
         )
     }
 }

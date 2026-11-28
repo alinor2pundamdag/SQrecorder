@@ -46,3 +46,18 @@ SQVE v1 fixes a non-empty RSA-OAEP label `SQREC-VAULT-DEK-v1`. Android Keystore'
 - Do not promise identical hardware security, background recording policy, or feature availability on every OS/device.
 - Do not export raw private keys or plaintext DEKs in logs, crash reports, or public APIs.
 - Do not change SQVE v1 constants or existing v1 ciphertext.
+
+
+## Canonical implementation profile (2026-11-28)
+
+The byte-level V2 profile is now specified in `docs/security/sqve-v2-envelope-design.md`: big-endian fixed-width integers; bounded, sorted ASCII recipient records; authenticated canonical header; versioned HKDF domain labels; explicit V2 content/wrap suite IDs; exact ECDH wrapped-DEK framing; chunk framing/AAD; and a full SHA-256 stream footer. Implement this as a distinct V2 module and parser. Do not repurpose or mutate V1 serialization.
+
+This is an implementation baseline for deterministic vector generation, **not** independent cryptographic approval. Production acceptance still requires independently reproduced Rust + platform golden vectors, parser fuzz/negative tests, provider conformance, review of nonce recovery and recipient rewrap, and successful encrypted-capture/SQJ/durable recovery integration. If review identifies a cryptographic or byte-profile defect, correct it before deployment and version the suite/profile rather than preserving an unsafe draft.
+
+## Live-capture length semantics
+
+SQVE v2 now includes an authenticated streaming-length flag for live capture: header `flags=0x0001` and both declared length/count fields set to the all-ones u64 sentinel; actual values are committed in the authenticated 56-byte footer. The fixed-length mode remains `flags=0`. This avoids plaintext staging or fabricated capture lengths and is required before integrating the microphone sink. The profile is pre-release and must receive independent cryptographic review, golden vectors, cross-provider conformance, and crash/recovery tests. No V1 behavior changes.
+
+## Android API 23 V2 recipient compatibility
+
+SQVE v2 recipient suite `0x0003` is explicitly defined for Android API 23–30: RSA-3072/OAEP-SHA256/MGF1-SHA1/empty label, exactly 384 wrapped-DEK ciphertext bytes. It is a distinct suite identifier, not a V1 fallback or a silent parameter downgrade. API 31+ uses the V2 ECDH-P256/HKDF-SHA256/AES-GCM suite where supported. The provider must fail closed if exact suite parameters are unavailable. Independent cryptographic review and API23 emulator/physical-device conformance remain mandatory.

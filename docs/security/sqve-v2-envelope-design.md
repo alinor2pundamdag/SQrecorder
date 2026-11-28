@@ -42,3 +42,94 @@
 - Fuzz canonical parser and envelope boundary lengths; run sanitizers where available.
 - Review HKDF/HMAC key separation, GCM nonce uniqueness and recipient rewrap protocol with a cryptography reviewer.
 - Keep v1 fixture files and regression tests permanently.
+
+
+## Canonical SQVE v2 wire profile — implementation baseline
+
+The following byte profile closes the encoding ambiguities for implementation and vector generation. It does **not** waive independent cryptographic review or make V2 production-accepted before cross-provider vectors pass.
+
+### Primitive encodings and bounds
+
+- All integers in V2 are unsigned, fixed-width, **big-endian**. V1 remains byte-for-byte little-endian where its reader specifies it.
+- Lengths are byte counts, not character counts. Parsers validate bounds and arithmetic before allocation; reject truncation, overflow, duplicate recipient IDs, unknown mandatory suite IDs, nonzero reserved fields, and trailing bytes.
+- Recipient key IDs are canonical ASCII tokens, 1–128 bytes, limited to `A-Z a-z 0-9 . _ - :`. IDs are case-sensitive and unique within one header. Do not normalize or silently rewrite IDs.
+- Header maximum: 65,535 bytes. Recipient count: 1–16. Wrapped-DEK record maximum: 8,192 bytes. Chunk size is exactly 1,048,576 bytes except the final chunk; zero-length files have zero chunk records.
+- V2 content suite ID `0x0001`: AES-256-GCM, 12-byte nonce, 16-byte tag. Wrap suite IDs are scoped to V2 and immutable: `0x0001` RSA-OAEP-SHA256 with MGF1-SHA256 and empty label; `0x0002` ECDH-P-256/HKDF-SHA256/AES-256-GCM profile below. A provider that cannot implement the exact selected suite must fail capability negotiation; no parameter substitution.
+
+### Header serialization
+
+Serialize these fields in order:
+
+1. magic `SQVE` (4 bytes)
+2. version `u16be = 2`
+3. total header length `u32be` (includes the final 32-byte MAC)
+4. content suite `u16be = 0x0001`
+5. flags `u16be`: `0x0000` fixed-length or `0x0001` streaming-capture; reject all other bits
+6. file ID (16 random bytes)
+7. file salt (32 random bytes)
+8. nonce prefix (4 random bytes)
+9. chunk size `u32be = 1,048,576`
+10. declared plaintext length `u64be`
+11. declared chunk count `u64be`
+12. recipient count `u16be`
+13. reserved `u16be = 0`
+14. recipient records, sorted by recipient key ID's raw ASCII bytes ascending; each record is `wrapSuite:u16be || keyIdLength:u16be || wrappedLength:u32be || keyIdBytes || wrappedBytes`
+15. header MAC (32 bytes)
+
+For each record, `wrappedLength` is the exact byte length of `wrappedBytes`; the enclosing header length is computed with checked arithmetic. Reject non-canonical recipient ordering rather than sorting attacker-supplied data during parse.
+
+The header MAC key is HKDF-SHA256(`IKM=DEK, salt=fileSalt, info=ASCII "SQREC-SQVE2-HEADER-MAC-v1", L=32`). The MAC is HMAC-SHA256 over every serialized header byte preceding the MAC field (including all recipient records and the declared header length). Verify in constant time before trusting header fields or invoking a unwrap provider. Header rewrap/add/remove operations must recompute this MAC and commit through the journal; the content DEK and chunk ciphertext remain unchanged.
+
+### ECDH recipient wrapped-DEK bytes
+
+For suite `0x0002`, the `wrappedBytes` are exactly:
+
+`ephemeralSpkiLength:u16be || ephemeralSubjectPublicKeyInfoDER || wrapNonce[12] || encryptedDEK[32] || gcmTag[16]`.
+
+The ephemeral SPKI length must be 1–2,048 bytes and decode as exactly one P-256 public key; reject trailing DER bytes and non-P-256 keys. The HKDF info and wrap AAD are the exact byte strings defined in “DEK wrapping and metadata binding” above. The nonce is freshly generated for every wrap. The wrapped plaintext is exactly the 32-byte DEK; ciphertext length is therefore exactly 32 bytes, followed by the 16-byte tag.
+
+### Chunk framing and AAD
+
+Each chunk record is:
+
+`chunkIndex:u64be || plaintextLength:u32be || ciphertextLength:u32be || ciphertext[ciphertextLength-16] || tag[16]`.
+
+Require index sequence 0..chunkCount-1 with no gaps or duplicates. `ciphertextLength = plaintextLength + 16`; plaintext length is 1..1,048,576 except a final shorter chunk. Nonce is the 4-byte header prefix followed by `chunkIndex:u64be`. Reject a chunk count/length pair that does not equal the checked ceiling of declared plaintext length / chunk size, or any index that could exceed the counter limit.
+
+Chunk AAD is the concatenation, without separators:
+
+`ASCII "SQREC-SQVE2-CHUNK-AAD-v1" || version:u16be(2) || contentSuite:u16be || fileId[16] || fileSalt[32] || noncePrefix[4] || chunkSize:u32be || declaredPlaintextLength:u64be || chunkIndex:u64be || plaintextLength:u32be`.
+
+Recipient records are intentionally excluded from chunk AAD so an authenticated recipient rewrap does not require re-encrypting audio. The header MAC authenticates those records separately.
+
+### Stream footer
+
+After the declared chunk records, write exactly 56 bytes:
+
+`magic "SQVF"[4] || version:u16be(2) || footerLength:u16be(56) || chunkCount:u64be || plaintextLength:u64be || streamDigest[32]`.
+
+Do not truncate SHA-256; reject any other footer length. The digest is SHA-256 over the complete serialized header (including its MAC) and all chunk record bytes, excluding the footer. The footer digest is an integrity/consistency aid; AEAD tags and the authenticated header remain the cryptographic authenticity boundary.
+
+### Implementation sequencing / safety
+
+- Implement this profile in a new V2 module and parser; do not change V1 constants or reinterpret V1 bytes as V2.
+- Generate deterministic fixtures with fixed test-only keys/IDs/salt/nonces and independently reproduce them in Rust plus at least two platform providers. Test fixtures must never be used as production randomness.
+- Before shipping, a cryptography reviewer must confirm this serialization, HKDF domains, HMAC coverage, ECDH wrap profile, nonce uniqueness/recovery, and recipient rewrap semantics. If review changes any byte or cryptographic parameter, update the suite/version and vectors together; do not silently edit an already deployed suite.
+
+### V2 streaming-capture mode (required for live microphone capture)
+
+The fixed-length profile above cannot be used for an active take because its final WAV length is unknown at Start. Do not stage plaintext or claim a guessed length. V2 therefore defines the authenticated streaming flag `0x0001`:
+
+- Header plaintext length and chunk count are both `u64be = 0xffffffffffffffff` sentinels; the header MAC authenticates the flag and sentinels.
+- Chunk AAD binds those sentinel values exactly as serialized. Chunk indices remain consecutive; every chunk is authenticated before acceptance.
+- Streaming output emits full 1 MiB chunks as available; only the final chunk may be shorter. Zero-byte capture has zero chunk records.
+- The 56-byte footer carries actual plaintext length and chunk count. Verification streams to the footer, checks actual count/length against the chunk sequence, authenticates every GCM tag and the stream digest, then requires EOF.
+- Fixed-length mode (`flags=0`) retains declared count/length checks. A parser must require the flag and both sentinels to agree.
+
+This pre-release profile addition enables encrypted live capture without plaintext staging. It requires deterministic vectors, crash/recovery tests and independent cryptographic review before production acceptance. V1 remains unchanged.
+
+### Android minimum-API recipient suite
+
+Android Keystore documents ECDH `PURPOSE_AGREE_KEY` as API 31+, and MGF1 digest selection for RSA OAEP as API 35+. To preserve the app's declared API 23 minimum without silently changing V2 parameters, V2 suite `0x0003` is explicitly defined for Android API 23–30: RSA-3072, OAEP digest SHA-256, MGF1 digest SHA-1 (the platform's documented default), empty OAEP label. The ciphertext is exactly 384 bytes. The key remains an Android Keystore-generated, authentication-required private key; only the public key is used to wrap.
+
+Suite 3 is a compatibility profile requiring independent cryptographic review and Android API 23 emulator/device conformance. It is not a downgrade to SQVE v1 and must never be mislabeled as suite 1. A provider must fail closed if it cannot enforce the exact RSA parameters.

@@ -16,18 +16,42 @@ public enum class VaultV2CipherSuite {
 public enum class VaultV2WrapSuite {
     RSA_OAEP_SHA256_MGF1_SHA256_EMPTY_LABEL,
     ECDH_P256_HKDF_SHA256_AES256_GCM,
+    RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL,
 }
 
 public data class VaultV2RecipientWrap(
     public val suite: VaultV2WrapSuite,
     public val recipientKeyId: String,
-    /** RSA ciphertext, or ECDH-derived AES-GCM ciphertext+tag; Base64 standard encoding. */
+    /** Canonical suite-specific wrappedBytes payload, standard Base64. ECDH embeds DER length+SPKI, nonce, ciphertext and tag. */
     public val wrappedDekBase64: String,
     /** DER SubjectPublicKeyInfo of the ephemeral P-256 key for ECDH only. */
     public val ephemeralPublicKeyBase64: String? = null,
     /** 96-bit AES-GCM nonce for ECDH wrapping, 24 lowercase hex chars. */
     public val wrapNonceHex: String? = null,
 )
+
+
+/**
+ * V2-only key custody boundary. Implementations must use the exact selected
+ * suite and fail closed when the platform cannot provide it; this API cannot
+ * fall back to the V1 RSA/OAEP path.
+ */
+public interface VaultV2KeyAccess {
+    public fun createRandomV2FileKeyHandle(): VaultFileKeyHandle
+    public fun currentPublicV2RecipientKeyId(): String
+    public fun wrapFileKeyForV2(
+        fileKeyHandle: VaultFileKeyHandle,
+        recipientKeyId: String,
+        fileId: ByteArray,
+        fileSalt: ByteArray,
+    ): VaultV2RecipientWrap
+    public fun unwrapV2RecipientFileKey(
+        wrap: VaultV2RecipientWrap,
+        fileId: ByteArray,
+        fileSalt: ByteArray,
+        authContext: VaultAuthContext,
+    ): VaultFileKeyHandle
+}
 
 public data class VaultV2EnvelopeContract(
     public val formatVersion: Int = 2,
@@ -65,12 +89,17 @@ public data class VaultV2EnvelopeContract(
         ) return VaultV2ContractError.INVALID_HEADER_MAC_ENCODING
         if (recipients.isEmpty()) return VaultV2ContractError.MISSING_RECIPIENT
         if (recipients.size > MAX_RECIPIENTS) return VaultV2ContractError.INVALID_WRAPPED_DEK
-        if (recipients.any { !it.recipientKeyId.isSafeId() }) {
+        if (recipients.any { !it.recipientKeyId.isSafeV2RecipientId() }) {
             return VaultV2ContractError.INVALID_RECIPIENT_ID
         }
         if (recipients.map { it.recipientKeyId }.distinct().size != recipients.size) {
             return VaultV2ContractError.DUPLICATE_RECIPIENT
         }
+        // V2 wire records are strictly sorted by the raw ASCII recipient ID.
+        if (recipients.zipWithNext().any { (left, right) ->
+                left.recipientKeyId >= right.recipientKeyId
+            }
+        ) return VaultV2ContractError.NONCANONICAL_RECIPIENT_ORDER
         for (recipient in recipients) {
             if (recipient.wrappedDekBase64.length > MAX_WRAPPED_DEK_BASE64_BYTES ||
                 !recipient.wrappedDekBase64.isCanonicalBase64()
@@ -84,8 +113,14 @@ public data class VaultV2EnvelopeContract(
                         recipient.wrapNonceHex != null
                     ) return VaultV2ContractError.INVALID_RSA_WRAP
                 }
+                VaultV2WrapSuite.RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL -> {
+                    if (recipient.wrappedDekBase64.length != RSA3072_CIPHERTEXT_BASE64_LENGTH ||
+                        recipient.ephemeralPublicKeyBase64 != null ||
+                        recipient.wrapNonceHex != null
+                    ) return VaultV2ContractError.INVALID_RSA_WRAP
+                }
                 VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM -> {
-                    if (recipient.wrappedDekBase64.length != ECDH_WRAPPED_DEK_BASE64_LENGTH ||
+                    if (recipient.wrappedDekBase64.length < MIN_ECDH_WRAPPED_DEK_BASE64_LENGTH ||
                         recipient.ephemeralPublicKeyBase64.isNullOrEmpty() ||
                         recipient.ephemeralPublicKeyBase64.length > MAX_EPHEMERAL_KEY_BASE64_CHARS ||
                         !recipient.ephemeralPublicKeyBase64.isCanonicalBase64() ||
@@ -104,7 +139,8 @@ public data class VaultV2EnvelopeContract(
         public const val GCM_NONCE_BYTES: Int = 12
         public const val CHUNK_SIZE_BYTES: Int = 1_048_576
         public const val MIN_RSA_2048_CIPHERTEXT_BASE64: Int = 344
-        public const val ECDH_WRAPPED_DEK_BASE64_LENGTH: Int = 64
+        public const val RSA3072_CIPHERTEXT_BASE64_LENGTH: Int = 512
+        public const val MIN_ECDH_WRAPPED_DEK_BASE64_LENGTH: Int = 84
         public const val MAX_WRAPPED_DEK_BASE64_BYTES: Int = 16_384
         public const val MAX_RECIPIENTS: Int = 16
         public const val MAX_EPHEMERAL_KEY_BASE64_CHARS: Int = 512
@@ -124,6 +160,7 @@ public enum class VaultV2ContractError {
     MISSING_RECIPIENT,
     INVALID_RECIPIENT_ID,
     DUPLICATE_RECIPIENT,
+    NONCANONICAL_RECIPIENT_ORDER,
     INVALID_WRAPPED_DEK,
     INVALID_RSA_WRAP,
     INVALID_ECDH_WRAP,
@@ -167,6 +204,13 @@ private fun String.isLowerHex(expected: Int): Boolean =
 private fun String.isSafeId(): Boolean =
     isNotEmpty() && length <= 128 &&
         all { it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' || it == '-' || it == '_' || it == '.' }
+
+private fun String.isSafeV2RecipientId(): Boolean =
+    isNotEmpty() && length <= 128 &&
+        all {
+            it in 'a'..'z' || it in 'A'..'Z' || it in '0'..'9' ||
+                it == '-' || it == '_' || it == '.' || it == ':'
+        }
 
 private fun String.isCanonicalUuid(): Boolean =
     length == 36 &&

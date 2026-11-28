@@ -6,6 +6,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 pub mod envelope;
+pub mod v2;
 
 use aes_gcm::{
     Aes256Gcm, Nonce, Tag,
@@ -146,6 +147,55 @@ pub fn sha256(bytes: &[u8]) -> [u8; 32] {
     let digest = Sha256::digest(bytes);
     let mut output = [0u8; 32];
     output.copy_from_slice(&digest);
+    output
+}
+
+/// SQVE v2 header-authentication primitive. The DEK never leaves this crate;
+/// HKDF domain separation and HMAC are implemented here over the pinned SHA-256.
+pub(crate) fn sqve_v2_header_mac(
+    key: &VaultFileKey,
+    salt: &[u8; 32],
+    authenticated_bytes: &[u8],
+) -> [u8; 32] {
+    let mut prk = hmac_sha256(salt, &key.bytes);
+    let info = b"SQREC-SQVE2-HEADER-MAC-v1";
+    let mut expand_input = Vec::with_capacity(info.len() + 1);
+    expand_input.extend_from_slice(info);
+    expand_input.push(1);
+    let mut header_key = hmac_sha256(&prk, &expand_input);
+    let mac = hmac_sha256(&header_key, authenticated_bytes);
+    prk.zeroize();
+    header_key.zeroize();
+    mac
+}
+
+fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    const BLOCK: usize = 64;
+    let mut normalized = [0u8; BLOCK];
+    if key.len() > BLOCK {
+        normalized[..32].copy_from_slice(&sha256(key));
+    } else {
+        normalized[..key.len()].copy_from_slice(key);
+    }
+    let mut inner_pad = [0x36u8; BLOCK];
+    let mut outer_pad = [0x5cu8; BLOCK];
+    for index in 0..BLOCK {
+        inner_pad[index] ^= normalized[index];
+        outer_pad[index] ^= normalized[index];
+    }
+    let mut inner = Sha256::new();
+    inner.update(inner_pad);
+    inner.update(message);
+    let inner_digest = inner.finalize();
+    let mut outer = Sha256::new();
+    outer.update(outer_pad);
+    outer.update(inner_digest);
+    let digest = outer.finalize();
+    let mut output = [0u8; 32];
+    output.copy_from_slice(&digest);
+    normalized.zeroize();
+    inner_pad.zeroize();
+    outer_pad.zeroize();
     output
 }
 
