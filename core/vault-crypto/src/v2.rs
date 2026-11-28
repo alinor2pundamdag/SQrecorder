@@ -59,8 +59,32 @@ pub enum Error {
     MalformedFooter,
     DigestMismatch,
     TrailingData,
-    Crypto(VaultCryptoError),
+    Crypto(VaultCryptoError),\n    RandomUnavailable,
 }
+impl Header {
+    /// Build a fresh per-file V2 header using the OS CSPRNG. DEK generation
+    /// remains separately owned by VaultFileKey::generate().
+    pub fn new_random(plaintext_len: u64, recipients: Vec<RecipientWrap>) -> Result<Self, Error> {
+        let mut file_id = [0u8; 16];
+        let mut file_salt = [0u8; 32];
+        let mut nonce_prefix = [0u8; 4];
+        if getrandom::fill(&mut file_id).is_err()
+            || getrandom::fill(&mut file_salt).is_err()
+            || getrandom::fill(&mut nonce_prefix).is_err() {
+            file_id.zeroize();
+            file_salt.zeroize();
+            nonce_prefix.zeroize();
+            return Err(Error::RandomUnavailable);
+        }
+        let header = Self {
+            file_id, file_salt, nonce_prefix, plaintext_len,
+            chunk_count: expected_chunks(plaintext_len), recipients,
+        };
+        validate(&header)?;
+        Ok(header)
+    }
+}
+
 impl From<VaultCryptoError> for Error {
     fn from(value: VaultCryptoError) -> Self {
         Self::Crypto(value)
