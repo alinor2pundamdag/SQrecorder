@@ -162,6 +162,10 @@ public class CaptureForegroundService : Service() {
     }
     if (count == 0) continue
     if (count % 2 != 0) throw IllegalStateException("AudioRecord returned a partial S16 frame: $count bytes")
+    if (bytes > MAX_WAV_PCM_BYTES - count.toLong()) {
+     requestStop(StopReason.STORAGE_LIMIT)
+     break
+    }
     pcm.position(0)
     pump!!.submit(pcm, count, count / 2, SystemClock.elapsedRealtimeNanos())
     bytes = Math.addExact(bytes, count.toLong())
@@ -276,5 +280,6 @@ public class CaptureForegroundService : Service() {
   private const val QUEUE_BLOCK_CAPACITY = 32
   private const val MAX_CAPTURE_BLOCK_FRAMES = 32_768
   private const val MAX_CAPTURE_BLOCK_BYTES = MAX_CAPTURE_BLOCK_FRAMES * 2
+  private const val MAX_WAV_PCM_BYTES = 0xffff_ffffL - 36L
  }
 }
