@@ -70,3 +70,11 @@ This file records the current verification state; it does not itself complete a 
 - Added always-upload Android test report artifact to the workflow (Node 24-compatible upload-artifact v6, pinned SHA) for root-cause evidence on future failures; commit `0c4beeb9e755ed4cddff46c532171b2c200545aa`.
 - Latest exact-head runs observed: Android run `46155335077` pending on `0c4beeb9...`; cross-platform run `46155335142` in progress on same SHA. No pass claimed until completion and report inspection.
 - Release gates remain blocked: latest Android app unit test is failed on prior SHA; emulator and physical-device acceptance not yet evidenced on current head; finalization/recovery crash-window, ENOSPC/force-stop/sink/queue failure matrix and independent security review remain open.
+
+
+## Android SQVE sink test fixture diagnosis — 2026-11-28
+
+- Exact tested SHA `4bde03e39608929b73a5aaa28f34d66640a46b9e`: Rust contract `46155398666` passed; cross-platform matrix `46155398697` passed all six jobs. Android `46155398711` failed one app unit test (15/16 passed); app compilation/APK assembly succeeded and emulator stages were skipped after unit failure.
+- Downloaded and inspected JUnit artifact `15267478455`. The failure is an `IllegalArgumentException` at `SqveV2EncryptedWavSink.finish()` line 83: fixture passed an odd PCM byte count (`2,097,171`), invalid for the configured 16-bit PCM stream. The sink's even-byte validation is correct; no production code change was made to weaken it.
+- Corrected fixture to `2 * 1,048,576 + 18` bytes and expected final encrypted chunk length to 62 bytes; tamper verification uses the corrected PCM count. Test commit: `da15fc0b16a5284fbef6c23ac4591b0e26fb3940`.
+- Exact-head CI for the correction commit is **pending/unobserved** at evidence time. This fix does not close emulator, physical-device, durable recovery, fault-matrix, or independent security-review gates. PR remains draft/open/unmerged.
