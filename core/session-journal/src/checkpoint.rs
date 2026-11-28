@@ -78,9 +78,9 @@ pub fn decode_checkpoint(bytes: &[u8]) -> Result<JournalSignatureAnchor, Checkpo
     if read_u16(bytes, 4) != VERSION {
         return Err(CheckpointCodecError::UnsupportedVersion);
     }
-    let algorithm_len = usize::from(read_u16(bytes, 70));
-    let key_id_len = usize::from(read_u16(bytes, 72));
-    let signature_len = usize::from(read_u16(bytes, 74));
+    let algorithm_len = usize::from(read_u16(bytes, 62));
+    let key_id_len = usize::from(read_u16(bytes, 64));
+    let signature_len = usize::from(read_u16(bytes, 66));
     if algorithm_len == 0 || algorithm_len > MAX_ALGORITHM_BYTES
         || key_id_len == 0 || key_id_len > MAX_KEY_ID_BYTES
         || signature_len == 0 || signature_len > MAX_SIGNATURE_BYTES
