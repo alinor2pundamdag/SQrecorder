@@ -59,3 +59,14 @@ This file records the current verification state; it does not itself complete a 
 - Rust contract and cross-platform matrix were green on unchanged Rust/KMP source SHA `2657d5ff11d3ba55bbbe9565a423c9b9c0e1c2bc`; this is not a substitute for the latest final evidence SHA.
 - Latest Android app/emulator workflow before evidence commit: `46153810154`, targeting `bef7e321edfd44fde27576b5160e702d19df3ba2`, was in progress; it must finish and then the evidence-commit SHA must be checked again.
 - PR #7 and #2 are still open/draft/unmerged. No release/acceptance gate is marked complete.
+
+
+
+## Android exact-head CI update — 2026-11-28 (latest observed)
+
+- Latest pre-correction app CI: run `46154378011`, SHA `c3624259beeb937b07a4bdfc1b607804ea0c631b`, failed in `:android:app:testDebugUnitTest` (16 tests, 4 failures); Android adapter host-contract build passed; emulator jobs were skipped.
+- Failed tests: three SQAC checkpoint persistence/verification tests and `SqveV2EncryptedWavSinkTest.captureSinkWritesOnlyAuthenticatedEncryptedWavChunks` at staged verification. Detailed JUnit XML/HTML was not available from that run.
+- Correction in progress: injected the production Android hard-link publication operation into `SqjDurableCheckpointStore` and made host tests use JVM NIO hard links, avoiding Android framework static-method mocking in local JVM tests. Commits `91aa03858977ca2434564634e520a66f0aa85877` and `3427e60bf9ea35fa1f8b6d1ab3f0c4c688088f30`.
+- Added always-upload Android test report artifact to the workflow (Node 24-compatible upload-artifact v6, pinned SHA) for root-cause evidence on future failures; commit `0c4beeb9e755ed4cddff46c532171b2c200545aa`.
+- Latest exact-head runs observed: Android run `46155335077` pending on `0c4beeb9...`; cross-platform run `46155335142` in progress on same SHA. No pass claimed until completion and report inspection.
+- Release gates remain blocked: latest Android app unit test is failed on prior SHA; emulator and physical-device acceptance not yet evidenced on current head; finalization/recovery crash-window, ENOSPC/force-stop/sink/queue failure matrix and independent security review remain open.
