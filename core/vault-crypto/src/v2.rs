@@ -1,7 +1,7 @@
 //! SQVE v2 canonical wire primitives and authenticated streaming writer.
 //! V1 serialization remains isolated in `envelope`; this module never dispatches
 //! V2 input through a V1 parser or writer.
-use std::io::{Read, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 
 use sha2::{Digest, Sha256};
 use zeroize::Zeroize;
@@ -287,7 +287,77 @@ impl<W: Write> Writer<W> {
     }
 }
 
-/// Fixed-length input stream encryption with a single reusable 1 MiB buffer.
+
+/// Reads and authenticates a complete V2 envelope, including every chunk tag,
+/// footer digest, exact file length and EOF. Plaintext is zeroized per chunk
+/// and never returned by this verifier.
+pub fn verify_authenticated_stream<R: Read + Seek>(
+    input: &mut R, key: &VaultFileKey,
+) -> Result<Header, Error> {
+    let file_len = input.seek(SeekFrom::End(0)).map_err(|_| Error::Read)?;
+    input.seek(SeekFrom::Start(0)).map_err(|_| Error::Read)?;
+    let mut fixed = [0u8; FIXED_HEADER_BYTES];
+    input.read_exact(&mut fixed).map_err(|_| Error::Read)?;
+    if &fixed[..4] != b"SQVE" || u16::from_be_bytes(fixed[4..6].try_into().unwrap()) != VERSION {
+        return Err(Error::InvalidHeader);
+    }
+    let header_len = u32::from_be_bytes(fixed[6..10].try_into().unwrap()) as usize;
+    if !(FIXED_HEADER_BYTES + HEADER_MAC_BYTES..=HEADER_MAX_BYTES).contains(&header_len) {
+        return Err(Error::InvalidHeader);
+    }
+    let mut header_bytes = Vec::new();
+    header_bytes.try_reserve_exact(header_len).map_err(|_| Error::Allocation)?;
+    header_bytes.extend_from_slice(&fixed);
+    header_bytes.resize(header_len, 0);
+    input.read_exact(&mut header_bytes[FIXED_HEADER_BYTES..]).map_err(|_| Error::Read)?;
+    let header = parse_header(&header_bytes, key)?;
+    let expected_len = (header_len as u64)
+        .checked_add(header.plaintext_len)
+        .and_then(|n| header.chunk_count.checked_mul(32).and_then(|o| n.checked_add(o)))
+        .and_then(|n| n.checked_add(FOOTER_BYTES as u64)).ok_or(Error::LengthOverflow)?;
+    if file_len != expected_len { return Err(if file_len > expected_len { Error::TrailingData } else { Error::MalformedChunk }); }
+
+    let mut hash = Sha256::new();
+    hash.update(&header_bytes);
+    let mut ciphertext = Vec::new();
+    ciphertext.try_reserve_exact(CHUNK_BYTES).map_err(|_| Error::Allocation)?;
+    ciphertext.resize(CHUNK_BYTES, 0);
+    for index in 0..header.chunk_count {
+        let mut record = [0u8; 16];
+        input.read_exact(&mut record).map_err(|_| Error::Read)?;
+        let got_index = u64::from_be_bytes(record[..8].try_into().unwrap());
+        let plain_len = u32::from_be_bytes(record[8..12].try_into().unwrap()) as usize;
+        let cipher_len = u32::from_be_bytes(record[12..16].try_into().unwrap()) as usize;
+        let offset = index.checked_mul(CHUNK_BYTES as u64).ok_or(Error::LengthOverflow)?;
+        let expected_plain = header.plaintext_len.checked_sub(offset).ok_or(Error::MalformedChunk)?
+            .min(CHUNK_BYTES as u64) as usize;
+        if got_index != index || plain_len != expected_plain || cipher_len != plain_len + GCM_TAG_BYTES {
+            return Err(Error::MalformedChunk);
+        }
+        input.read_exact(&mut ciphertext[..plain_len]).map_err(|_| Error::Read)?;
+        let mut tag = [0u8; GCM_TAG_BYTES];
+        input.read_exact(&mut tag).map_err(|_| Error::Read)?;
+        hash.update(record);
+        hash.update(&ciphertext[..plain_len]);
+        hash.update(tag);
+        decrypt_chunk(key, &header, index, plain_len as u32, &mut ciphertext[..plain_len], &tag)?;
+        ciphertext[..plain_len].zeroize();
+        tag.zeroize();
+    }
+    let mut footer = [0u8; FOOTER_BYTES];
+    input.read_exact(&mut footer).map_err(|_| Error::Read)?;
+    if &footer[..4] != b"SQVF" || u16::from_be_bytes(footer[4..6].try_into().unwrap()) != VERSION
+        || u16::from_be_bytes(footer[6..8].try_into().unwrap()) as usize != FOOTER_BYTES
+        || u64::from_be_bytes(footer[8..16].try_into().unwrap()) != header.chunk_count
+        || u64::from_be_bytes(footer[16..24].try_into().unwrap()) != header.plaintext_len {
+        return Err(Error::MalformedFooter);
+    }
+    let digest = hash.finalize();
+    if !constant_time_eq(&digest, &footer[24..56]) { return Err(Error::DigestMismatch); }
+    if input.read(&mut [0u8; 1]).map_err(|_| Error::Read)? != 0 { return Err(Error::TrailingData); }
+    Ok(header)
+}
+\n/// Fixed-length input stream encryption with a single reusable 1 MiB buffer.
 /// It never accepts short input or silently ignores trailing bytes.
 pub fn encrypt_stream<R: Read, W: Write>(
     input: &mut R, output: W, header: Header, key: VaultFileKey,
