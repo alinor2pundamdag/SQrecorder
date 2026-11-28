@@ -189,6 +189,7 @@ public class CaptureForegroundService : Service() {
     queueBlockCapacity = QUEUE_BLOCK_CAPACITY,
     maxBlockFrames = MAX_CAPTURE_BLOCK_FRAMES,
    )
+   val eventJournal = checkNotNull(journal) { "Capture journal must exist before starting the queue pump" }
    pump = CaptureQueuePump(
     queue, rate, encryptedSink!!, 1L,
     onConsumerFailure = { failure ->
@@ -200,7 +201,7 @@ public class CaptureForegroundService : Service() {
      // drains queued events after the lifecycle thread journals the stop.
      // Use append-time monotonic time for chain ordering and retain the source
      // timestamp as payload evidence.
-     journal!!.append(
+     eventJournal.append(
       CaptureSessionJournal.RECORD_INTEGRITY_INCIDENT,
       SystemClock.elapsedRealtimeNanos(),
       mapOf(
