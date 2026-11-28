@@ -249,3 +249,13 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Android Vault contract Run #188 (`46107670104`): **PASS**.
 - GitHub Actions confirms all three completed successfully on the exact same source SHA. The B4 source-slice CI wait is closed for that commit; this documentation update advances the branch and requires fresh exact-head CI.
 - B4 remains **not release-complete**: SQVE v2 cryptographic implementation/golden vectors/provider conformance, Android encrypted finalization wiring, SQJ durable journal/checkpoint and key-registry integration, encrypted durable promotion/recovery, crash-cut/ENOSPC/force-stop matrix, full combined-candidate CI, and physical-device acceptance remain open. SQVE v1 and all other blueprint decisions remain locked.
+
+## SQVE v2 implementation checkpoint — 2026-11-28
+
+Authoritative write/finalization target remains SQVE v2; V1 is legacy read/verification only. Controlled candidate commits include:
+
+- Rust V2 streaming writer/verifier, header sentinels, authenticated footer and deterministic vector: see candidate branch commits beginning `8514eeff168b` and subsequent validation/fix commits.
+- Android capture-time encrypted WAV sink, staged header/chunk/footer verifier, tamper test, and atomic promotion with parent-directory sync: candidate commits `63ff7c638c43`, `902be902d1ce`, `80089787811e`, `22f1b58625ff`.
+- Additional Rust footer/trailing-data and 1 MiB boundary tests: candidate commit `f17c497549b9`.
+
+**Evidence status:** implementation commits are present on the controlled candidate PR #7; they are not automatically merged into B4. CI is being run against the exact candidate heads. This B4 evidence document does not claim candidate CI, device tests, SQJ durability/recovery, iOS provider or independent crypto review have passed. Keep release gates blocked until all evidence is attached and exact-head checks pass.
