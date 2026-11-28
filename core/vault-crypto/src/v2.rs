@@ -144,7 +144,7 @@ pub fn parse_header(bytes: &[u8], key: &VaultFileKey) -> Result<Header, Error> {
         || u16::from_be_bytes(bytes[10..12].try_into().unwrap()) != CONTENT_SUITE_AES_256_GCM
         || bytes[12..14] != [0, 0]
         || u32::from_be_bytes(bytes[66..70].try_into().unwrap()) as usize != CHUNK_BYTES
-        || bytes[86..90] != [0, 0, 0, 0] {
+         {
         return Err(Error::InvalidHeader);
     }
     let mac_at = bytes.len() - HEADER_MAC_BYTES;
