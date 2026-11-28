@@ -642,6 +642,15 @@ mod tests {
         let key = VaultFileKey::from_bytes(&[0x55; 32]).unwrap();
         let mut source = std::io::Cursor::new(b"SQV".to_vec());
         let encoded = encrypt_stream(&mut source, Vec::new(), sample(), key).unwrap();
+        // Independently generated deterministic envelope SHA-256 vector
+        // (Python hashlib/hmac + cryptography AESGCM; fixed test-only inputs).
+        assert_eq!(
+            crate::sha256(&encoded),
+            [
+                0x46, 0x0a, 0x6f, 0x06, 0x71, 0x5d, 0xcb, 0x8b, 0x70, 0x4d, 0x1a, 0x44, 0xd0, 0x4c, 0x0c, 0x57,
+                0xfd, 0x6e, 0xcf, 0x0a, 0x43, 0x39, 0x32, 0xd7, 0x11, 0x99, 0x96, 0x59, 0xf4, 0xcf, 0xc7, 0x69,
+            ]
+        );
         let mut file = std::io::Cursor::new(encoded);
         let verify_key = VaultFileKey::from_bytes(&[0x55; 32]).unwrap();
         assert_eq!(
