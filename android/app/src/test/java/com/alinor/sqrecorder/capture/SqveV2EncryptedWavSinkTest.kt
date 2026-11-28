@@ -44,7 +44,7 @@ class SqveV2EncryptedWavSinkTest {
                 RandomAccessFile(output, "rw"), native, handle,
                 fileId, salt, noncePrefix, header, 48_000,
             )
-            val pcm = ByteArray(2 * 1_048_576 + 19) { 0x5a }
+            val pcm = ByteArray(2 * 1_048_576 + 18) { 0x5a }
             var overflowOffsetRejected = false
             try {
                 sink.writePcm(pcm, Int.MAX_VALUE, 1)
@@ -67,7 +67,7 @@ class SqveV2EncryptedWavSinkTest {
                 tamper.writeByte(original.toInt() xor 0x01)
                 var rejected = false
                 try {
-                    sink.verifyFinished(2 * 1_048_576L + 19L)
+                    sink.verifyFinished(2 * 1_048_576L + 18L)
                 } catch (_: IllegalArgumentException) {
                     rejected = true
                 } finally {
@@ -104,7 +104,7 @@ class SqveV2EncryptedWavSinkTest {
             assertEquals(1L, readU64(encoded, chunk1At + 4))
             val chunk2At = chunk1At + 20 + 1_048_576 + 16
             assertArrayEquals("SQVC".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(chunk2At, chunk2At + 4))
-            assertEquals(63, readU32(encoded, chunk2At + 12).toInt())
+            assertEquals(62, readU32(encoded, chunk2At + 12).toInt())
             assertEquals(2L, readU64(encoded, chunk2At + 4))
             val footerAt = encoded.size - 56
             assertArrayEquals("SQVF".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(footerAt, footerAt + 4))
