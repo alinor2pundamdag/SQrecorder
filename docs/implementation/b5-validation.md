@@ -43,3 +43,9 @@
 - Capture still bypasses the Rust bounded capture ABI, SQJ append-only journal, and Rust durable-store promotion/recovery APIs. Do not claim queue-overrun protection, durable session commit, crash recovery, or idempotent journal-backed finalization.
 - Next implementation must wire capture through bounded native/KMP pipeline and integrate authenticated Vault encryption + metadata-only SQJ + durable stage/verify/promote/commit; keep plaintext out of finalized artifacts. Add crash-cut/ENOSPC and sink-failure tests before marking those gates.
 - PR #4 remains DRAFT / OPEN / UNMERGED. No release/merge authorization from CI success alone.
+
+## SQVE v2 encrypted capture promotion gate (candidate implementation)
+
+The Android capture owner now calls `SqveV2EncryptedWavSink.verifyFinished()` after writing the streaming footer and before any final-name promotion. The verifier rechecks the authenticated header MAC, chunk order/length and per-chunk GCM tags/AAD, canonical WAV RIFF/data length, footer count/actual plaintext length, SHA-256 over header+records+ciphertext+tags, and exact EOF. Promotion uses same-filesystem `ATOMIC_MOVE` only (no copy fallback), then syncs the parent directory. Any verification or promotion exception leaves the capture incomplete and must not emit a successful-finalization event.
+
+**Still release-blocking:** this does not yet bind the artifact to a durable SQJ session journal, store event/checkpoint/final-hash records, provide authenticated startup reconciliation after process death, or demonstrate ENOSPC/force-stop/torn-footer/atomic-rename crash cuts. Exact-head CI and physical device tests are required. Treat this as an implementation checkpoint, not release acceptance.
