@@ -29,6 +29,29 @@ public data class VaultV2RecipientWrap(
     public val wrapNonceHex: String? = null,
 )
 
+
+/**
+ * V2-only key custody boundary. Implementations must use the exact selected
+ * suite and fail closed when the platform cannot provide it; this API cannot
+ * fall back to the V1 RSA/OAEP path.
+ */
+public interface VaultV2KeyAccess {
+    public fun createRandomV2FileKeyHandle(): VaultFileKeyHandle
+    public fun currentPublicV2RecipientKeyId(): String
+    public fun wrapFileKeyForV2(
+        fileKeyHandle: VaultFileKeyHandle,
+        recipientKeyId: String,
+        fileId: ByteArray,
+        fileSalt: ByteArray,
+    ): VaultV2RecipientWrap
+    public fun unwrapV2RecipientFileKey(
+        wrap: VaultV2RecipientWrap,
+        fileId: ByteArray,
+        fileSalt: ByteArray,
+        authContext: VaultAuthContext,
+    ): VaultFileKeyHandle
+}
+
 public data class VaultV2EnvelopeContract(
     public val formatVersion: Int = 2,
     public val cipherSuite: VaultV2CipherSuite,
