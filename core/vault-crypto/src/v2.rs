@@ -200,7 +200,8 @@ pub fn parse_header(bytes: &[u8], key: &VaultFileKey) -> Result<Header, Error> {
         return Err(Error::InvalidHeader);
     }
     let mac_at = bytes.len() - HEADER_MAC_BYTES;
-    let salt: [u8; 32] = bytes[30..62]
+    let salt: [u8; 32] = bytes
+        .get(30..62)
         .ok_or(Error::InvalidHeader)?
         .try_into()
         .map_err(|_| Error::InvalidHeader)?;
