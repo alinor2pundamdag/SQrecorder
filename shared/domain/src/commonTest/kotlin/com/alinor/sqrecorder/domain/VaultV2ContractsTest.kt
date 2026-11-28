@@ -93,4 +93,15 @@ class VaultV2ContractsTest {
             validV2().copy(headerMacBase64 = "B".repeat(43) + "=").validate(),
         )
     }
+
+    @Test
+    fun v2RecipientIdsUseCanonicalAsciiOrderAndPermitContractColon() {
+        val first = validV2().recipients.single().copy(recipientKeyId = "device:primary")
+        val next = first.copy(recipientKeyId = "z-device")
+        assertNull(validV2().copy(recipients = listOf(first, next)).validate())
+        assertEquals(
+            VaultV2ContractError.NONCANONICAL_RECIPIENT_ORDER,
+            validV2().copy(recipients = listOf(next, first)).validate(),
+        )
+    }
 }
