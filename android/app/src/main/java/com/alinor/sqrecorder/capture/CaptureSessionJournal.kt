@@ -106,6 +106,129 @@ internal class CaptureSessionJournal private constructor(
         private val MAGIC = byteArrayOf(0x53, 0x51, 0x4a, 0x52)
         private val DIGEST_DOMAIN = byteArrayOf(0x53, 0x51, 0x4a, 0x31)
 
+        data class ScanResult(
+            val valid: Boolean,
+            val damagedTail: Boolean,
+            val lastSequence: Long,
+            val finalized: Boolean,
+            val reason: String?,
+        )
+
+        /**
+         * Read-only SQJ scanner for startup reconciliation. It never truncates,
+         * repairs, or appends to a damaged journal; caller must retain evidence.
+         */
+        fun scan(file: File): ScanResult {
+            if (!file.isFile) return ScanResult(false, false, 0L, false, "missing journal")
+            return try {
+                FileChannel.open(file.toPath(), StandardOpenOption.READ).use { channel ->
+                    val size = channel.size()
+                    var offset = 0L
+                    var expectedSequence = 1L
+                    var previousDigest = ByteArray(DIGEST_BYTES)
+                    var priorTimestamp: Long? = null
+                    var sessionId: ByteArray? = null
+                    var finalized = false
+                    while (offset < size) {
+                        if (size - offset < 4L) {
+                            previousDigest.fill(0)
+                            return ScanResult(false, true, expectedSequence - 1L, finalized, "torn length prefix")
+                        }
+                        val prefix = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN)
+                        channel.position(offset)
+                        readFully(channel, prefix)
+                        prefix.flip()
+                        val bodyLength = prefix.int
+                        if (bodyLength < MIN_BODY_BYTES || bodyLength > MIN_BODY_BYTES + MAX_PAYLOAD_BYTES ||
+                            size - offset - 4L < bodyLength.toLong()
+                        ) {
+                            previousDigest.fill(0)
+                            return ScanResult(false, size - offset - 4L < bodyLength.toLong(), expectedSequence - 1L, finalized, "invalid or truncated record length")
+                        }
+                        val bytes = ByteBuffer.allocate(4 + bodyLength).order(ByteOrder.LITTLE_ENDIAN)
+                        channel.position(offset)
+                        readFully(channel, bytes)
+                        val record = bytes.array()
+                        val payloadLength = ByteBuffer.wrap(record, 76, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                        if (!record.copyOfRange(4, 8).contentEquals(MAGIC) ||
+                            ByteBuffer.wrap(record, 8, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt() != JOURNAL_VERSION ||
+                            payloadLength < 1 || bodyLength != MIN_BODY_BYTES + payloadLength ||
+                            ByteBuffer.wrap(record, 12, 8).order(ByteOrder.LITTLE_ENDIAN).long != expectedSequence ||
+                            !record.copyOfRange(44, 76).contentEquals(previousDigest)
+                        ) {
+                            record.fill(0)
+                            previousDigest.fill(0)
+                            return ScanResult(false, false, expectedSequence - 1L, finalized, "record metadata/chain mismatch")
+                        }
+                        val timestamp = ByteBuffer.wrap(record, 20, 8).order(ByteOrder.LITTLE_ENDIAN).long
+                        if (timestamp < 0L || (priorTimestamp != null && timestamp < priorTimestamp!!)) {
+                            record.fill(0)
+                            previousDigest.fill(0)
+                            return ScanResult(false, false, expectedSequence - 1L, finalized, "timestamp regression")
+                        }
+                        val id = record.copyOfRange(28, 44)
+                        if (id.all { it == 0.toByte() } || (sessionId != null && !sessionId!!.contentEquals(id))) {
+                            record.fill(0)
+                            previousDigest.fill(0)
+                            return ScanResult(false, false, expectedSequence - 1L, finalized, "session UUID mismatch")
+                        }
+                        if (sessionId == null) sessionId = id else id.fill(0)
+                        val type = ByteBuffer.wrap(record, 10, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xffff
+                        val payload = record.copyOfRange(80, 80 + payloadLength)
+                        if (!isCanonicalJournalPayload(payload, type)) {
+                            payload.fill(0)
+                            record.fill(0)
+                            previousDigest.fill(0)
+                            return ScanResult(false, false, expectedSequence - 1L, finalized, "noncanonical event payload")
+                        }
+                        payload.fill(0)
+                        val digestOffset = record.size - DIGEST_BYTES
+                        val actualDigest = MessageDigest.getInstance("SHA-256").run {
+                            update(DIGEST_DOMAIN)
+                            update(previousDigest)
+                            update(record, 4, digestOffset - 4)
+                            digest()
+                        }
+                        val storedDigest = record.copyOfRange(digestOffset, record.size)
+                        if (!MessageDigest.isEqual(actualDigest, storedDigest)) {
+                            actualDigest.fill(0); storedDigest.fill(0); record.fill(0); previousDigest.fill(0)
+                            return ScanResult(false, false, expectedSequence - 1L, finalized, "record digest mismatch")
+                        }
+                        previousDigest.fill(0)
+                        previousDigest = actualDigest.copyOf()
+                        actualDigest.fill(0); storedDigest.fill(0); record.fill(0)
+                        finalized = finalized || type == RECORD_FILE_FINALIZED
+                        priorTimestamp = timestamp
+                        expectedSequence = Math.addExact(expectedSequence, 1L)
+                        offset = Math.addExact(offset, 4L + bodyLength.toLong())
+                    }
+                    previousDigest.fill(0)
+                    sessionId?.fill(0)
+                    ScanResult(true, false, expectedSequence - 1L, finalized, null)
+                }
+            } catch (failure: Exception) {
+                ScanResult(false, false, 0L, false, failure.javaClass.simpleName)
+            }
+        }
+
+        private fun readFully(channel: FileChannel, buffer: ByteBuffer) {
+            while (buffer.hasRemaining()) {
+                if (channel.read(buffer) < 0) throw java.io.EOFException("truncated SQJ record")
+            }
+        }
+
+        private fun isCanonicalJournalPayload(bytes: ByteArray, recordType: Int): Boolean {
+            val text = bytes.toString(Charsets.UTF_8)
+            if (text.toByteArray(Charsets.UTF_8).contentEquals(bytes).not()) return false
+            val pair = Regex("\\\"([A-Za-z][A-Za-z0-9]*)\\\":(-?[0-9]+)")
+            val matches = pair.findAll(text).toList()
+            if (matches.isEmpty() || text != matches.joinToString(prefix = "{", postfix = "}", separator = ",") { it.value }) return false
+            val keys = matches.map { it.groupValues[1] }
+            if (keys != keys.sorted() || keys.distinct().size != keys.size) return false
+            val values = matches.associate { it.groupValues[1] to it.groupValues[2].toLongOrNull() }
+            return values["eventCode"] == recordType.toLong() && values["schemaVersion"] == JOURNAL_VERSION.toLong()
+        }
+
         fun create(file: File, sessionId: UUID): CaptureSessionJournal {
             val parent = file.parentFile ?: error("SQJ parent directory missing")
             check(parent.isDirectory || parent.mkdirs()) { "SQJ parent directory unavailable" }
