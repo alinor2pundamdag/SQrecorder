@@ -223,7 +223,17 @@ public class CaptureForegroundService : Service() {
     bytes = Math.addExact(bytes, count.toLong())
    }
    val stopRequestedNs = SystemClock.elapsedRealtimeNanos()
-   journal!!.append(CaptureSessionJournal.RECORD_CAPTURE_STOP_REQUESTED, stopRequestedNs, mapOf("stopReasonCode" to stopReason.ordinal.toLong()))
+   journal!!.append(CaptureSessionJournal.RECORD_CAPTURE_STOP_REQUESTED, stopRequestedNs, mapOf("stopReasonCode" to when (stopReason) {
+    StopReason.USER_REQUEST -> 1L
+    StopReason.STORAGE_LIMIT -> 2L
+    StopReason.THERMAL_LIMIT -> 3L
+    StopReason.BATTERY_LIMIT -> 4L
+    StopReason.CAPTURE_FAILURE -> 5L
+    StopReason.PCM_QUEUE_PRESSURE -> 6L
+    StopReason.PERMISSION_REVOKED -> 7L
+    StopReason.ROUTE_LOSS -> 8L
+    StopReason.APP_SHUTDOWN -> 9L
+   }))
    reduce(SessionEvent.StopRequested(stopRequestedNs, stopReason))
    stopRecorderIfRecording(active)
    pump!!.stopAndDrain()
