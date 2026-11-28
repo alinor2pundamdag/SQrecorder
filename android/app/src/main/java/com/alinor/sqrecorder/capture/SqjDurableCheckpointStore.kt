@@ -1,6 +1,8 @@
 package com.alinor.sqrecorder.capture
 
 import com.alinor.sqrecorder.domain.JournalSignatureAnchor
+import com.alinor.sqrecorder.vault.android.AndroidJournalAnchorVerifier
+import com.alinor.sqrecorder.vault.android.JournalAnchorVerificationResult
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -70,6 +72,104 @@ internal class SqjDurableCheckpointStore {
             encoded.fill(0)
         }
         return target
+    }
+
+
+    /** Reads a persisted SQAC file and verifies both signature and exact journal-head binding. */
+    fun verifyPersisted(
+        journalFile: File,
+        checkpointFile: File,
+        verifier: AndroidJournalAnchorVerifier,
+    ): SqacVerificationResult {
+        val bytes = try {
+            checkpointFile.readBytes()
+        } catch (_: Exception) {
+            return SqacVerificationResult.INVALID_CHECKPOINT
+        }
+        val anchor = try {
+            decodeCanonicalSqac(bytes)
+        } catch (_: Exception) {
+            bytes.fill(0)
+            return SqacVerificationResult.INVALID_CHECKPOINT
+        }
+        bytes.fill(0)
+        val scan = CaptureSessionJournal.scan(journalFile)
+        if (!scan.valid || scan.damagedTail) return SqacVerificationResult.JOURNAL_DAMAGED
+        if (scan.lastSequence != anchor.sequence) return SqacVerificationResult.SEQUENCE_MISMATCH
+        val terminalDigest = try {
+            readTerminalDigest(journalFile)
+        } catch (_: Exception) {
+            return SqacVerificationResult.JOURNAL_DAMAGED
+        }
+        val digestHex = terminalDigest.joinToString("") { "%02x".format(it) }
+        terminalDigest.fill(0)
+        if (digestHex != anchor.digestHex) return SqacVerificationResult.DIGEST_MISMATCH
+        return when (verifier.verify(anchor)) {
+            JournalAnchorVerificationResult.VALID -> SqacVerificationResult.VALID
+            JournalAnchorVerificationResult.KEY_NOT_FOUND -> SqacVerificationResult.RETAINED_KEY_MISSING
+            else -> SqacVerificationResult.INVALID_SIGNATURE
+        }
+    }
+
+    private fun decodeCanonicalSqac(bytes: ByteArray): JournalSignatureAnchor {
+        require(bytes.size in 69..340)
+        require(bytes.copyOfRange(0, 4).contentEquals(byteArrayOf(0x53, 0x51, 0x41, 0x43)))
+        val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        require(buffer.getShort(4).toInt() == 1)
+        val sequence = buffer.getLong(6)
+        val digest = bytes.copyOfRange(14, 46).joinToString("") { "%02x".format(it) }
+        val epoch = buffer.getLong(46)
+        val timestamp = buffer.getLong(54)
+        val algorithmLength = buffer.getShort(62).toInt() and 0xffff
+        val keyLength = buffer.getShort(64).toInt() and 0xffff
+        val signatureLength = buffer.getShort(66).toInt() and 0xffff
+        require(algorithmLength in 1..64 && keyLength in 1..128 && signatureLength in 1..80)
+        require(bytes.size == 68 + algorithmLength + keyLength + signatureLength)
+        val algorithmStart = 68
+        val keyStart = algorithmStart + algorithmLength
+        val signatureStart = keyStart + keyLength
+        val algorithm = strictUtf8(bytes.copyOfRange(algorithmStart, keyStart))
+        val keyId = strictUtf8(bytes.copyOfRange(keyStart, signatureStart))
+        val signature = bytes.copyOfRange(signatureStart, bytes.size)
+        val anchor = JournalSignatureAnchor(
+            formatVersion = 1,
+            sequence = sequence,
+            digestHex = digest,
+            signatureAlgorithmId = algorithm,
+            signingKeyId = keyId,
+            signatureBase64 = encodeStandardBase64(signature),
+            authenticationEpoch = epoch,
+            monotonicTimestampNs = timestamp,
+        )
+        signature.fill(0)
+        require(anchor.validate())
+        return anchor
+    }
+
+    private fun strictUtf8(bytes: ByteArray): String =
+        Charsets.UTF_8.newDecoder()
+            .onMalformedInput(java.nio.charset.CodingErrorAction.REPORT)
+            .onUnmappableCharacter(java.nio.charset.CodingErrorAction.REPORT)
+            .decode(ByteBuffer.wrap(bytes)).toString().also { bytes.fill(0) }
+
+    private fun encodeStandardBase64(bytes: ByteArray): String {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+        val output = StringBuilder(((bytes.size + 2) / 3) * 4)
+        var i = 0
+        while (i < bytes.size) {
+            val a = bytes[i].toInt() and 0xff
+            val hasB = i + 1 < bytes.size
+            val hasC = i + 2 < bytes.size
+            val b = if (hasB) bytes[i + 1].toInt() and 0xff else 0
+            val d = if (hasC) bytes[i + 2].toInt() and 0xff else 0
+            val block = (a shl 16) or (b shl 8) or d
+            output.append(alphabet[(block ushr 18) and 63])
+            output.append(alphabet[(block ushr 12) and 63])
+            output.append(if (hasB) alphabet[(block ushr 6) and 63] else '=')
+            output.append(if (hasC) alphabet[block and 63] else '=')
+            i += 3
+        }
+        return output.toString()
     }
 
     private fun readTerminalDigest(file: File): ByteArray {
@@ -153,3 +253,15 @@ internal class SqjDurableCheckpointStore {
         return chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
 }
+
+
+internal enum class SqacVerificationResult {
+    VALID,
+    INVALID_CHECKPOINT,
+    JOURNAL_DAMAGED,
+    SEQUENCE_MISMATCH,
+    DIGEST_MISMATCH,
+    RETAINED_KEY_MISSING,
+    INVALID_SIGNATURE,
+}
+
