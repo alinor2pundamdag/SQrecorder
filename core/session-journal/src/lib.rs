@@ -4,6 +4,8 @@
 use sha2::{Digest, Sha256};
 
 pub mod anchor_registry;
+pub mod file_sink;
+pub use file_sink::{FileJournalOpenError, FileJournalSink};
 pub mod anchor_verifier;
 pub use anchor_registry::{
     AnchorKeyRegistryError, AnchorKeyRegistryStatus, AnchorKeyRegistryVerification,
