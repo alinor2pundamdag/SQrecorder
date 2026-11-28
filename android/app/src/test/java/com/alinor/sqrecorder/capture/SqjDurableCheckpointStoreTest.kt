@@ -13,6 +13,7 @@ import java.security.KeyPairGenerator
 import java.security.MessageDigest
 import java.security.Signature
 import java.io.File
+import java.nio.file.Files
 import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -22,7 +23,7 @@ import org.junit.Test
 class SqjDurableCheckpointStoreTest {
     @Test
     fun persistsCanonicalSqacOnlyWhenAnchorMatchesFullyVerifiedJournalHead() {
-        val root = createTempDir(prefix = "sqrec-sqac-")
+        val root = Files.createTempDirectory("sqrec-sqac-").toFile()
         val session = UUID.randomUUID()
         val journalFile = File(root, "session-$session.sqj")
         val checkpointDirectory = File(root, "checkpoints")
@@ -49,7 +50,7 @@ class SqjDurableCheckpointStoreTest {
 
     @Test
     fun rejectsStaleSequenceOrDigestBeforeWritingCheckpoint() {
-        val root = createTempDir(prefix = "sqrec-sqac-stale-")
+        val root = Files.createTempDirectory("sqrec-sqac-stale-").toFile()
         val session = UUID.randomUUID()
         val journalFile = File(root, "session-$session.sqj")
         try {
@@ -74,7 +75,7 @@ class SqjDurableCheckpointStoreTest {
 
     @Test
     fun conflictingSameSequenceCheckpointIsNeverOverwritten() {
-        val root = createTempDir(prefix = "sqrec-sqac-conflict-")
+        val root = Files.createTempDirectory("sqrec-sqac-conflict-").toFile()
         val session = UUID.randomUUID()
         val journalFile = File(root, "session-$session.sqj")
         val cpDir = File(root, "cp")
@@ -102,7 +103,7 @@ class SqjDurableCheckpointStoreTest {
 
     @Test
     fun persistedCheckpointSignatureVerifiesAndBecomesStaleAfterJournalAdvance() {
-        val root = createTempDir(prefix = "sqrec-sqac-verify-")
+        val root = Files.createTempDirectory("sqrec-sqac-verify-").toFile()
         val session = UUID.randomUUID()
         val journalFile = File(root, "session-$session.sqj")
         val cpDir = File(root, "cp")
@@ -192,7 +193,7 @@ class SqjDurableCheckpointStoreTest {
 
     @Test
     fun rejectsOversizedCheckpointBeforeReadOrSignatureWork() {
-        val root = createTempDir(prefix = "sqrec-sqac-large-")
+        val root = Files.createTempDirectory("sqrec-sqac-large-").toFile()
         val journal = File(root, "journal.sqj")
         val oversized = File(root, "oversized.checkpoint")
         try {
@@ -213,7 +214,7 @@ class SqjDurableCheckpointStoreTest {
 
     @Test
     fun expiredAuthContextIsRejectedBeforeSignerOrCheckpointWrite() {
-        val root = createTempDir(prefix = "sqrec-sqac-auth-")
+        val root = Files.createTempDirectory("sqrec-sqac-auth-").toFile()
         val journal = File(root, "journal.sqj")
         val cpDir = File(root, "cp")
         var signerCalled = false

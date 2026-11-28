@@ -1,6 +1,7 @@
 package com.alinor.sqrecorder.capture
 
 import java.io.File
+import java.nio.file.Files
 import java.io.RandomAccessFile
 import java.util.UUID
 import org.junit.Assert.assertEquals
@@ -11,7 +12,7 @@ import org.junit.Test
 class CaptureSessionJournalTest {
     @Test
     fun appendsDurableCanonicalSqjChainAndScannerAcceptsIt() {
-        val directory = createTempDir(prefix = "sqrec-sqj-")
+        val directory = Files.createTempDirectory("sqrec-sqj-").toFile()
         val session = UUID.fromString("12345678-1234-4234-8234-123456789abc")
         val journalFile = File(directory, "session-$session.sqj")
         try {
@@ -44,7 +45,7 @@ class CaptureSessionJournalTest {
 
     @Test
     fun emptyCreatedJournalIsNotMistakenForAValidSession() {
-        val directory = createTempDir(prefix = "sqrec-sqj-empty-")
+        val directory = Files.createTempDirectory("sqrec-sqj-empty-").toFile()
         val session = UUID.randomUUID()
         val journalFile = File(directory, "session-$session.sqj")
         try {
@@ -60,7 +61,7 @@ class CaptureSessionJournalTest {
 
     @Test
     fun timestampRegressionIsRejectedBeforeAnyJournalBytesAreWritten() {
-        val directory = createTempDir(prefix = "sqrec-sqj-time-")
+        val directory = Files.createTempDirectory("sqrec-sqj-time-").toFile()
         val session = UUID.randomUUID()
         val journalFile = File(directory, "session-$session.sqj")
         try {
@@ -87,7 +88,7 @@ class CaptureSessionJournalTest {
 
     @Test
     fun scannerDoesNotAcceptPrematureOrPostFinalizationRecords() {
-        val directory = createTempDir(prefix = "sqrec-sqj-terminal-")
+        val directory = Files.createTempDirectory("sqrec-sqj-terminal-").toFile()
         val session = UUID.randomUUID()
         val journalFile = File(directory, "session-$session.sqj")
         try {
@@ -120,7 +121,7 @@ class CaptureSessionJournalTest {
 
     @Test
     fun scannerRejectsDamagedDigestWithoutModifyingOriginalJournal() {
-        val directory = createTempDir(prefix = "sqrec-sqj-corrupt-")
+        val directory = Files.createTempDirectory("sqrec-sqj-corrupt-").toFile()
         val session = UUID.randomUUID()
         val journalFile = File(directory, "session-$session.sqj")
         try {
