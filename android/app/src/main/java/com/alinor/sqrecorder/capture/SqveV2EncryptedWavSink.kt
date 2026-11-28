@@ -162,7 +162,6 @@ internal class SqveV2EncryptedWavSink(
         if (index == 0L && firstReserved) {
             file.seek(firstRecordOffset + CHUNK_RECORD_BYTES + CHUNK_BYTES + GCM_TAG_BYTES)
         }
-        if (index == 0L) nextIndex = 1L
     }
 
     private fun chunkAad(index: Long, size: Int): ByteArray =
