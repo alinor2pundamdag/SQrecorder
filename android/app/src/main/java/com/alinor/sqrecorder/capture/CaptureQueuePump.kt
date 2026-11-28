@@ -49,26 +49,27 @@ internal class CaptureQueuePump(
         consumerFailure.get()?.let { throw IllegalStateException("PCM consumer failed", it) }
         check(!drainRequested.get()) { "PCM queue is already stopping" }
         check(byteCount > 0 && byteCount % 2 == 0 && frameCount == byteCount / 2)
-        val status = queue.submit(
-            pcm = pcm,
-            sampleRateHz = sampleRateHz,
-            byteCount = byteCount,
-            frameCount = frameCount,
-            firstFrameIndex = producerFrameIndex,
-            monotonicTimestampNs = monotonicTimestampNs,
-            captureEpoch = captureEpoch,
-            sequence = producerSequence,
-        )
+        val status = try {
+            queue.submit(
+                pcm = pcm,
+                sampleRateHz = sampleRateHz,
+                byteCount = byteCount,
+                frameCount = frameCount,
+                firstFrameIndex = producerFrameIndex,
+                monotonicTimestampNs = monotonicTimestampNs,
+                captureEpoch = captureEpoch,
+                sequence = producerSequence,
+            )
+        } finally {
+            pcm.position(0)
+            repeat(byteCount) { pcm.put(0) }
+            pcm.position(0)
+        }
         if (status != JniCaptureQueue.STATUS_OK) {
             val error = IllegalStateException("native PCM submit failed with sq_status_v1=$status")
             consumerFailure.compareAndSet(null, error)
             throw error
         }
-        // Native submit copies the block into its bounded queue. Scrub the
-        // producer's reusable direct buffer immediately after that ownership transfer.
-        pcm.position(0)
-        repeat(byteCount) { pcm.put(0) }
-        pcm.position(0)
         producerFrameIndex = Math.addExact(producerFrameIndex, frameCount.toLong())
         producerSequence = Math.addExact(producerSequence, 1)
         LockSupport.unpark(consumer)
