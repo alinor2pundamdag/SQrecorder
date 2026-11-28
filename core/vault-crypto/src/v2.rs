@@ -65,10 +65,7 @@ pub enum Error {
 impl Header {
     /// Build a fresh per-file V2 header using the OS CSPRNG. DEK generation
     /// remains separately owned by VaultFileKey::generate().
-    pub fn new_random(
-        plaintext_len: u64,
-        recipients: Vec<RecipientWrap>,
-    ) -> Result<Self, Error> {
+    pub fn new_random(plaintext_len: u64, recipients: Vec<RecipientWrap>) -> Result<Self, Error> {
         let mut file_id = [0u8; 16];
         let mut file_salt = [0u8; 32];
         let mut nonce_prefix = [0u8; 4];
