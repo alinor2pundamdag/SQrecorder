@@ -192,6 +192,31 @@ Canonical ORD-G-001 body absent; restore or approve minimum bootstrap. Master pl
 Tree: 113 files, no truncation, SHA `450fabc9263368a9e366df834e1aad9c3815f425`. Rust PASS run 46156388703/job 141013864188. Cross-platform PASS run 46156388734, 6/6 (Rust Linux/macOS/Windows; KMP Linux/macOS/Windows). Android run 46156388675/job 141015290416 FAIL: app assemble/unit BUILD SUCCESSFUL, API36 bridge PASS, API23 connected device test install fails; log `pm install-create ... Could not access the Package Manager. Is the system running?`, `DELETE_FAILED_INTERNAL_ERROR`, API23 0 tests. App report artifact 15268127484, 16,542 bytes; total test count UNKNOWN. Local build/test NONE. Physical device NONE. Signing/SBOM/repro artifact NONE. Independent review NONE. Full license/NC and TODO scan NONE. Protocol changes by this audit NONE.
 
 ## Governance bootstrap confirmation
+
+The six required files were absent at source SHA `450fabc9263368a9e366df834e1aad9c3815f425`. Added by commit `80abe5ba44d1a991a5654c211c78133777b3aff9` (parent is the audited source SHA):
+
+| File | UTF-8 bytes at bootstrap commit | Blob SHA |
+|---|---:|---|
+| `AGENTS.md` | 1,123 | `06eea8db61d31292745be4bcfcc5aaf5c720cde1` |
+| `docs/PROJECT_STATE.md` | 1,042 | `02ef208e9ac4ac24e69763744099e05bd0ff4b51` |
+| `docs/ORDERS.md` | 589 | `aca67f09afdff3bbd20be72ca7b46d84a2df7a8b` |
+| `docs/AMENDMENTS.md` | 317 | `c83fe63449980135c32589316960f18370547d2c` |
+| `docs/REVIEWS.md` | 341 | `1267520afabc4a42f77288e4891a2ffb6e9eac37` |
+| `docs/MASTER_PLAN.md` | 557 | `63673b91e20b17a72636b73f7ec8ebd7542f6313` |
+| `docs/audit/ORD-G-003-disclosure.md` | 28,592 | `cbc9815e651203c1aad5c50be55f105509c6ab64` |
+
+The canonical ORD-G-001 text, master plan and A1–A33 were not reconstructed. No contract changed. CI must be checked again on the post-bootstrap HEAD.
+
+## Ledger snippet (verbatim from docs/PROJECT_STATE.md)
+
+## Ledger entry — governance bootstrap byte/hash verification
+
+- Timestamp: 2026-11-28T23:07:21+08:00 (audit timestamp; bootstrap commit was authored at repository current time, UTC timestamp is in Git commit metadata).
+- Governance commit: `80abe5ba44d1a991a5654c211c78133777b3aff9`, parent `450fabc9263368a9e366df834e1aad9c3815f425`.
+- Files added and UTF-8 bytes at bootstrap commit: `AGENTS.md` 1,123; `docs/PROJECT_STATE.md` 1,042; `docs/ORDERS.md` 589; `docs/AMENDMENTS.md` 317; `docs/REVIEWS.md` 341; `docs/MASTER_PLAN.md` 557; `docs/audit/ORD-G-003-disclosure.md` 28,592. Blob IDs recorded in GitHub tree/commit.
+- Disclosure content at bootstrap commit blob: `cbc9815e651203c1aad5c50be55f105509c6ab64`. The following report revision embeds this ledger snippet; Git object identity of that subsequent revision is independently recorded in repository history (self-hash is not embedded).
+- No protocol/security contract changed. New governance/docs paths trigger fresh workflows; the prior evidence remains tied to source SHA `450fabc9263368a9e366df834e1aad9c3815f425`.
+
 Six required files absent at source SHA `450fabc9263368a9e366df834e1aad9c3815f425`. Bootstrap files created: `AGENTS.md`, `docs/PROJECT_STATE.md`, `docs/ORDERS.md`, `docs/AMENDMENTS.md`, `docs/REVIEWS.md`, `docs/MASTER_PLAN.md`; disclosure `docs/audit/ORD-G-003-disclosure.md`. Bootstrap commit SHA and actual byte sizes will be recorded by the following ledger-update commit; branch moves and triggers fresh exact-head CI. Contract files untouched.
 
 ## Ledger snippet
