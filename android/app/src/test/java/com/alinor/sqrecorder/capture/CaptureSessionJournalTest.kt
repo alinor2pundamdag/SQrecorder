@@ -70,6 +70,39 @@ class CaptureSessionJournalTest {
     }
 
     @Test
+    fun scannerDoesNotAcceptPrematureOrPostFinalizationRecords() {
+        val directory = createTempDir(prefix = "sqrec-sqj-terminal-")
+        val session = UUID.randomUUID()
+        val journalFile = File(directory, "session-$session.sqj")
+        try {
+            CaptureSessionJournal.create(journalFile, session).use { journal ->
+                journal.append(CaptureSessionJournal.RECORD_SESSION_CREATED, 10L)
+                journal.append(CaptureSessionJournal.RECORD_FILE_FINALIZED, 20L)
+            }
+            val premature = CaptureSessionJournal.scan(journalFile)
+            assertFalse("FILE_FINALIZED without encryption completion is invalid", premature.valid)
+            assertFalse(premature.finalized)
+
+            journalFile.delete()
+            CaptureSessionJournal.create(journalFile, session).use { journal ->
+                journal.append(CaptureSessionJournal.RECORD_SESSION_CREATED, 10L)
+                journal.append(CaptureSessionJournal.RECORD_CAPTURE_STARTED, 20L)
+                journal.append(CaptureSessionJournal.RECORD_CAPTURE_STOP_REQUESTED, 30L)
+                journal.append(CaptureSessionJournal.RECORD_CAPTURE_STOPPED, 40L)
+                journal.append(CaptureSessionJournal.RECORD_VAULT_ENCRYPTION_STARTED, 50L)
+                journal.append(CaptureSessionJournal.RECORD_VAULT_ENCRYPTION_COMPLETED, 60L)
+                journal.append(CaptureSessionJournal.RECORD_FILE_FINALIZED, 70L)
+                journal.append(CaptureSessionJournal.RECORD_INTEGRITY_INCIDENT, 80L)
+            }
+            val afterFinal = CaptureSessionJournal.scan(journalFile)
+            assertFalse("no records may follow FILE_FINALIZED", afterFinal.valid)
+            assertTrue(afterFinal.finalized)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun scannerRejectsDamagedDigestWithoutModifyingOriginalJournal() {
         val directory = createTempDir(prefix = "sqrec-sqj-corrupt-")
         val session = UUID.randomUUID()
