@@ -53,7 +53,35 @@ public class CaptureForegroundService : Service() {
  @Volatile private var vaultNative: JniVaultNativeKeyBridge? = null
  @Volatile private var vaultKeyHandle: com.alinor.sqrecorder.domain.VaultFileKeyHandle? = null
 
- override fun onCreate() { super.onCreate(); createNotificationChannel() }
+ override fun onCreate() {
+  super.onCreate()
+  createNotificationChannel()
+  inspectUnfinishedCaptureJournals()
+ }
+
+ /**
+  * Startup reconciliation is intentionally read-only until a user-authenticated
+  * V2 unwrap and full envelope verification are available. Never delete, truncate,
+  * or promote orphaned artifacts automatically.
+  */
+ private fun inspectUnfinishedCaptureJournals() {
+  val directory = File(filesDir, "recordings")
+  val journals = directory.listFiles { file -> file.isFile && file.name.startsWith("session-") && file.name.endsWith(".sqj") }
+    ?: return
+  for (journalFile in journals) {
+   val scan = CaptureSessionJournal.scan(journalFile)
+   val id = journalFile.name.removePrefix("session-").removeSuffix(".sqj")
+   val partial = File(directory, "capture-$id.sqve.part")
+   val finalized = File(directory, "capture-$id.sqve")
+   if (!scan.valid) {
+    android.util.Log.e(TAG, "SQJ recovery required for ${journalFile.name}: ${scan.reason}; preserve bytes and artifacts")
+   } else if (!scan.finalized && (partial.exists() || finalized.exists())) {
+    android.util.Log.w(TAG, "Unfinished SQJ capture requires authenticated recovery: ${journalFile.name}; preserve .part/final artifact")
+   } else if (scan.finalized && !finalized.exists()) {
+    android.util.Log.e(TAG, "SQJ says finalized but artifact is missing: ${journalFile.name}; integrity incident")
+   }
+  }
+ }
 
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   when (intent?.action) {
