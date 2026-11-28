@@ -1,6 +1,7 @@
 package com.alinor.sqrecorder.capture
 
 import java.io.File
+import com.alinor.sqrecorder.PcmWavHeader
 import com.alinor.sqrecorder.domain.VaultFileKeyHandle
 import com.alinor.sqrecorder.domain.VaultV2RecipientWrap
 import com.alinor.sqrecorder.domain.VaultV2WrapSuite
@@ -85,8 +86,9 @@ class SqveV2EncryptedWavSinkTest {
             val nonce0 = noncePrefix + u64be(0)
             val aad0 = chunkAad(fileId, salt, noncePrefix, 0, plain0Length)
             val plain0 = native.decrypt(handle, nonce0, aad0, encoded.copyOfRange(encrypted0At, encrypted0At + plain0Length + 16))
-            assertArrayEquals("RIFF".toByteArray(Charsets.US_ASCII), plain0.copyOfRange(0, 4))
-            assertEquals(pcm.size, readLeU32(plain0, 40).toInt())
+            val expectedWavHeader = PcmWavHeader.create(48_000, pcm.size.toLong())
+            assertArrayEquals(expectedWavHeader, plain0.copyOfRange(0, expectedWavHeader.size))
+            expectedWavHeader.fill(0)
             plain0.fill(0)
 
             val chunk1At = encrypted0At + plain0Length + 16
