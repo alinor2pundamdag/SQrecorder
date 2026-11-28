@@ -166,7 +166,7 @@ class SqjDurableCheckpointStoreTest {
             val authContext = VaultAuthContext(
                 sessionId = VaultAuthSessionId("host-test-session"),
                 authorizationEpoch = epoch,
-                expiresAtMonotonicNs = 99_999L,
+                expiresAtMonotonicNs = Long.MAX_VALUE,
             )
             val cp = coordinator.anchorDurableHead(journalFile, cpDir, authContext)
             assertEquals(SqacVerificationResult.VALID, store.verifyPersisted(journalFile, cp, verifier))
