@@ -11,10 +11,10 @@ import java.security.MessageDigest
 import javax.crypto.Cipher
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.SecretKeySpec
-import kotlin.test.Test
-import kotlin.test.assertContentEquals
-import kotlin.test.assertEquals
-import kotlin.test.assertTrue
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
 
 class SqveV2EncryptedWavSinkTest {
     @Test
@@ -51,7 +51,7 @@ class SqveV2EncryptedWavSinkTest {
 
             val encoded = output.readBytes()
             assertEquals(envelopeBytes, encoded.size.toLong())
-            assertContentEquals(byteArrayOf(0x53, 0x51, 0x56, 0x45), encoded.copyOfRange(0, 4))
+            assertArrayEquals(byteArrayOf(0x53, 0x51, 0x56, 0x45), encoded.copyOfRange(0, 4))
             assertTrue(encoded.indexOfSubsequence("RIFF".toByteArray(Charsets.US_ASCII)) < 0)
             val headerLength = readU32(encoded, 6).toInt()
             assertEquals(header.size, headerLength)
