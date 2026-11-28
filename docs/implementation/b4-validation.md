@@ -269,3 +269,11 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Candidate head before this evidence-only update was `6d49f940927d0658318b5223b292a82c3c576ea4`; GitHub Actions workflow-run query returned zero runs and combined commit status returned no statuses. This was recorded as **not run/not verified**, never PASS.
 - Updated the B4 evidence record to request a fresh CI cycle from the controlled candidate branch. This commit changes only validation evidence; it does not alter implementation and does not convert any gate to PASS.
 - After this commit, fetch the new PR head and check Rust, cross-platform and Android workflow runs against that exact SHA. Keep the PR draft/open/unmerged. If path filters prevent a workflow from running, record it as not run and request a supported manual dispatch/re-run; do not infer success.
+
+
+## Capture artifact no-clobber promotion hardening — 2026-11-28
+
+- Fixed a destructive collision edge in the Android capture service: the encrypted `.sqve.part` is now created with exclusive `File.createNewFile()` before opening `RandomAccessFile("rw")`, so an orphaned stage is never silently reused/truncated.
+- Final publication now uses a same-filesystem hard-link create (atomic destination-name creation that fails if the final name exists), directory sync, stage unlink, and a second directory sync. It avoids `ATOMIC_MOVE` provider semantics that may replace an existing target. A crash between link and unlink can leave both names for the same verified ciphertext; recovery preserves/reconciles them, never overwrites.
+- Implementation commit: `bbbdde6cba02d7111d8245de03eddfb7e7b2837d`; follow-up removed the now-unused move import: `3ca7fe3b823098c6f35ca90943709634271b8532`.
+- **Verification pending:** this relies on hard-link support for the app-private recording filesystem; Android API/device and crash-cut tests must validate link + directory-sync + unlink behavior. Do not mark durable promotion acceptance until those tests and exact-head CI pass.
