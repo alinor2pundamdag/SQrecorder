@@ -228,8 +228,11 @@ pub(crate) fn sqve_v2_header_mac(
     let mut expand_input = Vec::with_capacity(info.len() + 1);
     expand_input.extend_from_slice(info);
     expand_input.push(1);
-    let header_key = hmac_sha256(&prk, &expand_input);
-    hmac_sha256(&header_key, authenticated_bytes)
+    let mut header_key = hmac_sha256(&prk, &expand_input);
+    let mac = hmac_sha256(&header_key, authenticated_bytes);
+    prk.zeroize();
+    header_key.zeroize();
+    mac
 }
 
 fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
