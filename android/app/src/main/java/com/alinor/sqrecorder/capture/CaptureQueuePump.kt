@@ -125,7 +125,14 @@ internal class CaptureQueuePump(
                 check(byteCount <= stagingBytes.size.toLong() && byteCount % 2L == 0L)
                 pcm.position(0)
                 pcm.get(stagingBytes, 0, byteCount.toInt())
-                try {\n                    output.writePcm(stagingBytes, 0, byteCount.toInt())\n                } finally {\n                    stagingBytes.fill(0, 0, byteCount.toInt())\n                    pcm.position(0)\n                    repeat(byteCount.toInt()) { pcm.put(0) }\n                    pcm.position(0)\n                }
+                try {
+                    output.writePcm(stagingBytes, 0, byteCount.toInt())
+                } finally {
+                    stagingBytes.fill(0, 0, byteCount.toInt())
+                    pcm.position(0)
+                    repeat(byteCount.toInt()) { pcm.put(0) }
+                    pcm.position(0)
+                }
                 consumerFrameIndex = Math.addExact(consumerFrameIndex, metadata.frameCount.toLong())
                 consumerSequence = Math.addExact(consumerSequence, 1)
             }
