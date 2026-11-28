@@ -493,7 +493,7 @@ impl<W: Write> Writer<W> {
         if self.next != self.header.chunk_count || self.written != self.header.plaintext_len {
             return Err(Error::Incomplete);
         }
-        let digest = self.hash.finalize();
+        let digest = self.hash.clone().finalize();
         let mut footer = [0u8; FOOTER_BYTES];
         footer[..4].copy_from_slice(b"SQVF");
         footer[4..6].copy_from_slice(&VERSION.to_be_bytes());
