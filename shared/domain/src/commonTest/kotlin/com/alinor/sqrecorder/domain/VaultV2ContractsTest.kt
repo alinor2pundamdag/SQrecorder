@@ -104,4 +104,26 @@ class VaultV2ContractsTest {
             validV2().copy(recipients = listOf(next, first)).validate(),
         )
     }
+
+    @Test
+    fun explicitApi23Rsa3072SuiteRequiresExactCiphertextSizeAndNoEcdhFields() {
+        val recipient = VaultV2RecipientWrap(
+            suite = VaultV2WrapSuite.RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL,
+            recipientKeyId = "android-v2-rsa3072-mgf1sha1",
+            wrappedDekBase64 = "A".repeat(VaultV2EnvelopeContract.RSA3072_CIPHERTEXT_BASE64_LENGTH),
+        )
+        assertNull(validV2().copy(recipients = listOf(recipient)).validate())
+        assertEquals(
+            VaultV2ContractError.INVALID_RSA_WRAP,
+            validV2().copy(
+                recipients = listOf(recipient.copy(wrappedDekBase64 = "A".repeat(508))),
+            ).validate(),
+        )
+        assertEquals(
+            VaultV2ContractError.INVALID_RSA_WRAP,
+            validV2().copy(
+                recipients = listOf(recipient.copy(ephemeralPublicKeyBase64 = "AQ==")),
+            ).validate(),
+        )
+    }
 }
