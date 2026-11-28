@@ -4,7 +4,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use sha2::{Digest, Sha256};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::{
     GCM_TAG_BYTES, VaultCryptoError, VaultFileKey, decrypt_chunk_in_place, encrypt_chunk_in_place,
@@ -511,7 +511,7 @@ pub struct StreamingWriter<W: Write> {
     key: VaultFileKey,
     header: Header,
     hash: Sha256,
-    buffer: Vec<u8>,
+    buffer: Zeroizing<Vec<u8>>,
     buffered: usize,
     next_index: u64,
     written: u64,
@@ -536,7 +536,7 @@ impl<W: Write> StreamingWriter<W> {
             key,
             header,
             hash,
-            buffer,
+            buffer: Zeroizing::new(buffer),
             buffered: 0,
             next_index: 0,
             written: 0,
