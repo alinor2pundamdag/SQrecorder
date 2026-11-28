@@ -30,8 +30,8 @@ class SqveV2EncryptedWavSinkTest {
         val wrap = VaultV2RecipientWrap(
             suite = VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM,
             recipientKeyId = "android-v2-ecdh-" + "a".repeat(64),
-            wrappedDekBase64 = SqveBase64.encodeNoWrap(wrapBytes),
-            ephemeralPublicKeyBase64 = SqveBase64.encodeNoWrap(ephemeral),
+            wrappedDekBase64 = java.util.Base64.getEncoder().encodeToString(wrapBytes),
+            ephemeralPublicKeyBase64 = java.util.Base64.getEncoder().encodeToString(ephemeral),
             wrapNonceHex = wrapNonce.joinToString("") { "%02x".format(it.toInt() and 0xff) },
         )
         val header = AndroidSqveV2HeaderCodec(native).serializeStreamingHeader(
@@ -56,30 +56,30 @@ class SqveV2EncryptedWavSinkTest {
             val headerLength = readU32(encoded, 6).toInt()
             assertEquals(header.size, headerLength)
             val chunk0At = headerLength
-            assertContentEquals("SQVC".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(chunk0At, chunk0At + 4))
+            assertArrayEquals("SQVC".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(chunk0At, chunk0At + 4))
             val plain0Length = readU32(encoded, chunk0At + 12).toInt()
             assertEquals(1_048_576, plain0Length)
             val encrypted0At = chunk0At + 20
             val nonce0 = noncePrefix + u64be(0)
             val aad0 = chunkAad(fileId, salt, noncePrefix, 0, plain0Length)
             val plain0 = native.decrypt(handle, nonce0, aad0, encoded.copyOfRange(encrypted0At, encrypted0At + plain0Length + 16))
-            assertContentEquals("RIFF".toByteArray(Charsets.US_ASCII), plain0.copyOfRange(0, 4))
+            assertArrayEquals("RIFF".toByteArray(Charsets.US_ASCII), plain0.copyOfRange(0, 4))
             assertEquals(pcm.size, readLeU32(plain0, 40).toInt())
             plain0.fill(0)
 
             val chunk1At = encrypted0At + plain0Length + 16
-            assertContentEquals("SQVC".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(chunk1At, chunk1At + 4))
+            assertArrayEquals("SQVC".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(chunk1At, chunk1At + 4))
             assertEquals(1_048_576, readU32(encoded, chunk1At + 12).toInt())
             assertEquals(1L, readU64(encoded, chunk1At + 4))
             val chunk2At = chunk1At + 20 + 1_048_576 + 16
-            assertContentEquals("SQVC".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(chunk2At, chunk2At + 4))
+            assertArrayEquals("SQVC".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(chunk2At, chunk2At + 4))
             assertEquals(63, readU32(encoded, chunk2At + 12).toInt())
             assertEquals(2L, readU64(encoded, chunk2At + 4))
             val footerAt = encoded.size - 56
-            assertContentEquals("SQVF".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(footerAt, footerAt + 4))
+            assertArrayEquals("SQVF".toByteArray(Charsets.US_ASCII), encoded.copyOfRange(footerAt, footerAt + 4))
             assertEquals(3L, readU64(encoded, footerAt + 8))
             assertEquals(pcm.size.toLong() + 44L, readU64(encoded, footerAt + 16))
-            assertContentEquals(
+            assertArrayEquals(
                 MessageDigest.getInstance("SHA-256").digest(encoded.copyOfRange(0, footerAt)),
                 encoded.copyOfRange(footerAt + 24, encoded.size),
             )
