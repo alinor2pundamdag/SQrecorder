@@ -30,6 +30,7 @@ internal class SqveV2EncryptedWavSink(
     private var firstReserved = false
     private var firstRecordOffset = header.size.toLong()
     private var nextIndex = 1L
+    private var finished = false
     private var closed = false
 
     init {
@@ -46,7 +47,7 @@ internal class SqveV2EncryptedWavSink(
     }
 
     fun writePcm(bytes: ByteArray, offset: Int, length: Int) {
-        check(!closed) { "encrypted WAV sink is closed" }
+        check(!closed && !finished) { "encrypted WAV sink is closed or finalized" }
         require(offset >= 0 && length >= 0 && offset.toLong() + length.toLong() <= bytes.size.toLong())
         var cursor = offset
         var remaining = length
@@ -78,7 +79,7 @@ internal class SqveV2EncryptedWavSink(
     }
 
     fun finish(pcmBytes: Long): Long {
-        check(!closed) { "encrypted WAV sink already finalized" }
+        check(!closed && !finished) { "encrypted WAV sink already finalized or closed" }
         require(pcmBytes > 0L && pcmBytes % 2L == 0L)
         val wavHeader = PcmWavHeader.create(sampleRateHz, pcmBytes)
         wavHeader.copyInto(firstChunk, 0)
@@ -121,7 +122,7 @@ internal class SqveV2EncryptedWavSink(
         file.fd.sync()
         footer.fill(0)
         streamDigest.fill(0)
-        closed = true
+        finished = true
         return file.length()
     }
 
@@ -131,7 +132,7 @@ internal class SqveV2EncryptedWavSink(
      * footer digest/count/length and the canonical WAV size fields.
      */
     fun verifyFinished(pcmBytes: Long) {
-        check(!closed) { "sink must remain open until staged verification completes" }
+        check(!closed && finished) { "sink must be finalized and open during staged verification" }
         require(pcmBytes > 0L && pcmBytes % 2L == 0L)
         val expectedPlaintext = Math.addExact(pcmBytes, 44L)
         val totalFileBytes = file.length()
