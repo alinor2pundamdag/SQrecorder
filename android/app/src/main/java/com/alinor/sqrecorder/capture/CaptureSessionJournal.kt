@@ -174,6 +174,11 @@ internal class CaptureSessionJournal private constructor(
                         }
                         if (sessionId == null) sessionId = id else id.fill(0)
                         val type = ByteBuffer.wrap(record, 10, 2).order(ByteOrder.LITTLE_ENDIAN).short.toInt() and 0xffff
+                        if (type !in RECORD_SESSION_CREATED..RECORD_MIGRATION_APPENDED) {
+                            record.fill(0)
+                            previousDigest.fill(0)
+                            return ScanResult(false, false, expectedSequence - 1L, finalized, "unknown journal record type")
+                        }
                         val payload = record.copyOfRange(80, 80 + payloadLength)
                         if (!isCanonicalJournalPayload(payload, type)) {
                             payload.fill(0)
