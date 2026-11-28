@@ -115,19 +115,26 @@ public class CaptureForegroundService : Service() {
     queueBlockCapacity = QUEUE_BLOCK_CAPACITY,
     maxBlockFrames = MAX_CAPTURE_BLOCK_FRAMES,
    )
-   pump = CaptureQueuePump(queue, rate, output!!, 1L)
+   pump = CaptureQueuePump(queue, rate, output!!, 1L) { failure ->
+    android.util.Log.e(TAG, "PCM sink failed; requesting controlled capture stop", failure)
+    requestStop(StopReason.CAPTURE_FAILURE)
+   }
    pump!!.start()
    val pcm = ByteBuffer.allocateDirect(MAX_CAPTURE_BLOCK_BYTES)
    var bytes = 0L
    while (!stopping.get()) {
     if (StatFs(filesDir.absolutePath).availableBytes < MIN_FREE_BYTES) {
-     stopping.set(true) // deterministic low-storage stop
-     stopReason = StopReason.STORAGE_LIMIT
+     // READ_BLOCKING can hang after only setting the stop flag.
+     // Stop AudioRecord now so the read returns and cleanup drains the queue.
+     requestStop(StopReason.STORAGE_LIMIT)
      break
     }
     pcm.clear()
     val count = active.read(pcm, pcm.capacity(), AudioRecord.READ_BLOCKING)
-    if (count < 0) throw IllegalStateException("AudioRecord read failed: $count")
+    if (count < 0) {
+     if (stopping.get()) break // requestStop() intentionally unblocks READ_BLOCKING
+     throw IllegalStateException("AudioRecord read failed: $count")
+    }
     if (count == 0) continue
     if (count % 2 != 0) throw IllegalStateException("AudioRecord returned a partial S16 frame: $count bytes")
     pcm.position(0)
