@@ -1,8 +1,10 @@
 # B4 validation record
 
+> **AUTHORITATIVE LOCK: SQVE v2 is the only current encrypted-write/finalization target. SQVE v1 is legacy read/verification compatibility only; no new V1 output and no silent downgrade. This supersedes historical B1/B4 wording that called V1 the locked/current write format. Implement V2 only against the approved canonical schema, provider suite IDs, golden vectors, and review gates.**
+
 ## Implemented
 
-- Approved B1 foundation retained: SQVE v1 chunked AES-256-GCM, RSA-OAEP SHA-256 wrap contract, and KMP Vault/session/journal contracts.
+- Approved B1 foundation retained: Historical SQVE v1 reader/compatibility contract, plus KMP Vault/session/journal contracts; SQVE v2 is the authoritative current write/finalization target.
 - Rust Vault writer/chunk AEAD, DEK zeroization, SQJ hash-chain/recovery, terminal writer after sink failure.
 - JCS canonical payload enforcement (RFC 8785), nested/escaped duplicate-key detection, canonical recovery verification.
 - Verified-only journal resume restores sequence/digest/timestamp; damaged tails require recovery.
@@ -180,7 +182,7 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 
 ### Gates still open — do not mark B4 100%
 1. Exact final evidence-SHA CI: Rust, Android JNI/16 KB, Android host tests, API 36 emulator, and cross-platform Rust/KMP matrix must all pass on the evidence commit.
-2. SQVE v2 is only a common metadata contract/design. Canonical serialized parser/writer, cryptographic RSA/ECDH providers, header MAC/AAD, nonces/counter enforcement, cross-platform golden vectors, v1 read/migration, recovery, fuzz/tamper vectors, and independent security review remain. SQVE v1 unchanged.
+2. SQVE v2 is only a common metadata contract/design. Canonical serialized parser/writer, cryptographic RSA/ECDH providers, header MAC/AAD, nonces/counter enforcement, cross-platform golden vectors, v1 read/migration, recovery, fuzz/tamper vectors, and independent security review remain. SQVE v1 retained only as immutable legacy read/verification compatibility; SQVE v2 is the sole current write target.
 3. Rust anchor verifier still lacks a production ECDSA P-256/SHA-256 implementation/provider and real signature vectors; registry/preimage primitive is not the end-to-end signed journal acceptance.
 4. Anchor registry must be wired into signer rotation, durable journal checkpoints/recovery, key invalidation, registry export/restore, and trusted integrity/backup policy on each platform.
 5. Crash-cut + ENOSPC/storage-fault integration tests and recovery evidence remain.
@@ -227,7 +229,7 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Cross-platform Run #118: **PASS** (all six Rust/KMP Linux, macOS, Windows jobs).
 - Android Vault Run #184: **PASS** (native/JNI 16 KB checks, host contracts, app/unit build, API 36 emulator Vault bridge).
 - These three workflows are confirmed completed/successful by GitHub Actions for the exact source SHA above. This closes the current CI verification wait for this B4 hardening slice; it does not close B4 release acceptance.
-- **SQVE scope correction:** SQVE v1 remains unchanged. Owner-approved ADR 0002 is the only approved envelope-version revision: separately versioned SQVE v2, with schema, cryptographic golden vectors, provider conformance, migration and independent review still required. Do not change other locked blueprint decisions or treat v2 metadata contracts as complete crypto.
+- **SQVE scope correction:** SQVE v1 remains immutable legacy compatibility only; SQVE v2 is the current write target. Owner-approved ADR 0002 is the only approved envelope-version revision: separately versioned SQVE v2, with schema, cryptographic golden vectors, provider conformance, migration and independent review still required. Do not change other locked blueprint decisions or treat v2 metadata contracts as complete crypto.
 - B4 remains **IN PROGRESS / NOT 100%**: end-to-end secure capture finalization, signed journal/key-registry integration, crash/ENOSPC recovery matrix, final integrated CI, and required device acceptance remain open.
 
 
