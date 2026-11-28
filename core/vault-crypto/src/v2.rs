@@ -220,8 +220,13 @@ pub fn decrypt_chunk(
     key: &VaultFileKey, header: &Header, index: u64, plaintext_len: u32,
     ciphertext: &mut [u8], tag: &[u8],
 ) -> Result<(), Error> {
-    if index >= header.chunk_count || ciphertext.len() != plaintext_len as usize
-        || plaintext_len == 0 || plaintext_len as usize > CHUNK_BYTES {
+    if index >= header.chunk_count || header.chunk_count != expected_chunks(header.plaintext_len) {
+        return Err(Error::MalformedChunk);
+    }
+    let offset = index.checked_mul(CHUNK_BYTES as u64).ok_or(Error::LengthOverflow)?;
+    let expected = header.plaintext_len.checked_sub(offset).ok_or(Error::MalformedChunk)?
+        .min(CHUNK_BYTES as u64) as usize;
+    if ciphertext.len() != expected || plaintext_len as usize != expected || expected == 0 {
         return Err(Error::MalformedChunk);
     }
     decrypt_chunk_in_place(key, chunk_nonce(header.nonce_prefix, index),
