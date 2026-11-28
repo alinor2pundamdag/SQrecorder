@@ -262,3 +262,10 @@ This supersedes the prior checkpoint wording that V2 cryptographic implementatio
 - Android tests now include independent header golden vectors and encrypted sink multi-chunk/footer assertions. Latest exact candidate head before this evidence edit: b9171e03c81c9ec139796d30ad3c05ec8691e5cf. Rust, cross-platform and Android workflows were started for that exact head; capture their final conclusions after the evidence commit, because this commit advances the head.
 
 Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/final hash and idempotent journal-backed finalization; encrypted durable-store stage/verify/promote/reconcile and startup recovery; crash-cut/force-stop/ENOSPC/sink-failure/queue-overrun matrix; recording-list/playback/decryption/authenticated recovery UI; API23 + API31+ emulator and physical device matrix; independent crypto review; iOS V2 recipient provider and cross-provider vectors. PR #2 and controlled candidate PR #7 remain draft/open/unmerged.
+
+
+## Exact-head CI restart requested — 2026-11-28
+
+- Candidate head before this evidence-only update was `6d49f940927d0658318b5223b292a82c3c576ea4`; GitHub Actions workflow-run query returned zero runs and combined commit status returned no statuses. This was recorded as **not run/not verified**, never PASS.
+- Updated the B4 evidence record to request a fresh CI cycle from the controlled candidate branch. This commit changes only validation evidence; it does not alter implementation and does not convert any gate to PASS.
+- After this commit, fetch the new PR head and check Rust, cross-platform and Android workflow runs against that exact SHA. Keep the PR draft/open/unmerged. If path filters prevent a workflow from running, record it as not run and request a supported manual dispatch/re-run; do not infer success.
