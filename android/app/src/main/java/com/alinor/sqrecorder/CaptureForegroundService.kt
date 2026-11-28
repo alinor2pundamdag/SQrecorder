@@ -74,10 +74,20 @@ public class CaptureForegroundService : Service() {
    val finalized = File(directory, "capture-$id.sqve")
    if (!scan.valid) {
     android.util.Log.e(TAG, "SQJ recovery required for ${journalFile.name}: ${scan.reason}; preserve bytes and artifacts")
-   } else if (!scan.finalized && (partial.exists() || finalized.exists())) {
-    android.util.Log.w(TAG, "Unfinished SQJ capture requires authenticated recovery: ${journalFile.name}; preserve .part/final artifact")
-   } else if (scan.finalized && !finalized.exists()) {
-    android.util.Log.e(TAG, "SQJ says finalized but artifact is missing: ${journalFile.name}; integrity incident")
+   } else if (!scan.finalized) {
+    // A durable SESSION_CREATED with no stage is still an interrupted session.
+    // Report every unfinished state; never silently skip an empty orphan.
+    android.util.Log.w(
+     TAG,
+     "Unfinished SQJ capture requires authenticated recovery: ${journalFile.name}; " +
+      "partialExists=${partial.exists()} finalExists=${finalized.exists()}; preserve all evidence",
+    )
+   } else if (!finalized.exists() || partial.exists()) {
+    android.util.Log.e(
+     TAG,
+     "SQJ/artifact state mismatch: ${journalFile.name}; " +
+      "finalExists=${finalized.exists()} partialExists=${partial.exists()}; integrity/recovery review required",
+    )
    }
   }
  }
@@ -185,13 +195,18 @@ public class CaptureForegroundService : Service() {
      requestStop(StopReason.CAPTURE_FAILURE)
     },
     onCaptureEvent = { event ->
+     // Native event timestamps can predate STOP_REQUESTED: the consumer
+     // drains queued events after the lifecycle thread journals the stop.
+     // Use append-time monotonic time for chain ordering and retain the source
+     // timestamp as payload evidence.
      journal!!.append(
       CaptureSessionJournal.RECORD_INTEGRITY_INCIDENT,
-      event.monotonicTimestampNs,
+      SystemClock.elapsedRealtimeNanos(),
       mapOf(
        "captureEpoch" to event.captureEpoch,
        "detailCode" to event.detailCode.toLong(),
        "eventSequence" to event.eventSequence,
+       "eventTimestampNs" to event.monotonicTimestampNs,
        "nativeEventType" to event.eventType.toLong(),
       ),
      )
