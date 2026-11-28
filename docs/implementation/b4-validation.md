@@ -381,3 +381,9 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Added regression test rejecting a 1 MiB checkpoint before decoding/signature work; canonical checkpoint cap remains 340 bytes.
 - Commits: `061bd245c6a163c437a0f4a425fe23acc06b7256`, test `3b9e46e4249dc78524397159025ed805b8eb1134`.
 - Exact-head build/test/CI/device validation is still not available from the connected GitHub workflow interface; source is committed, not runtime-verified.
+
+
+## SQAC minimum-size canonicalization — 2026-11-28
+
+- Tightened bounded checkpoint input from 69 to 71 bytes, the true minimum for SQAC v1 fixed 68-byte header plus three non-empty variable fields. Decoder still enforces exact lengths and all individual maxima (64/128/80 bytes).
+- Commit: `7205cfb9217442afd32dc05f15b4b6d3bc855871`. Source correction only; no test execution/CI pass claimed.
