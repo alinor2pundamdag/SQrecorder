@@ -85,8 +85,12 @@ internal class SqveV2EncryptedWavSink(
         wavHeader.fill(0)
         val plaintextTotal = Math.addExact(pcmBytes, 44L)
 
+        // Chunk zero is patched and encrypted at Stop. Preserve the already
+        // emitted tail end while overwriting its reserved first-chunk slot.
+        val tailEndOffset = if (firstReserved) file.length() else -1L
         emitChunk(index = 0L, buffer = firstChunk, size = firstUsed)
         firstChunk.fill(0)
+        if (firstReserved) file.seek(tailEndOffset)
         if (tailUsed > 0) emitTailChunk(tailUsed)
 
         // Hash the serialized header and encrypted chunk records in wire order.
