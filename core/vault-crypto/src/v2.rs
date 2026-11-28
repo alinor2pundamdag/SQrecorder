@@ -640,6 +640,7 @@ mod tests {
             nonce_prefix: [1, 2, 3, 4],
             plaintext_len: 3,
             chunk_count: 1,
+            streaming: false,
             recipients: vec![RecipientWrap {
                 suite: WRAP_SUITE_ECDH_P256_HKDF_SHA256_AES_GCM,
                 key_id: "device:primary".into(),
