@@ -229,3 +229,11 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - These three workflows are confirmed completed/successful by GitHub Actions for the exact source SHA above. This closes the current CI verification wait for this B4 hardening slice; it does not close B4 release acceptance.
 - **SQVE scope correction:** SQVE v1 remains unchanged. Owner-approved ADR 0002 is the only approved envelope-version revision: separately versioned SQVE v2, with schema, cryptographic golden vectors, provider conformance, migration and independent review still required. Do not change other locked blueprint decisions or treat v2 metadata contracts as complete crypto.
 - B4 remains **IN PROGRESS / NOT 100%**: end-to-end secure capture finalization, signed journal/key-registry integration, crash/ENOSPC recovery matrix, final integrated CI, and required device acceptance remain open.
+
+
+## Reconciled exact-head CI — 2026-11-27 23:xx UTC
+
+- Live GitHub Actions API verification resolved the previous pending-evidence ambiguity. PR #2 head at this checkpoint was `81d8759df022c1f9a7f6a48b41b072a2094d0cdb`.
+- Rust contract Run #160 (`46023749757`) **PASS**; cross-platform matrix Run #119 (`46023749508`) **PASS**; Android Vault contract Run #185 (`46023749577`) **PASS**. All three completed successfully on the exact same SHA.
+- Therefore the B4 evidence/documentation head's Rust, six-platform Rust/KMP matrix, and Android Vault/API 36 emulator CI wait is **CLOSED** for that SHA. This is not a release-acceptance declaration.
+- The current document-only update creates a new commit and must be validated by fresh exact-head CI. Keep PR #2 and tracking PR #3 draft/open/unmerged.
