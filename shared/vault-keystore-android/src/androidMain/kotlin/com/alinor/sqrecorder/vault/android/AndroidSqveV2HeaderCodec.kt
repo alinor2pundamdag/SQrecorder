@@ -110,8 +110,11 @@ public class AndroidSqveV2HeaderCodec(
     }
 }
 
+private const val V2_MIN_ECDH_PAYLOAD_BYTES = 63
+private const val V2_MAX_WRAPPED_BYTES = 8_192
+
 private fun validateEcdhPayload(payload: ByteArray) {
-    if (payload.size !in AndroidSqveV2HeaderCodec.MIN_ECDH_PAYLOAD_BYTES..AndroidSqveV2HeaderCodec.MAX_WRAPPED_BYTES) {
+    if (payload.size !in V2_MIN_ECDH_PAYLOAD_BYTES..V2_MAX_WRAPPED_BYTES) {
         throw IllegalArgumentException("Malformed V2 ECDH wrapped-DEK payload")
     }
     val derLength = ((payload[0].toInt() and 0xff) shl 8) or (payload[1].toInt() and 0xff)
