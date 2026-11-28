@@ -21,7 +21,7 @@ public enum class VaultV2WrapSuite {
 public data class VaultV2RecipientWrap(
     public val suite: VaultV2WrapSuite,
     public val recipientKeyId: String,
-    /** RSA ciphertext, or ECDH-derived AES-GCM ciphertext+tag; Base64 standard encoding. */
+    /** Canonical suite-specific wrappedBytes payload, standard Base64. ECDH embeds DER length+SPKI, nonce, ciphertext and tag. */
     public val wrappedDekBase64: String,
     /** DER SubjectPublicKeyInfo of the ephemeral P-256 key for ECDH only. */
     public val ephemeralPublicKeyBase64: String? = null,
@@ -113,7 +113,7 @@ public data class VaultV2EnvelopeContract(
                     ) return VaultV2ContractError.INVALID_RSA_WRAP
                 }
                 VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM -> {
-                    if (recipient.wrappedDekBase64.length != ECDH_WRAPPED_DEK_BASE64_LENGTH ||
+                    if (recipient.wrappedDekBase64.length < MIN_ECDH_WRAPPED_DEK_BASE64_LENGTH ||
                         recipient.ephemeralPublicKeyBase64.isNullOrEmpty() ||
                         recipient.ephemeralPublicKeyBase64.length > MAX_EPHEMERAL_KEY_BASE64_CHARS ||
                         !recipient.ephemeralPublicKeyBase64.isCanonicalBase64() ||
@@ -132,7 +132,7 @@ public data class VaultV2EnvelopeContract(
         public const val GCM_NONCE_BYTES: Int = 12
         public const val CHUNK_SIZE_BYTES: Int = 1_048_576
         public const val MIN_RSA_2048_CIPHERTEXT_BASE64: Int = 344
-        public const val ECDH_WRAPPED_DEK_BASE64_LENGTH: Int = 64
+        public const val MIN_ECDH_WRAPPED_DEK_BASE64_LENGTH: Int = 84
         public const val MAX_WRAPPED_DEK_BASE64_BYTES: Int = 16_384
         public const val MAX_RECIPIENTS: Int = 16
         public const val MAX_EPHEMERAL_KEY_BASE64_CHARS: Int = 512
