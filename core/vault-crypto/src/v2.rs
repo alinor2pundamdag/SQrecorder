@@ -207,7 +207,8 @@ fn valid_key_id(id: &str) -> bool {
 
 fn validate(header: &Header) -> Result<(), Error> {
     if (!header.streaming && header.chunk_count != expected_chunks(header.plaintext_len))
-        || (header.streaming && (header.plaintext_len != u64::MAX || header.chunk_count != u64::MAX))
+        || (header.streaming
+            && (header.plaintext_len != u64::MAX || header.chunk_count != u64::MAX))
         || header.recipients.is_empty()
         || header.recipients.len() > RECIPIENTS_MAX
     {
@@ -446,7 +447,9 @@ impl<W: Write> Writer<W> {
         })
     }
     pub fn write_chunk(&mut self, plaintext: &mut [u8]) -> Result<(), Error> {
-        if self.header.streaming { return Err(Error::InvalidHeader); }
+        if self.header.streaming {
+            return Err(Error::InvalidHeader);
+        }
         if self.next >= self.header.chunk_count {
             return Err(Error::ChunkOrder);
         }
@@ -503,7 +506,6 @@ impl<W: Write> Writer<W> {
     }
 }
 
-
 pub struct StreamingWriter<W: Write> {
     output: W,
     key: VaultFileKey,
@@ -525,10 +527,19 @@ impl<W: Write> StreamingWriter<W> {
         let mut hash = Sha256::new();
         hash.update(&encoded);
         let mut buffer = Vec::new();
-        buffer.try_reserve_exact(CHUNK_BYTES).map_err(|_| Error::Allocation)?;
+        buffer
+            .try_reserve_exact(CHUNK_BYTES)
+            .map_err(|_| Error::Allocation)?;
         buffer.resize(CHUNK_BYTES, 0);
         Ok(Self {
-            output, key, header, hash, buffer, buffered: 0, next_index: 0, written: 0,
+            output,
+            key,
+            header,
+            hash,
+            buffer,
+            buffered: 0,
+            next_index: 0,
+            written: 0,
         })
     }
 
@@ -561,13 +572,21 @@ impl<W: Write> StreamingWriter<W> {
         record[12..16].copy_from_slice(&(size as u32).to_be_bytes());
         record[16..20].copy_from_slice(&cipher_len.to_be_bytes());
         self.output.write_all(&record).map_err(|_| Error::Write)?;
-        self.output.write_all(&self.buffer[..size]).map_err(|_| Error::Write)?;
+        self.output
+            .write_all(&self.buffer[..size])
+            .map_err(|_| Error::Write)?;
         self.output.write_all(&tag).map_err(|_| Error::Write)?;
         self.hash.update(record);
         self.hash.update(&self.buffer[..size]);
         self.hash.update(tag);
-        self.written = self.written.checked_add(size as u64).ok_or(Error::LengthOverflow)?;
-        self.next_index = self.next_index.checked_add(1).ok_or(Error::LengthOverflow)?;
+        self.written = self
+            .written
+            .checked_add(size as u64)
+            .ok_or(Error::LengthOverflow)?;
+        self.next_index = self
+            .next_index
+            .checked_add(1)
+            .ok_or(Error::LengthOverflow)?;
         self.buffer[..size].zeroize();
         self.buffered = 0;
         Ok(())
@@ -601,7 +620,9 @@ fn verify_streaming_after_header<R: Read + Seek>(
     let mut hash = Sha256::new();
     hash.update(header_bytes);
     let mut ciphertext = Vec::new();
-    ciphertext.try_reserve_exact(CHUNK_BYTES).map_err(|_| Error::Allocation)?;
+    ciphertext
+        .try_reserve_exact(CHUNK_BYTES)
+        .map_err(|_| Error::Allocation)?;
     ciphertext.resize(CHUNK_BYTES, 0);
     let mut next_index = 0u64;
     let mut plaintext_total = 0u64;
@@ -613,7 +634,9 @@ fn verify_streaming_after_header<R: Read + Seek>(
         input.read_exact(&mut prefix).map_err(|_| Error::Read)?;
         if &prefix == b"SQVF" {
             footer[..4].copy_from_slice(&prefix);
-            input.read_exact(&mut footer[4..]).map_err(|_| Error::Read)?;
+            input
+                .read_exact(&mut footer[4..])
+                .map_err(|_| Error::Read)?;
             break;
         }
         if &prefix != b"SQVC" || saw_short_chunk {
@@ -621,17 +644,23 @@ fn verify_streaming_after_header<R: Read + Seek>(
         }
         let mut record = [0u8; 20];
         record[..4].copy_from_slice(&prefix);
-        input.read_exact(&mut record[4..]).map_err(|_| Error::Read)?;
+        input
+            .read_exact(&mut record[4..])
+            .map_err(|_| Error::Read)?;
         let index = u64::from_be_bytes(record[4..12].try_into().unwrap());
         let plain_len = u32::from_be_bytes(record[12..16].try_into().unwrap()) as usize;
         let cipher_len = u32::from_be_bytes(record[16..20].try_into().unwrap()) as usize;
-        if index != next_index || plain_len == 0 || plain_len > CHUNK_BYTES
+        if index != next_index
+            || plain_len == 0
+            || plain_len > CHUNK_BYTES
             || cipher_len != plain_len + GCM_TAG_BYTES
         {
             return Err(Error::MalformedChunk);
         }
         saw_short_chunk = plain_len < CHUNK_BYTES;
-        input.read_exact(&mut ciphertext[..plain_len]).map_err(|_| Error::Read)?;
+        input
+            .read_exact(&mut ciphertext[..plain_len])
+            .map_err(|_| Error::Read)?;
         let mut tag = [0u8; GCM_TAG_BYTES];
         input.read_exact(&mut tag).map_err(|_| Error::Read)?;
         hash.update(record);
@@ -647,7 +676,9 @@ fn verify_streaming_after_header<R: Read + Seek>(
         )?;
         ciphertext[..plain_len].zeroize();
         tag.zeroize();
-        plaintext_total = plaintext_total.checked_add(plain_len as u64).ok_or(Error::LengthOverflow)?;
+        plaintext_total = plaintext_total
+            .checked_add(plain_len as u64)
+            .ok_or(Error::LengthOverflow)?;
         next_index = next_index.checked_add(1).ok_or(Error::LengthOverflow)?;
     }
 
@@ -973,7 +1004,10 @@ mod tests {
         let encoded = writer.finish().unwrap();
         let mut reader = std::io::Cursor::new(encoded);
         let verify_key = VaultFileKey::from_bytes(&[0x66; 32]).unwrap();
-        assert_eq!(verify_authenticated_stream(&mut reader, &verify_key).unwrap(), header);
+        assert_eq!(
+            verify_authenticated_stream(&mut reader, &verify_key).unwrap(),
+            header
+        );
     }
 
     #[test]
@@ -986,6 +1020,9 @@ mod tests {
             .unwrap();
         let mut reader = std::io::Cursor::new(encoded);
         let verify_key = VaultFileKey::from_bytes(&[0x67; 32]).unwrap();
-        assert_eq!(verify_authenticated_stream(&mut reader, &verify_key).unwrap(), header);
+        assert_eq!(
+            verify_authenticated_stream(&mut reader, &verify_key).unwrap(),
+            header
+        );
     }
 }
