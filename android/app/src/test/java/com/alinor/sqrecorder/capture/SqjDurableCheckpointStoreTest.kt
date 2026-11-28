@@ -162,6 +162,7 @@ class SqjDurableCheckpointStoreTest {
                 },
                 verifier,
                 store,
+                monotonicNowNs = { 0L },
             )
             val authContext = VaultAuthContext(
                 sessionId = VaultAuthSessionId("host-test-session"),
