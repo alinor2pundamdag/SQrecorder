@@ -33,6 +33,10 @@ internal class CaptureSessionJournal private constructor(
             put("eventCode", recordType.toLong())
             put("schemaVersion", JOURNAL_VERSION.toLong())
         }
+        // Reject sequence exhaustion before touching disk. Otherwise a valid
+        // Long.MAX_VALUE record could be synced and then overflow the writer's
+        // next-sequence state, leaving an ambiguous durable append.
+        val nextSequence = Math.addExact(sequence, 1L)
         val payload = canonicalNumericJson(payloadFields)
         require(payload.size <= MAX_PAYLOAD_BYTES)
 
@@ -74,7 +78,7 @@ internal class CaptureSessionJournal private constructor(
         previousDigest.fill(0)
         previousDigest = digest.copyOf()
         lastTimestampNs = timestampNs
-        sequence = Math.addExact(sequence, 1L)
+        sequence = nextSequence
         bodyWithoutDigest.fill(0)
         payload.fill(0)
         return digest
@@ -255,7 +259,12 @@ internal class CaptureSessionJournal private constructor(
 
         private fun readFully(channel: FileChannel, buffer: ByteBuffer) {
             while (buffer.hasRemaining()) {
-                if (channel.read(buffer) < 0) throw java.io.EOFException("truncated SQJ record")
+                val count = channel.read(buffer)
+                if (count < 0) throw java.io.EOFException("truncated SQJ record")
+                // FileChannel normally makes progress for regular files; a
+                // zero-byte read here is treated as an I/O fault rather than
+                // spinning indefinitely during startup recovery.
+                if (count == 0) throw java.io.IOException("SQJ read made no progress")
             }
         }
 
