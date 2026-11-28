@@ -113,7 +113,8 @@ pub fn decode_checkpoint(bytes: &[u8]) -> Result<JournalSignatureAnchor, Checkpo
             .map_err(|_| CheckpointCodecError::InvalidMetadata)?
             .to_owned(),
         signing_key_id: core::str::from_utf8(&bytes[key_start..signature_start])
-            .map_err(|_| CheckpointCodecError::InvalidMetadata)?.to_owned(),
+            .map_err(|_| CheckpointCodecError::InvalidMetadata)?
+            .to_owned(),
         signature_der: bytes[signature_start..].to_vec(),
         authentication_epoch: read_u64(bytes, 46),
         monotonic_timestamp_ns: read_u64(bytes, 54),
