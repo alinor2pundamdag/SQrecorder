@@ -4,11 +4,12 @@
 //! The platform adapter must atomically persist the checkpoint, sync the file
 //! and parent directory, and preserve prior evidence on failure.
 use crate::{
+    JournalVerificationStatus,
     anchor_verifier::{
         JournalAnchorVerificationResult, JournalSignatureAnchor, P256Sha256SignatureProvider,
         verify_journal_anchor,
     },
-    verify_journal, JournalVerificationStatus,
+    verify_journal,
 };
 
 const MAGIC: &[u8; 4] = b"SQAC";
@@ -301,5 +302,4 @@ mod tests {
             BoundCheckpointVerification::JournalSequenceMismatch
         );
     }
-
 }
