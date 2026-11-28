@@ -24,6 +24,7 @@ import com.alinor.sqrecorder.domain.StopReason
 import com.alinor.sqrecorder.domain.SessionFailureCode
 import com.alinor.sqrecorder.domain.TransitionOutcome
 import com.alinor.sqrecorder.capture.CaptureQueuePump
+import com.alinor.sqrecorder.capture.CaptureSessionJournal
 import com.alinor.sqrecorder.capture.JniCaptureQueue
 import com.alinor.sqrecorder.capture.SqveV2EncryptedWavSink
 import com.alinor.sqrecorder.vault.android.AndroidSqveV2HeaderCodec
