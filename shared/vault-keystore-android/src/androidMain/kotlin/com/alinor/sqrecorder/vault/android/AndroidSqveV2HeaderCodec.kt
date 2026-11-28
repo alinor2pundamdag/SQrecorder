@@ -42,6 +42,10 @@ public class AndroidSqveV2HeaderCodec(
             throw IllegalArgumentException("V2 wrapped-DEK payload violates wire bounds")
         }
         if (suite == ECDH_WRAP_SUITE) validateEcdhPayload(wrapped)
+        if (suite == RSA3072_SHA1_WRAP_SUITE && wrapped.size != RSA3072_CIPHERTEXT_BYTES) {
+            wrapped.fill(0)
+            throw IllegalArgumentException("V2 RSA3072 recipient ciphertext must be 384 bytes")
+        }
 
         val body = ByteArrayOutputStream()
         body.write(MAGIC)
@@ -99,6 +103,7 @@ public class AndroidSqveV2HeaderCodec(
         const val RSA_WRAP_SUITE = 1
         const val ECDH_WRAP_SUITE = 2
         const val RSA3072_SHA1_WRAP_SUITE = 3
+        const val RSA3072_CIPHERTEXT_BYTES = 384
         const val FLAG_STREAMING = 1
         const val CHUNK_BYTES = 1_048_576
         const val DEK_BYTES = 32
