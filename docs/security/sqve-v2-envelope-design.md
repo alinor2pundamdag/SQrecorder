@@ -104,11 +104,11 @@ Recipient records are intentionally excluded from chunk AAD so an authenticated 
 
 ### Stream footer
 
-After the declared chunk records, write exactly 48 bytes:
+After the declared chunk records, write exactly 56 bytes:
 
-`magic "SQVF"[4] || version:u16be(2) || footerLength:u16be(48) || chunkCount:u64be || plaintextLength:u64be || streamDigest[24]`.
+`magic "SQVF"[4] || version:u16be(2) || footerLength:u16be(56) || chunkCount:u64be || plaintextLength:u64be || streamDigest[32]`.
 
-**Correction before implementation:** the existing V1 footer is 56 bytes with a 32-byte digest. V2 MUST NOT truncate SHA-256 to fit this proposed 48-byte footer. Use a 56-byte V2 footer with `streamDigest[32]`, and reject any other footer length. The digest is SHA-256 over the complete serialized header (including its MAC) and all chunk record bytes, excluding the footer. The footer digest is an integrity/consistency aid; AEAD tags and the authenticated header remain the cryptographic authenticity boundary.
+Do not truncate SHA-256; reject any other footer length. The digest is SHA-256 over the complete serialized header (including its MAC) and all chunk record bytes, excluding the footer. The footer digest is an integrity/consistency aid; AEAD tags and the authenticated header remain the cryptographic authenticity boundary.
 
 ### Implementation sequencing / safety
 
