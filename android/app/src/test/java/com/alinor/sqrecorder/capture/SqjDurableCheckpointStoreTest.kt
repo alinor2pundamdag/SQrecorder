@@ -210,6 +210,50 @@ class SqjDurableCheckpointStoreTest {
         }
     }
 
+
+    @Test
+    fun expiredAuthContextIsRejectedBeforeSignerOrCheckpointWrite() {
+        val root = createTempDir(prefix = "sqrec-sqac-auth-")
+        val journal = File(root, "journal.sqj")
+        val cpDir = File(root, "cp")
+        var signerCalled = false
+        try {
+            CaptureSessionJournal.create(journal, UUID.randomUUID()).use { writer ->
+                writer.append(CaptureSessionJournal.RECORD_SESSION_CREATED, 1L)
+            }
+            val verifier = AndroidJournalAnchorVerifier(JournalAnchorPublicKeyResolver { null })
+            val coordinator = SqjAuthenticatedCheckpointCoordinator(
+                object : JournalAnchorSigner {
+                    override fun signCommittedDigest(
+                        sequence: Long,
+                        digestHex: String,
+                        authContext: VaultAuthContext,
+                    ): JournalSignatureAnchor {
+                        signerCalled = true
+                        error("Signer must not run for expired auth")
+                    }
+                },
+                verifier,
+                monotonicNowNs = { 1_000L },
+            )
+            var rejected = false
+            try {
+                coordinator.anchorDurableHead(
+                    journal,
+                    cpDir,
+                    VaultAuthContext(VaultAuthSessionId("expired"), 1L, 999L),
+                )
+            } catch (_: IllegalStateException) {
+                rejected = true
+            }
+            assertTrue(rejected)
+            assertFalse(signerCalled)
+            assertFalse(cpDir.exists())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
     private fun fixture(
         sequence: Long,
         digestHex: String,
