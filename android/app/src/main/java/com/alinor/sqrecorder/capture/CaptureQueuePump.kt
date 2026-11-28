@@ -21,6 +21,7 @@ internal class CaptureQueuePump(
     private val sampleRateHz: Int,
     private val output: RandomAccessFile,
     private val captureEpoch: Long,
+    private val onConsumerFailure: (Throwable) -> Unit = {},
 ) : AutoCloseable {
     private val drainRequested = AtomicBoolean(false)
     private val consumerFailure = AtomicReference<Throwable?>(null)
@@ -126,8 +127,18 @@ internal class CaptureQueuePump(
                 consumerSequence = Math.addExact(consumerSequence, 1)
             }
         } catch (failure: Throwable) {
-            consumerFailure.compareAndSet(null, failure)
+            val firstFailure = consumerFailure.compareAndSet(null, failure)
             Log.e(TAG, "Bounded PCM sink failed; staging artifact must remain recoverable", failure)
+            // Notify capture control immediately. The producer may be blocked in
+            // AudioRecord.READ_BLOCKING; stopping it is required to unblock read
+            // and enter the single capture-thread drain/finalization path.
+            if (firstFailure) {
+                try {
+                    onConsumerFailure(failure)
+                } catch (callbackFailure: Throwable) {
+                    Log.e(TAG, "Capture failure callback failed", callbackFailure)
+                }
+            }
         } finally {
             consumerDone.set(true)
         }
