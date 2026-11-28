@@ -5,6 +5,13 @@
 //! Unsafe code at the eventual FFI boundary must be isolated, documented, and reviewed.
 #![deny(unsafe_op_in_unsafe_fn)]
 
+pub mod bounded_capture;
+pub mod capture_ffi;
+pub mod capture_jni;
+pub use bounded_capture::{
+    BoundedPcmQueue, CaptureError, CaptureEventMetadata, CaptureStatus, PcmMetadata,
+};
+
 /// Native ABI major version.
 pub const ABI_MAJOR_V1: u16 = 1;
 /// Native ABI minor version.

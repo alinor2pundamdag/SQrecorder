@@ -23,7 +23,7 @@ See [architecture boundaries](docs/architecture/system-boundaries.md), [decision
 
 ## Repository status
 
-This repository is being built in auditable batches. The B1 commit establishes the repository and build baseline only; it does not claim recording, Vault, DSP, platform integration, or runtime acceptance are implemented.
+Android B5 has an initial native application shell and user-started foreground microphone capture to app-private PCM WAV. This is an implementation slice, not production acceptance: Vault encryption, journal/checkpoint integration, Rust durable-store promotion, recovery UI, capture telemetry, and physical-device validation remain incomplete. See `docs/implementation/b5-validation.md`.
 
 ## Build prerequisites
 
