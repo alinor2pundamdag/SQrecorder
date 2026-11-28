@@ -1,6 +1,9 @@
 package com.alinor.sqrecorder.capture
 
 import com.alinor.sqrecorder.domain.JournalSignatureAnchor
+import com.alinor.sqrecorder.domain.JournalAnchorSigner
+import com.alinor.sqrecorder.domain.VaultAuthContext
+import com.alinor.sqrecorder.domain.VaultAuthSessionId
 import com.alinor.sqrecorder.vault.android.AndroidJournalAnchorVerifier
 import com.alinor.sqrecorder.vault.android.JournalAnchorPublicKeyResolver
 import java.io.ByteArrayOutputStream
@@ -142,10 +145,30 @@ class SqjDurableCheckpointStoreTest {
                 monotonicTimestampNs = timestamp,
             )
             val store = SqjDurableCheckpointStore()
-            val cp = store.persistAfterJournalSync(journalFile, cpDir, anchor)
             val verifier = AndroidJournalAnchorVerifier(
                 JournalAnchorPublicKeyResolver { requested -> if (requested == keyId) pair.public.encoded else null },
             )
+            val coordinator = SqjAuthenticatedCheckpointCoordinator(
+                object : JournalAnchorSigner {
+                    override fun signCommittedDigest(
+                        sequence: Long,
+                        digestHex: String,
+                        authContext: VaultAuthContext,
+                    ): JournalSignatureAnchor {
+                        assertEquals(anchor.sequence, sequence)
+                        assertEquals(anchor.digestHex, digestHex)
+                        return anchor
+                    }
+                },
+                verifier,
+                store,
+            )
+            val authContext = VaultAuthContext(
+                sessionId = VaultAuthSessionId("host-test-session"),
+                authorizationEpoch = epoch,
+                expiresAtMonotonicNs = 99_999L,
+            )
+            val cp = coordinator.anchorDurableHead(journalFile, cpDir, authContext)
             assertEquals(SqacVerificationResult.VALID, store.verifyPersisted(journalFile, cp, verifier))
 
             // A separately valid journal with a later terminal sequence must
