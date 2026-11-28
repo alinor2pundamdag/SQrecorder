@@ -43,6 +43,22 @@ class CaptureSessionJournalTest {
     }
 
     @Test
+    fun emptyCreatedJournalIsNotMistakenForAValidSession() {
+        val directory = createTempDir(prefix = "sqrec-sqj-empty-")
+        val session = UUID.randomUUID()
+        val journalFile = File(directory, "session-$session.sqj")
+        try {
+            CaptureSessionJournal.create(journalFile, session).use { }
+            val scan = CaptureSessionJournal.scan(journalFile)
+            assertFalse(scan.valid)
+            assertTrue(scan.damagedTail)
+            assertEquals("empty journal; SESSION_CREATED was not durably recorded", scan.reason)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun timestampRegressionIsRejectedBeforeAnyJournalBytesAreWritten() {
         val directory = createTempDir(prefix = "sqrec-sqj-time-")
         val session = UUID.randomUUID()
