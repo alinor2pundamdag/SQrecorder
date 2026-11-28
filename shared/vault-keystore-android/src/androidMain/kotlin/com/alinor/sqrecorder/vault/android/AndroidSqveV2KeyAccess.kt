@@ -222,6 +222,71 @@ public class AndroidSqveV2KeyAccess(
         }
     }
 
+    private fun wrapFileKeyWithRsaV2(
+        handle: VaultFileKeyHandle,
+        recipientKeyId: String,
+        recipientPublic: PublicKey,
+    ): VaultV2RecipientWrap {
+        val dek = native.copyFileKeyForWrapping(handle)
+        try {
+            if (dek.size != DEK_BYTES) {
+                throw VaultKeyAccessException(VaultKeyAccessFailure.NATIVE_BRIDGE_FAILURE)
+            }
+            val cipher = Cipher.getInstance(RSA_OAEP_TRANSFORMATION, ANDROID_KEYSTORE)
+            cipher.init(Cipher.ENCRYPT_MODE, recipientPublic, RSA3072_OAEP_SPEC)
+            val wrapped = cipher.doFinal(dek)
+            try {
+                if (wrapped.size != RSA3072_CIPHERTEXT_BYTES) {
+                    throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+                }
+                return VaultV2RecipientWrap(
+                    suite = VaultV2WrapSuite.RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY_LABEL,
+                    recipientKeyId = recipientKeyId,
+                    wrappedDekBase64 = SqveBase64.encodeNoWrap(wrapped),
+                )
+            } finally {
+                wrapped.fill(0)
+            }
+        } catch (e: VaultKeyAccessException) {
+            throw e
+        } catch (e: Exception) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.CRYPTO_FAILURE, e)
+        } finally {
+            dek.fill(0)
+        }
+    }
+
+    private fun unwrapRsaV2(wrap: VaultV2RecipientWrap, alias: String): VaultFileKeyHandle {
+        val ciphertext = decodeCanonicalBase64(wrap.wrappedDekBase64)
+        if (ciphertext.size != RSA3072_CIPHERTEXT_BYTES) {
+            ciphertext.fill(0)
+            throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+        }
+        var dek: ByteArray? = null
+        try {
+            val privateKey = keyStore().getKey(alias, null) as? java.security.PrivateKey
+                ?: throw VaultKeyAccessException(VaultKeyAccessFailure.KEY_NOT_FOUND)
+            val cipher = Cipher.getInstance(RSA_OAEP_TRANSFORMATION, ANDROID_KEYSTORE)
+            cipher.init(Cipher.DECRYPT_MODE, privateKey, RSA3072_OAEP_SPEC)
+            dek = cipher.doFinal(ciphertext)
+            if (dek.size != DEK_BYTES) {
+                throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+            }
+            return native.importUnwrappedFileKey(dek)
+        } catch (e: UserNotAuthenticatedException) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.AUTHENTICATION_REQUIRED, e)
+        } catch (e: KeyPermanentlyInvalidatedException) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.KEY_INVALIDATED, e)
+        } catch (e: VaultKeyAccessException) {
+            throw e
+        } catch (e: Exception) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.CRYPTO_FAILURE, e)
+        } finally {
+            ciphertext.fill(0)
+            dek?.fill(0)
+        }
+    }
+
     private fun requireV2Platform() {
         if (Build.VERSION.SDK_INT < MIN_V2_API) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.UNSUPPORTED_PLATFORM)
@@ -241,6 +306,20 @@ public class AndroidSqveV2KeyAccess(
     private fun currentVersion(): Long =
         keyStore().aliases().toList().filter { it.startsWith(ALIAS_PREFIX) }
             .mapNotNull { it.removePrefix(ALIAS_PREFIX).toLongOrNull() }.maxOrNull() ?: 0L
+
+    private fun currentRsaAlias(createIfMissing: Boolean): String {
+        val aliases = keyStore().aliases().toList().filter { it.startsWith(RSA_ALIAS_PREFIX) }
+        val newest = aliases.maxByOrNull { it.removePrefix(RSA_ALIAS_PREFIX).toLongOrNull() ?: -1L }
+        if (newest != null) return newest
+        if (!createIfMissing) throw VaultKeyAccessException(VaultKeyAccessFailure.KEY_NOT_FOUND)
+        val alias = RSA_ALIAS_PREFIX + "1"
+        generateRsaRecipientKey(alias)
+        return alias
+    }
+
+    private fun currentRsaVersion(): Long =
+        keyStore().aliases().toList().filter { it.startsWith(RSA_ALIAS_PREFIX) }
+            .mapNotNull { it.removePrefix(RSA_ALIAS_PREFIX).toLongOrNull() }.maxOrNull() ?: 0L
 
     private fun generateRecipientKey(alias: String) {
         try {
@@ -268,6 +347,39 @@ public class AndroidSqveV2KeyAccess(
         }
     }
 
+    private fun generateRsaRecipientKey(alias: String) {
+        try {
+            val builder = KeyGenParameterSpec.Builder(
+                alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT,
+            )
+                .setKeySize(RSA3072_BITS)
+                .setDigests(KeyProperties.DIGEST_SHA256)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_RSA_OAEP)
+                .setUserAuthenticationRequired(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                builder.setUserAuthenticationParameters(
+                    AUTH_WINDOW_SECONDS,
+                    KeyProperties.AUTH_BIOMETRIC_STRONG or KeyProperties.AUTH_DEVICE_CREDENTIAL,
+                )
+            } else {
+                @Suppress("DEPRECATION")
+                builder.setUserAuthenticationValidityDurationSeconds(AUTH_WINDOW_SECONDS)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) builder.setUnlockedDeviceRequired(true)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                builder.setInvalidatedByBiometricEnrollment(true)
+            }
+            if (Build.VERSION.SDK_INT >= 35) {
+                builder.setMgf1Digests(KeyProperties.DIGEST_SHA1)
+            }
+            KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_RSA, ANDROID_KEYSTORE).apply {
+                initialize(builder.build())
+            }.generateKeyPair()
+        } catch (e: Exception) {
+            throw VaultKeyAccessException(VaultKeyAccessFailure.CRYPTO_FAILURE, e)
+        }
+    }
+
     private fun publicKey(alias: String): PublicKey =
         keyStore().getCertificate(alias)?.publicKey
             ?: throw VaultKeyAccessException(VaultKeyAccessFailure.KEY_NOT_FOUND)
@@ -275,14 +387,19 @@ public class AndroidSqveV2KeyAccess(
     private fun aliasForKeyId(id: String): String {
         val store = keyStore()
         return store.aliases().toList().firstOrNull { alias ->
-            alias.startsWith(ALIAS_PREFIX) &&
-                store.getCertificate(alias)?.publicKey?.let(::keyId) == id
+            (alias.startsWith(ALIAS_PREFIX) || alias.startsWith(RSA_ALIAS_PREFIX)) &&
+                store.getCertificate(alias)?.publicKey?.let { keyId(it, alias) } == id
         } ?: throw VaultKeyAccessException(VaultKeyAccessFailure.KEY_NOT_FOUND)
     }
 
-    private fun keyId(publicKey: PublicKey): String =
-        "android-v2-ecdh-" + MessageDigest.getInstance("SHA-256")
-            .digest(publicKey.encoded).toHex()
+    private fun keyId(publicKey: PublicKey, alias: String): String {
+        val prefix = if (alias.startsWith(RSA_ALIAS_PREFIX)) {
+            "android-v2-rsa3072-oaep256-mgf1sha1-"
+        } else {
+            "android-v2-ecdh-"
+        }
+        return prefix + MessageDigest.getInstance("SHA-256").digest(publicKey.encoded).toHex()
+    }
 
     private fun keyStore(): KeyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
 
@@ -290,7 +407,15 @@ public class AndroidSqveV2KeyAccess(
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val ALIAS_PREFIX = "sqrec.vault.sqve2.ecdh-p256.v2."
         const val CURVE = "secp256r1"
-        const val MIN_V2_API = 31
+        const val MIN_V2_API = 23
+        const val ECDH_API = 31
+        const val RSA_ALIAS_PREFIX = "sqrec.vault.sqve2.rsa3072.v3."
+        const val RSA3072_CIPHERTEXT_BYTES = 384
+        const val RSA3072_BITS = 3072
+        const val RSA_OAEP_TRANSFORMATION = "RSA/ECB/OAEPWithSHA-256AndMGF1Padding"
+        val RSA3072_OAEP_SPEC = OAEPParameterSpec(
+            "SHA-256", "MGF1", MGF1ParameterSpec.SHA1, PSource.PSpecified.DEFAULT,
+        )
         const val AUTH_WINDOW_SECONDS = 30
         const val DEK_BYTES = 32
         const val NONCE_BYTES = 12
