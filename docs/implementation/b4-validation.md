@@ -316,3 +316,13 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Added a host test for create/close-without-append and scanner rejection.
 - Commits: scanner `fd383e4e7b63ecf89b79945a2adc899e87f4937b`; test `8ac7e160b04cfaeb12704ef639c995f49d768a5f`.
 - Exact-head CI and all release/device gates remain pending. This is another fail-closed recovery correctness fix, not acceptance.
+
+
+## SQJ signed checkpoint codec and exact-journal binding — 2026-11-28
+
+- Added a portable canonical SQAC v1 checkpoint codec in core/session-journal/src/checkpoint.rs. It persists the full signed anchor fields without lossy conversion, bounds algorithm/key/signature lengths, rejects unsupported versions, malformed metadata, truncation and trailing bytes.
+- Added verify_checkpoint_binding: it first requires the supplied journal to be a completely valid, non-truncated SQJ stream, then requires the anchor sequence and digest to match that journal's exact terminal record, and finally verifies the anchor signature against the append-only retained-key registry/provider. A valid signature over a stale/different journal is not accepted as current.
+- Added round-trip, truncation/trailing-data, wrong-magic and zero-sequence codec tests. Exposed the API from the crate root.
+- Commits: codec 8072345f434bbc1457a53bf61685b983a3a76edc; length-offset correction 0ae0e8cae04cea274795d764a55feec467aa8b9a; crate export 76fa8894f9e24bf891f8ae8b118f683f0ed32003.
+- Scope boundary: this is portable verification/encoding, not platform durable checkpoint writing, signer/key lifecycle integration, automatic recovery, or atomic checkpoint replacement. Android must persist only after SQJ record sync, then checkpoint file + parent directory sync; stale checkpoint/journal mismatch must remain evidence and fail closed.
+- Rust formatting, workspace tests, Clippy, Android integration, and exact-head CI are NOT RUN / NOT VERIFIED for the integrated head. PR remains draft/open/unmerged.
