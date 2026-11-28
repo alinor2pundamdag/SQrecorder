@@ -338,3 +338,13 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Hardened scanner readFully: a zero-progress FileChannel read now returns an explicit I/O fault rather than potentially spinning forever during startup recovery. Recovery remains read-only and preserves journal bytes.
 - Commit: 0a7806884c0384cf791365dc722763e82bdbb382.
 - **Not verified:** Kotlin compilation, unit tests, Rust/KMP/Android CI, physical-device behavior. Exact-head CI and the signed durable checkpoint platform integration remain open gates.
+
+
+## Android immutable SQAC checkpoint persistence adapter — 2026-11-28
+
+- Added `android/app/src/main/java/com/alinor/sqrecorder/capture/SqjDurableCheckpointStore.kt`. It validates anchor metadata, requires a completely valid SQJ scan, binds anchor sequence and digest to the exact verified terminal record, and encodes canonical SQAC v1 bytes matching the portable Rust codec (little-endian fixed fields; exact DER signature bytes decoded from standard Base64).
+- Persistence is sequence-addressed and immutable. The temp file is written and fd-synced, then published with same-filesystem hard-link no-clobber, parent directory sync, temp unlink and a second parent sync. Existing same-sequence checkpoints are idempotent only when byte-identical; conflicts are preserved/rejected. No journal truncation, rewrite, or checkpoint overwrite.
+- Added Android host tests for canonical SQAC header/format, exact-head binding, stale sequence rejection and conflicting same-sequence preservation.
+- Commits: `e13a66291171df873878a9d77b52c54fcce92652` (store), `0acac81c523a9e437f5d7dc0a11cf130185927f1` (strict no-clobber publication), `682a65a30fe27406cb79fe8bcf2b9c78dda0fca1` (tests).
+- Integration boundary: this store is not yet called by CaptureForegroundService because the service currently has no user-authenticated VaultAuthContext/signing flow. The signer and retained-key verifier exist, but signing/checkpointing cannot be fabricated in a background capture path. Next required integration is the authenticated finalization/recovery coordinator, which must append+sync journal first, obtain valid user auth, sign exact committed head, persist checkpoint, verify retained-key signature, then mark authenticated finalization.
+- **Not verified:** Android/Kotlin compile, host tests, CI, device filesystem behavior. Exact-head CI and physical-device gates remain pending; no acceptance is claimed.
