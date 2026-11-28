@@ -11,7 +11,7 @@ import kotlin.test.assertEquals
 class AndroidSqveV2HeaderCodecTest {
     @Test
     fun streamingHeaderMatchesIndependentCanonicalV2Vector() {
-        val fake = FixedDekBridge()
+        val fake = AndroidSqveV2HeaderCodecTest.FixedDekBridge()
         val der = ByteArray(91) { 0x30 }
         val wrapNonce = ByteArray(12) { 0x77 }
         val ciphertextAndTag = ByteArray(48) { 0x77 }
@@ -42,19 +42,22 @@ class AndroidSqveV2HeaderCodecTest {
     }
 }
 
-private class FixedDekBridge : VaultNativeKeyBridge {
-    override fun generateFileKeyHandle() = VaultFileKeyHandle("9")
-    override fun destroyFileKeyHandle(handle: VaultFileKeyHandle) = Unit
-    override fun copyFileKeyForWrapping(handle: VaultFileKeyHandle) = ByteArray(32) { 0x55 }
-    override fun importUnwrappedFileKey(dek: ByteArray) = VaultFileKeyHandle("10")
-    override fun encryptChunk(
-        handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, plaintext: ByteArray,
-    ) = ByteArray(plaintext.size + 16)
-    override fun decryptChunk(
-        handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, ciphertextAndTag: ByteArray,
-    ) = ByteArray(ciphertextAndTag.size - 16)
+    companion object {
+        internal class FixedDekBridge : VaultNativeKeyBridge {
+            override fun generateFileKeyHandle() = VaultFileKeyHandle("9")
+            override fun destroyFileKeyHandle(handle: VaultFileKeyHandle) = Unit
+            override fun copyFileKeyForWrapping(handle: VaultFileKeyHandle) = ByteArray(32) { 0x55 }
+            override fun importUnwrappedFileKey(dek: ByteArray) = VaultFileKeyHandle("10")
+            override fun encryptChunk(
+                handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, plaintext: ByteArray,
+            ) = ByteArray(plaintext.size + 16)
+            override fun decryptChunk(
+                handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, ciphertextAndTag: ByteArray,
+            ) = ByteArray(ciphertextAndTag.size - 16)
+        
+        }
+    }
 
-}
 
 class AndroidSqveV2RsaSuiteTest {
     @Test
