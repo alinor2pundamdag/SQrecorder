@@ -125,6 +125,110 @@ internal class SqveV2EncryptedWavSink(
         return file.length()
     }
 
+    /**
+     * Verify the complete staged envelope before the owner may promote it.
+     * This re-authenticates the header MAC and every GCM chunk, checks the
+     * footer digest/count/length and the canonical WAV size fields.
+     */
+    fun verifyFinished(pcmBytes: Long) {
+        check(!closed) { "sink must remain open until staged verification completes" }
+        require(pcmBytes > 0L && pcmBytes % 2L == 0L)
+        val expectedPlaintext = Math.addExact(pcmBytes, 44L)
+        val totalFileBytes = file.length()
+        require(totalFileBytes >= header.size + FOOTER_BYTES)
+        file.seek(0L)
+        val encodedHeader = ByteArray(header.size)
+        file.readFully(encodedHeader)
+        require(encodedHeader.contentEquals(header))
+        val declaredHeaderLength = readU32(encodedHeader, 6)
+        require(declaredHeaderLength == header.size.toLong())
+        verifyHeaderMac(encodedHeader)
+
+        val footerOffset = totalFileBytes - FOOTER_BYTES
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(encodedHeader)
+        var cursor = encodedHeader.size.toLong()
+        var index = 0L
+        var plaintextTotal = 0L
+        var sawShort = false
+        val record = ByteArray(CHUNK_RECORD_BYTES)
+        while (cursor < footerOffset) {
+            require(!sawShort && footerOffset - cursor >= CHUNK_RECORD_BYTES)
+            file.seek(cursor)
+            file.readFully(record)
+            require(record.copyOfRange(0, 4).contentEquals("SQVC".toByteArray(Charsets.US_ASCII)))
+            require(readU64(record, 4) == index)
+            val plainLen = readU32(record, 12).toInt()
+            val cipherLen = readU32(record, 16).toInt()
+            require(plainLen in 1..CHUNK_BYTES && cipherLen == plainLen + GCM_TAG_BYTES)
+            if (index > 0L) require(plainLen == CHUNK_BYTES || cursor + CHUNK_RECORD_BYTES + cipherLen == footerOffset)
+            sawShort = plainLen < CHUNK_BYTES
+            val ciphertext = ByteArray(plainLen + GCM_TAG_BYTES)
+            file.readFully(ciphertext)
+            digest.update(record)
+            digest.update(ciphertext)
+            val nonce = noncePrefix + u64be(index)
+            val aad = chunkAad(index, plainLen)
+            val plaintext = try {
+                native.decryptChunk(keyHandle, nonce, aad, ciphertext)
+            } finally {
+                ciphertext.fill(0)
+                nonce.fill(0)
+                aad.fill(0)
+            }
+            try {
+                require(plaintext.size == plainLen)
+                if (index == 0L) {
+                    require(plaintext.size >= 44)
+                    require(plaintext.copyOfRange(0, 4).contentEquals("RIFF".toByteArray(Charsets.US_ASCII)))
+                    require(plaintext.copyOfRange(8, 12).contentEquals("WAVE".toByteArray(Charsets.US_ASCII)))
+                    require(readLeU32(plaintext, 40) == pcmBytes)
+                }
+            } finally {
+                plaintext.fill(0)
+            }
+            plaintextTotal = Math.addExact(plaintextTotal, plainLen.toLong())
+            cursor = Math.addExact(cursor, CHUNK_RECORD_BYTES.toLong() + cipherLen)
+            index = Math.addExact(index, 1L)
+        }
+        require(cursor == footerOffset && index > 0L)
+        require(plaintextTotal == expectedPlaintext)
+        require(index == ((expectedPlaintext - 1L) / CHUNK_BYTES + 1L))
+        file.seek(footerOffset)
+        val footer = ByteArray(FOOTER_BYTES)
+        file.readFully(footer)
+        require(footer.copyOfRange(0, 4).contentEquals("SQVF".toByteArray(Charsets.US_ASCII)))
+        require(readU16(footer, 4) == VERSION && readU16(footer, 6) == FOOTER_BYTES)
+        require(readU64(footer, 8) == index && readU64(footer, 16) == expectedPlaintext)
+        require(MessageDigest.isEqual(digest.digest(), footer.copyOfRange(24, 56)))
+        require(file.filePointer == totalFileBytes)
+        encodedHeader.fill(0)
+        record.fill(0)
+        footer.fill(0)
+    }
+
+    private fun verifyHeaderMac(encoded: ByteArray) {
+        val macAt = encoded.size - HEADER_MAC_BYTES
+        require(macAt > 0)
+        val dek = native.copyFileKeyForWrapping(keyHandle)
+        var prk: ByteArray? = null
+        var headerKey: ByteArray? = null
+        try {
+            require(dek.size == 32)
+            prk = hmacSha256(fileSalt, dek)
+            headerKey = hmacSha256(prk, HEADER_MAC_INFO + byteArrayOf(1))
+            val actual = hmacSha256(headerKey, encoded.copyOfRange(0, macAt))
+            require(MessageDigest.isEqual(actual, encoded.copyOfRange(macAt, encoded.size))) {
+                "SQVE v2 header MAC verification failed"
+            }
+            actual.fill(0)
+        } finally {
+            dek.fill(0)
+            prk?.fill(0)
+            headerKey?.fill(0)
+        }
+    }
+
     private fun emitTailChunk(size: Int) {
         emitChunk(nextIndex, tailChunk, size)
         tailChunk.fill(0)
@@ -191,6 +295,8 @@ internal class SqveV2EncryptedWavSink(
         const val GCM_TAG_BYTES = 16
         const val FOOTER_BYTES = 56
         const val HASH_BUFFER_BYTES = 64 * 1024
+        const val HEADER_MAC_BYTES = 32
+        val HEADER_MAC_INFO = "SQREC-SQVE2-HEADER-MAC-v1".toByteArray(Charsets.US_ASCII)
         val DOMAIN = "SQREC-SQVE2-CHUNK-AAD-v1".toByteArray(Charsets.US_ASCII)
     }
 }
@@ -203,3 +309,19 @@ private fun u64be(value: Long): ByteArray = ByteArray(8) { (value ushr (56 - it 
 private fun putU16(out: ByteArray, at: Int, value: Int) { out[at] = (value ushr 8).toByte(); out[at + 1] = value.toByte() }
 private fun putU32(out: ByteArray, at: Int, value: Int) { u32be(value).copyInto(out, at) }
 private fun putU64(out: ByteArray, at: Int, value: Long) { u64be(value).copyInto(out, at) }
+private fun hmacSha256(key: ByteArray, message: ByteArray): ByteArray =
+    javax.crypto.Mac.getInstance("HmacSHA256").run {
+        init(javax.crypto.spec.SecretKeySpec(key, "HmacSHA256"))
+        doFinal(message)
+    }
+private fun readU16(b: ByteArray, at: Int): Int =
+    ((b[at].toInt() and 0xff) shl 8) or (b[at + 1].toInt() and 0xff)
+private fun readU32(b: ByteArray, at: Int): Long =
+    ((b[at].toLong() and 0xff) shl 24) or ((b[at + 1].toLong() and 0xff) shl 16) or
+        ((b[at + 2].toLong() and 0xff) shl 8) or (b[at + 3].toLong() and 0xff)
+private fun readU64(b: ByteArray, at: Int): Long =
+    ByteArray(8) { b[at + it] }.fold(0L) { acc, byte -> (acc shl 8) or (byte.toLong() and 0xff) }
+private fun readLeU32(b: ByteArray, at: Int): Long =
+    (b[at].toLong() and 0xff) or ((b[at + 1].toLong() and 0xff) shl 8) or
+        ((b[at + 2].toLong() and 0xff) shl 16) or ((b[at + 3].toLong() and 0xff) shl 24)
+
