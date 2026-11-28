@@ -1,6 +1,5 @@
 package com.alinor.sqrecorder.vault.android
 
-import android.util.Base64
 import com.alinor.sqrecorder.domain.VaultFileKeyHandle
 import com.alinor.sqrecorder.domain.VaultV2RecipientWrap
 import com.alinor.sqrecorder.domain.VaultV2WrapSuite
@@ -31,11 +30,11 @@ public class AndroidSqveV2HeaderCodec(
             VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM -> ECDH_WRAP_SUITE
         }
         val wrapped = try {
-            Base64.decode(recipient.wrappedDekBase64, Base64.NO_WRAP)
+            SqveBase64.decodeCanonical(recipient.wrappedDekBase64)
         } catch (e: IllegalArgumentException) {
             throw IllegalArgumentException("V2 wrapped-DEK payload is not canonical Base64", e)
         }
-        if (Base64.encodeToString(wrapped, Base64.NO_WRAP) != recipient.wrappedDekBase64 ||
+        if (SqveBase64.encodeNoWrap(wrapped) != recipient.wrappedDekBase64 ||
             wrapped.isEmpty() || wrapped.size > MAX_WRAPPED_BYTES
         ) {
             wrapped.fill(0)
