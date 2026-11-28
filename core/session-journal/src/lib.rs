@@ -8,10 +8,7 @@ pub mod file_sink;
 pub use file_sink::{FileJournalOpenError, FileJournalSink};
 pub mod anchor_verifier;
 pub mod checkpoint;
-pub use checkpoint::{
-    BoundCheckpointVerification, CheckpointCodecError, decode_checkpoint, encode_checkpoint,
-    verify_checkpoint_binding,
-};
+
 pub use anchor_registry::{
     AnchorKeyRegistryError, AnchorKeyRegistryStatus, AnchorKeyRegistryVerification,
     AnchorKeyRegistryWriter, RetainedAnchorPublicKey, anchor_public_key_id,
