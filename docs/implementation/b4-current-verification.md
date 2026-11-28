@@ -42,3 +42,10 @@ This file records the current verification state; it does not itself complete a 
 - Exact-HEAD Rust workflow: [46153148664](https://github.com/alinor2pundamdag/SQrecorder/actions/runs/46153148664), in progress when recorded.
 - Exact-HEAD Android workflow: [46153148666](https://github.com/alinor2pundamdag/SQrecorder/actions/runs/46153148666), pending when recorded.
 - No combined commit statuses were present at query time. Do not call CI green until both workflows and all required matrix jobs complete successfully on this SHA.
+
+
+## Cross-platform candidate push trigger — final workflow maintenance
+
+- Added `b4-b5-controlled-validation-candidate` to `.github/workflows/platform-compatibility.yml` push branches as well. All three validation workflows (Rust, Android Vault, cross-platform matrix) now explicitly include this controlled candidate branch for relevant path-filtered pushes.
+- This workflow change advanced the branch after the previous evidence snapshot. Re-query exact HEAD and wait for all three workflows; prior run links are diagnostic only and not evidence for the new SHA.
+- Draft/open/unmerged remains mandatory until exact-head CI and the non-CI release gates pass.
