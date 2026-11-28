@@ -49,3 +49,13 @@ This file records the current verification state; it does not itself complete a 
 - Added `b4-b5-controlled-validation-candidate` to `.github/workflows/platform-compatibility.yml` push branches as well. All three validation workflows (Rust, Android Vault, cross-platform matrix) now explicitly include this controlled candidate branch for relevant path-filtered pushes.
 - This workflow change advanced the branch after the previous evidence snapshot. Re-query exact HEAD and wait for all three workflows; prior run links are diagnostic only and not evidence for the new SHA.
 - Draft/open/unmerged remains mandatory until exact-head CI and the non-CI release gates pass.
+
+
+## Current source and final evidence refresh — 2026-11-28
+
+- Current implementation head before this evidence refresh: `f3bae85e68c36e115b17a297fb3f44ee85feefe2`; this document commit is the final evidence-only change and requires its own exact-head workflows.
+- SQVE sink state machine corrected: finished-but-open permits staged read-back verification; writes/repeated finish are blocked; close performs final cleanup.
+- Capture service compiler issues identified from run `46153414046` and corrected: missing `CaptureSessionJournal` import and mutable nullable journal captured by consumer callback. The callback now uses a stable non-null journal reference.
+- Rust contract and cross-platform matrix were green on unchanged Rust/KMP source SHA `2657d5ff11d3ba55bbbe9565a423c9b9c0e1c2bc`; this is not a substitute for the latest final evidence SHA.
+- Latest Android app/emulator workflow before evidence commit: `46153810154`, targeting `bef7e321edfd44fde27576b5160e702d19df3ba2`, was in progress; it must finish and then the evidence-commit SHA must be checked again.
+- PR #7 and #2 are still open/draft/unmerged. No release/acceptance gate is marked complete.
