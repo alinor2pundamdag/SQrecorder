@@ -399,19 +399,30 @@ pub fn decrypt_chunk(
     ciphertext: &mut [u8],
     tag: &[u8],
 ) -> Result<(), Error> {
-    if index >= header.chunk_count || header.chunk_count != expected_chunks(header.plaintext_len) {
-        return Err(Error::MalformedChunk);
-    }
-    let offset = index
-        .checked_mul(CHUNK_BYTES as u64)
-        .ok_or(Error::LengthOverflow)?;
-    let expected = header
-        .plaintext_len
-        .checked_sub(offset)
-        .ok_or(Error::MalformedChunk)?
-        .min(CHUNK_BYTES as u64) as usize;
-    if ciphertext.len() != expected || plaintext_len as usize != expected || expected == 0 {
-        return Err(Error::MalformedChunk);
+    if header.streaming {
+        if header.plaintext_len != u64::MAX || header.chunk_count != u64::MAX {
+            return Err(Error::MalformedChunk);
+        }
+        if index == u64::MAX || plaintext_len == 0 || plaintext_len as usize > CHUNK_BYTES
+            || ciphertext.len() != plaintext_len as usize
+        {
+            return Err(Error::MalformedChunk);
+        }
+    } else {
+        if index >= header.chunk_count || header.chunk_count != expected_chunks(header.plaintext_len) {
+            return Err(Error::MalformedChunk);
+        }
+        let offset = index
+            .checked_mul(CHUNK_BYTES as u64)
+            .ok_or(Error::LengthOverflow)?;
+        let expected = header
+            .plaintext_len
+            .checked_sub(offset)
+            .ok_or(Error::MalformedChunk)?
+            .min(CHUNK_BYTES as u64) as usize;
+        if ciphertext.len() != expected || plaintext_len as usize != expected || expected == 0 {
+            return Err(Error::MalformedChunk);
+        }
     }
     decrypt_chunk_in_place(
         key,
