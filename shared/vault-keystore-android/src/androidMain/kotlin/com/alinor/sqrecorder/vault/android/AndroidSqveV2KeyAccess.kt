@@ -72,15 +72,16 @@ public class AndroidSqveV2KeyAccess(
         }.generateKeyPair()
         val ephemeralDer = ephemeral.public.encoded
         val idBytes = recipientKeyId.toByteArray(Charsets.US_ASCII)
-        val shared = agree(ephemeral.private, recipientPublic, androidKeyStore = false)
-        var kek: ByteArray? = null
         val dek = native.copyFileKeyForWrapping(fileKeyHandle)
+        var shared: ByteArray? = null
+        var kek: ByteArray? = null
         val nonce = ByteArray(NONCE_BYTES).also(SecureRandom()::nextBytes)
         var ciphertextAndTag: ByteArray? = null
         try {
             if (dek.size != DEK_BYTES) {
                 throw VaultKeyAccessException(VaultKeyAccessFailure.NATIVE_BRIDGE_FAILURE)
             }
+            shared = agree(ephemeral.private, recipientPublic, androidKeyStore = false)
             kek = deriveKek(shared, fileSalt, fileId, idBytes)
             val cipher = Cipher.getInstance(AES_GCM)
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(kek, AES_KEY), GCMParameterSpec(TAG_BITS, nonce))
@@ -103,7 +104,7 @@ public class AndroidSqveV2KeyAccess(
         } catch (e: Exception) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.CRYPTO_FAILURE, e)
         } finally {
-            shared.fill(0)
+            shared?.fill(0)
             kek?.fill(0)
             dek.fill(0)
             nonce.fill(0)
