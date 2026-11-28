@@ -20,7 +20,11 @@ import java.nio.file.StandardOpenOption
  * previous valid checkpoint; a retry for the same sequence is accepted only
  * when its bytes are identical.
  */
-internal class SqjDurableCheckpointStore {
+internal class SqjDurableCheckpointStore(
+    private val publishHardLink: (source: File, target: File) -> Unit = { source, target ->
+        android.system.Os.link(source.absolutePath, target.absolutePath)
+    },
+) {
     fun persistAfterJournalSync(
         journalFile: File,
         checkpointDirectory: File,
@@ -84,7 +88,7 @@ internal class SqjDurableCheckpointStore {
             // Hard-link publication is atomic and no-clobber on the same
             // filesystem. Never rely on ATOMIC_MOVE's provider-specific
             // behavior when a target name already exists.
-            android.system.Os.link(temp.absolutePath, target.absolutePath)
+            publishHardLink(temp, target)
             syncDirectory(checkpointDirectory)
             Files.delete(temp.toPath())
             syncDirectory(checkpointDirectory)
