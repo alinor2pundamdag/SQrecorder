@@ -393,3 +393,20 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 
 - Added host regression proving an expired VaultAuthContext is rejected before the injected signer is called and before a checkpoint directory/file is created.
 - Commit: `d5e424f7666547d9e4997a164d9a910f003f89f6`. Test source committed; execution remains pending exact-head Android host CI.
+
+
+## CI-backed corrections and current integration status — 2026-11-28
+
+Source-level root-cause corrections committed after runner findings:
+- `cfe853273f5dae2869d838133ef36cb3fd0c61c9`: separate SQVE sink `finished` from `closed`. `finish()` now seals writes/finalizes the footer but keeps the file descriptor open for `verifyFinished()`; close/zeroize remains the cleanup boundary. This fixes the prior contradictory lifecycle guard that would reject every post-finish verification.
+- `f9d19aaf9e0bfa4234ebcd44e18bd015959ff2d6`: import `CaptureSessionJournal` in `CaptureForegroundService`, resolving the compiler's primary unresolved-reference diagnostics.
+- `bef7e321edfd44fde27576b5160e702d19df3ba2`: use a stable non-null `eventJournal` in the asynchronous queue callback, avoiding Kotlin smart-cast failure on captured mutable nullable `journal`.
+- CI workflow trigger audit added the candidate branch to all three push workflow branch filters; rustfmt output was corrected and checkpoint exports restored/verified.
+
+Runner evidence:
+- Rust contract workflow `46153414041` and cross-platform Rust/KMP matrix `46153414136` both **SUCCESS** on SHA `2657d5ff11d3ba55bbbe9565a423c9b9c0e1c2bc`. Matrix included Rust Linux/macOS/Windows and KMP Linux/macOS/Windows; all jobs passed. This SHA precedes the later Android-only source fixes.
+- Android workflow `46153350700` on `14817eee20e30571ab6c91e32c6ffd256d832a22`: JNI build and Android Vault host tests **PASS**; app compilation **FAIL** due missing journal import and mutable captured journal reference. The failure was root-caused from exact compiler diagnostics, not masked.
+- Android workflow `46153414046` on `2657d5ff11d3ba55bbbe9565a423c9b9c0e1c2bc`: JNI build and host contract tests **PASS**; app compilation again exposed the same two service errors. Corrected in the commits above.
+- Latest Android run `46153810154` targets corrected current head `bef7e321edfd44fde27576b5160e702d19df3ba2` and is **in progress** at this evidence update. No Android app-unit/emulator pass is claimed yet.
+
+The candidate remains draft/open/unmerged. SQJ-to-authenticated finalization/recovery, crash-cut/fault matrix, physical-device validation, independent security review, and final exact-head CI are still acceptance gates.
