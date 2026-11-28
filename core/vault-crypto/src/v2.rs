@@ -15,6 +15,8 @@ pub const VERSION: u16 = 2;
 pub const CONTENT_SUITE_AES_256_GCM: u16 = 0x0001;
 pub const WRAP_SUITE_RSA_OAEP_SHA256_MGF1_SHA256_EMPTY: u16 = 0x0001;
 pub const WRAP_SUITE_ECDH_P256_HKDF_SHA256_AES_GCM: u16 = 0x0002;
+pub const WRAP_SUITE_RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY: u16 = 0x0003;
+pub const RSA3072_WRAPPED_DEK_BYTES: usize = 384;
 pub const CHUNK_BYTES: usize = 1_048_576;
 pub const HEADER_MAX_BYTES: usize = 65_535;
 pub const RECIPIENTS_MAX: usize = 16;
@@ -227,8 +229,14 @@ fn validate(header: &Header) -> Result<(), Error> {
         }
         if item.suite != WRAP_SUITE_RSA_OAEP_SHA256_MGF1_SHA256_EMPTY
             && item.suite != WRAP_SUITE_ECDH_P256_HKDF_SHA256_AES_GCM
+            && item.suite != WRAP_SUITE_RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY
         {
             return Err(Error::UnsupportedSuite);
+        }
+        if item.suite == WRAP_SUITE_RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY
+            && item.wrapped.len() != RSA3072_WRAPPED_DEK_BYTES
+        {
+            return Err(Error::InvalidRecipient);
         }
         if item.suite == WRAP_SUITE_ECDH_P256_HKDF_SHA256_AES_GCM
             && parse_ecdh_wrapped_dek(&item.wrapped).is_err()
