@@ -20,3 +20,12 @@ Branch: `b4-b5-controlled-validation-candidate`
 - Files added and UTF-8 bytes at bootstrap commit: `AGENTS.md` 1,123; `docs/PROJECT_STATE.md` 1,042; `docs/ORDERS.md` 589; `docs/AMENDMENTS.md` 317; `docs/REVIEWS.md` 341; `docs/MASTER_PLAN.md` 557; `docs/audit/ORD-G-003-disclosure.md` 28,592. Blob IDs recorded in GitHub tree/commit.
 - Disclosure content at bootstrap commit blob: `cbc9815e651203c1aad5c50be55f105509c6ab64`. The following report revision embeds this ledger snippet; Git object identity of that subsequent revision is independently recorded in repository history (self-hash is not embedded).
 - No protocol/security contract changed. New governance/docs paths trigger fresh workflows; the prior evidence remains tied to source SHA `450fabc9263368a9e366df834e1aad9c3815f425`.
+
+## Ledger entry — final ORD-G-003 report revision
+
+- Timestamp: 2026-11-28T23:07:21+08:00.
+- Governance bootstrap commit: `80abe5ba44d1a991a5654c211c78133777b3aff9`; final ledger-update commit is in subsequent Git history (not self-referenced).
+- Latest disclosure blob before this final ledger/report revision: `3d62476f252c8b5a4531c8439013b0dda188fb7a`, 30,686 bytes; complete current report path `docs/audit/ORD-G-003-disclosure.md`.
+- Required governance files now exist on candidate branch. The source audit remains anchored to `450fabc9263368a9e366df834e1aad9c3815f425` (113 original tracked files); post-bootstrap tree has 120 tracked files.
+- Exact CI remains tied to audited source SHA: Rust 46156388703 PASS; matrix 46156388734 PASS 6/6; Android 46156388675 FAIL API23 emulator install/package manager. No new source CI is inferred from docs-only commits.
+- ORD-G-001 exact text, canonical MASTER_PLAN and A1–A33 remain UNKNOWN/not supplied. No contracts changed; PRs remain draft/open/unmerged.

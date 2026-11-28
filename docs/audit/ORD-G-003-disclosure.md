@@ -193,31 +193,15 @@ Tree: 113 files, no truncation, SHA `450fabc9263368a9e366df834e1aad9c3815f425`. 
 
 ## Governance bootstrap confirmation
 
-The six required files were absent at source SHA `450fabc9263368a9e366df834e1aad9c3815f425`. Added by commit `80abe5ba44d1a991a5654c211c78133777b3aff9` (parent is the audited source SHA):
-
-| File | UTF-8 bytes at bootstrap commit | Blob SHA |
-|---|---:|---|
-| `AGENTS.md` | 1,123 | `06eea8db61d31292745be4bcfcc5aaf5c720cde1` |
-| `docs/PROJECT_STATE.md` | 1,042 | `02ef208e9ac4ac24e69763744099e05bd0ff4b51` |
-| `docs/ORDERS.md` | 589 | `aca67f09afdff3bbd20be72ca7b46d84a2df7a8b` |
-| `docs/AMENDMENTS.md` | 317 | `c83fe63449980135c32589316960f18370547d2c` |
-| `docs/REVIEWS.md` | 341 | `1267520afabc4a42f77288e4891a2ffb6e9eac37` |
-| `docs/MASTER_PLAN.md` | 557 | `63673b91e20b17a72636b73f7ec8ebd7542f6313` |
-| `docs/audit/ORD-G-003-disclosure.md` | 28,592 | `cbc9815e651203c1aad5c50be55f105509c6ab64` |
-
-The canonical ORD-G-001 text, master plan and A1–A33 were not reconstructed. No contract changed. CI must be checked again on the post-bootstrap HEAD.
+Source SHA `450fabc9263368a9e366df834e1aad9c3815f425` lacked all six governance files. Bootstrap commit `80abe5ba44d1a991a5654c211c78133777b3aff9` added them plus this report. Verified file byte sizes/blob SHAs are in the preceding ledger entry in `docs/PROJECT_STATE.md`. The post-bootstrap tracked count is 120; the audited pre-bootstrap tree was 113. No protocol, security, PCM, ABI, journal or motion contract changed.
 
 ## Ledger snippet (verbatim from docs/PROJECT_STATE.md)
 
-## Ledger entry — governance bootstrap byte/hash verification
+## Ledger entry — final ORD-G-003 report revision
 
-- Timestamp: 2026-11-28T23:07:21+08:00 (audit timestamp; bootstrap commit was authored at repository current time, UTC timestamp is in Git commit metadata).
-- Governance commit: `80abe5ba44d1a991a5654c211c78133777b3aff9`, parent `450fabc9263368a9e366df834e1aad9c3815f425`.
-- Files added and UTF-8 bytes at bootstrap commit: `AGENTS.md` 1,123; `docs/PROJECT_STATE.md` 1,042; `docs/ORDERS.md` 589; `docs/AMENDMENTS.md` 317; `docs/REVIEWS.md` 341; `docs/MASTER_PLAN.md` 557; `docs/audit/ORD-G-003-disclosure.md` 28,592. Blob IDs recorded in GitHub tree/commit.
-- Disclosure content at bootstrap commit blob: `cbc9815e651203c1aad5c50be55f105509c6ab64`. The following report revision embeds this ledger snippet; Git object identity of that subsequent revision is independently recorded in repository history (self-hash is not embedded).
-- No protocol/security contract changed. New governance/docs paths trigger fresh workflows; the prior evidence remains tied to source SHA `450fabc9263368a9e366df834e1aad9c3815f425`.
-
-Six required files absent at source SHA `450fabc9263368a9e366df834e1aad9c3815f425`. Bootstrap files created: `AGENTS.md`, `docs/PROJECT_STATE.md`, `docs/ORDERS.md`, `docs/AMENDMENTS.md`, `docs/REVIEWS.md`, `docs/MASTER_PLAN.md`; disclosure `docs/audit/ORD-G-003-disclosure.md`. Bootstrap commit SHA and actual byte sizes will be recorded by the following ledger-update commit; branch moves and triggers fresh exact-head CI. Contract files untouched.
-
-## Ledger snippet
-See the verbatim final entry in `docs/PROJECT_STATE.md` after bootstrap commit SHA/bytes are verified.
+- Timestamp: 2026-11-28T23:07:21+08:00.
+- Governance bootstrap commit: `80abe5ba44d1a991a5654c211c78133777b3aff9`; final ledger-update commit is in subsequent Git history (not self-referenced).
+- Latest disclosure blob before this final ledger/report revision: `3d62476f252c8b5a4531c8439013b0dda188fb7a`, 30,686 bytes; complete current report path `docs/audit/ORD-G-003-disclosure.md`.
+- Required governance files now exist on candidate branch. The source audit remains anchored to `450fabc9263368a9e366df834e1aad9c3815f425` (113 original tracked files); post-bootstrap tree has 120 tracked files.
+- Exact CI remains tied to audited source SHA: Rust 46156388703 PASS; matrix 46156388734 PASS 6/6; Android 46156388675 FAIL API23 emulator install/package manager. No new source CI is inferred from docs-only commits.
+- ORD-G-001 exact text, canonical MASTER_PLAN and A1–A33 remain UNKNOWN/not supplied. No contracts changed; PRs remain draft/open/unmerged.
