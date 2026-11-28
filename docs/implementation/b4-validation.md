@@ -387,3 +387,9 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 
 - Tightened bounded checkpoint input from 69 to 71 bytes, the true minimum for SQAC v1 fixed 68-byte header plus three non-empty variable fields. Decoder still enforces exact lengths and all individual maxima (64/128/80 bytes).
 - Commit: `7205cfb9217442afd32dc05f15b4b6d3bc855871`. Source correction only; no test execution/CI pass claimed.
+
+
+## Expired-auth negative test — 2026-11-28
+
+- Added host regression proving an expired VaultAuthContext is rejected before the injected signer is called and before a checkpoint directory/file is created.
+- Commit: `d5e424f7666547d9e4997a164d9a910f003f89f6`. Test source committed; execution remains pending exact-head Android host CI.
