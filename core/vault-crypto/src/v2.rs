@@ -1093,4 +1093,46 @@ mod tests {
             Err(Error::InvalidRecipient)
         );
     }
+
+    #[test]
+    fn streaming_verifier_rejects_footer_digest_and_trailing_bytes() {
+        let key = VaultFileKey::from_bytes(&[0x69; 32]).unwrap();
+        let header = Header::new_random_streaming(sample().recipients).unwrap();
+        let encoded = StreamingWriter::new(Vec::new(), header, key)
+            .unwrap()
+            .finish()
+            .unwrap();
+        let footer_at = encoded.len() - FOOTER_BYTES;
+        let mut bad_footer = encoded.clone();
+        bad_footer[footer_at + 24] ^= 0x80;
+        let mut reader = std::io::Cursor::new(bad_footer);
+        let verify_key = VaultFileKey::from_bytes(&[0x69; 32]).unwrap();
+        assert_eq!(
+            verify_authenticated_stream(&mut reader, &verify_key),
+            Err(Error::DigestMismatch)
+        );
+
+        let mut trailing = encoded;
+        trailing.push(0);
+        let mut reader = std::io::Cursor::new(trailing);
+        let verify_key = VaultFileKey::from_bytes(&[0x69; 32]).unwrap();
+        assert_eq!(
+            verify_authenticated_stream(&mut reader, &verify_key),
+            Err(Error::TrailingData)
+        );
+    }
+
+    #[test]
+    fn streaming_capture_chunk_boundary_round_trips_without_unbounded_buffer() {
+        let key = VaultFileKey::from_bytes(&[0x6a; 32]).unwrap();
+        let header = Header::new_random_streaming(sample().recipients).unwrap();
+        let plaintext = vec![0x5c; CHUNK_BYTES + 1];
+        let mut writer = StreamingWriter::new(Vec::new(), header.clone(), key).unwrap();
+        writer.write_plaintext(&plaintext[..CHUNK_BYTES - 13]).unwrap();
+        writer.write_plaintext(&plaintext[CHUNK_BYTES - 13..]).unwrap();
+        let encoded = writer.finish().unwrap();
+        let mut reader = std::io::Cursor::new(encoded);
+        let verify_key = VaultFileKey::from_bytes(&[0x6a; 32]).unwrap();
+        assert_eq!(verify_authenticated_stream(&mut reader, &verify_key).unwrap(), header);
+    }
 }
