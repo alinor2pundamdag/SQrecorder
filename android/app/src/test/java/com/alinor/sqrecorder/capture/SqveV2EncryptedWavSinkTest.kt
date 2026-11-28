@@ -1,6 +1,5 @@
 package com.alinor.sqrecorder.capture
 
-import android.util.Base64
 import java.io.File
 import com.alinor.sqrecorder.domain.VaultFileKeyHandle
 import com.alinor.sqrecorder.domain.VaultV2RecipientWrap
@@ -31,8 +30,8 @@ class SqveV2EncryptedWavSinkTest {
         val wrap = VaultV2RecipientWrap(
             suite = VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM,
             recipientKeyId = "android-v2-ecdh-" + "a".repeat(64),
-            wrappedDekBase64 = Base64.encodeToString(wrapBytes, Base64.NO_WRAP),
-            ephemeralPublicKeyBase64 = Base64.encodeToString(ephemeral, Base64.NO_WRAP),
+            wrappedDekBase64 = SqveBase64.encodeNoWrap(wrapBytes),
+            ephemeralPublicKeyBase64 = SqveBase64.encodeNoWrap(ephemeral),
             wrapNonceHex = wrapNonce.joinToString("") { "%02x".format(it.toInt() and 0xff) },
         )
         val header = AndroidSqveV2HeaderCodec(native).serializeStreamingHeader(
