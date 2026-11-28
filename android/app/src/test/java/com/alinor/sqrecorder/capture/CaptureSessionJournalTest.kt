@@ -39,6 +39,33 @@ class CaptureSessionJournalTest {
     }
 
     @Test
+    fun timestampRegressionIsRejectedBeforeAnyJournalBytesAreWritten() {
+        val directory = createTempDir(prefix = "sqrec-sqj-time-")
+        val session = UUID.randomUUID()
+        val journalFile = File(directory, "session-$session.sqj")
+        try {
+            CaptureSessionJournal.create(journalFile, session).use { journal ->
+                journal.append(CaptureSessionJournal.RECORD_SESSION_CREATED, 200L)
+                val before = journalFile.readBytes()
+                var rejected = false
+                try {
+                    journal.append(CaptureSessionJournal.RECORD_CAPTURE_STARTED, 199L)
+                } catch (_: IllegalArgumentException) {
+                    rejected = true
+                }
+                assertTrue("monotonic timestamp regression must be rejected", rejected)
+                assertEquals(before.toList(), journalFile.readBytes().toList())
+                journal.append(CaptureSessionJournal.RECORD_CAPTURE_STARTED, 201L)
+            }
+            val scan = CaptureSessionJournal.scan(journalFile)
+            assertTrue(scan.valid)
+            assertEquals(2L, scan.lastSequence)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    @Test
     fun scannerRejectsDamagedDigestWithoutModifyingOriginalJournal() {
         val directory = createTempDir(prefix = "sqrec-sqj-corrupt-")
         val session = UUID.randomUUID()
