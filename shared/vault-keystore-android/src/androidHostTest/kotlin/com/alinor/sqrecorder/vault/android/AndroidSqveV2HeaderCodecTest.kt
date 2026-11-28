@@ -36,7 +36,7 @@ class AndroidSqveV2HeaderCodecTest {
                 0x17, 0xdf.toByte(), 0x7a, 0xc7.toByte(), 0xd5.toByte(), 0x72, 0x6c, 0xcb.toByte(),
                 0x58, 0x0d, 0xba.toByte(), 0x8e.toByte(), 0x40, 0x6c, 0x10, 0xc5.toByte(),
                 0xef.toByte(), 0xa2.toByte(), 0xd2.toByte(), 0x4e, 0x32, 0x88.toByte(), 0xfd.toByte(), 0xe9.toByte(),
-            )
+            ),
             MessageDigest.getInstance("SHA-256").digest(header),
         )
     }
