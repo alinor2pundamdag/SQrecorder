@@ -86,13 +86,18 @@ public class AndroidSqveV2KeyAccess(
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(kek, AES_KEY), GCMParameterSpec(TAG_BITS, nonce))
             cipher.updateAAD(wrapAad(fileId, idBytes, ephemeralDer))
             ciphertextAndTag = cipher.doFinal(dek)
-            return VaultV2RecipientWrap(
-                suite = VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM,
-                recipientKeyId = recipientKeyId,
-                wrappedDekBase64 = Base64.encodeToString(ciphertextAndTag, Base64.NO_WRAP),
-                ephemeralPublicKeyBase64 = Base64.encodeToString(ephemeralDer, Base64.NO_WRAP),
-                wrapNonceHex = nonce.toHex(),
-            )
+            val canonicalPayload = encodeCanonicalEcdhPayload(ephemeralDer, nonce, ciphertextAndTag)
+            try {
+                return VaultV2RecipientWrap(
+                    suite = VaultV2WrapSuite.ECDH_P256_HKDF_SHA256_AES256_GCM,
+                    recipientKeyId = recipientKeyId,
+                    wrappedDekBase64 = Base64.encodeToString(canonicalPayload, Base64.NO_WRAP),
+                    ephemeralPublicKeyBase64 = Base64.encodeToString(ephemeralDer, Base64.NO_WRAP),
+                    wrapNonceHex = nonce.toHex(),
+                )
+            } finally {
+                canonicalPayload.fill(0)
+            }
         } catch (e: VaultKeyAccessException) {
             throw e
         } catch (e: Exception) {
