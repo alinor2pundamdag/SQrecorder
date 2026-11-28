@@ -46,6 +46,7 @@ class SqveV2EncryptedWavSinkTest {
             val pcm = ByteArray(2 * 1_048_576 + 19) { 0x5a }
             sink.writePcm(pcm, 0, pcm.size)
             val envelopeBytes = sink.finish(pcm.size.toLong())
+            sink.verifyFinished(pcm.size.toLong())
             sink.close()
             pcm.fill(0)
 
