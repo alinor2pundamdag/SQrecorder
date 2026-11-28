@@ -144,6 +144,9 @@ public class CaptureForegroundService : Service() {
    journal!!.append(CaptureSessionJournal.RECORD_SESSION_CREATED, SystemClock.elapsedRealtimeNanos())
    // Session UUID binds the encrypted artifact name to its durable SQJ file.
    partial = File(directory, "capture-$sessionUuid.sqve.part")
+   // Exclusive create prevents RandomAccessFile("rw") from reusing or overwriting
+   // an orphaned encrypted stage left by a prior crash/recovery incident.
+   check(partial.createNewFile()) { "Encrypted partial already exists; preserve it for recovery" }
    val nativeVault = JniVaultNativeKeyBridge()
    vaultNative = nativeVault
    // Capture only needs the recipient's public key. This verifier deliberately
@@ -252,8 +255,14 @@ public class CaptureForegroundService : Service() {
    vaultKeyHandle = null
    fileId.fill(0); fileSalt.fill(0); noncePrefix.fill(0)
    val destination = File(partial.parentFile, partial.name.removeSuffix(".part"))
-   // Same-filesystem atomic promotion only; never silently fall back to a copy.
-   Files.move(partial.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE)
+   // Atomic no-clobber publication: hard-link the already verified inode at
+   // the final name (link fails if it exists), sync the directory, then unlink
+   // the stage and sync again. A crash between operations leaves recoverable
+   // duplicate names for the same verified ciphertext; it never overwrites.
+   check(!destination.exists()) { "Final encrypted artifact already exists; preserve both candidates" }
+   android.system.Os.link(partial.absolutePath, destination.absolutePath)
+   FileChannel.open(destination.parentFile!!.toPath(), StandardOpenOption.READ).use { it.force(true) }
+   Files.delete(partial.toPath())
    FileChannel.open(destination.parentFile!!.toPath(), StandardOpenOption.READ).use { it.force(true) }
    journal!!.append(CaptureSessionJournal.RECORD_FILE_FINALIZED, SystemClock.elapsedRealtimeNanos(), mapOf("encryptedBytes" to encryptedBytes))
    reduce(SessionEvent.FinalizationSucceeded(SystemClock.elapsedRealtimeNanos(), encryptedBytes))
