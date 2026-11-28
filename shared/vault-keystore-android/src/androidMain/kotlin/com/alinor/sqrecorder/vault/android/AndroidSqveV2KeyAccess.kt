@@ -279,6 +279,48 @@ public class AndroidSqveV2KeyAccess(
     }
 }
 
+private data class ParsedCanonicalEcdhPayload(
+    val ephemeralDer: ByteArray,
+    val nonce: ByteArray,
+    val ciphertextAndTag: ByteArray,
+)
+
+private fun encodeCanonicalEcdhPayload(
+    ephemeralDer: ByteArray,
+    nonce: ByteArray,
+    ciphertextAndTag: ByteArray,
+): ByteArray {
+    require(ephemeralDer.isNotEmpty() && ephemeralDer.size <= 2_048)
+    require(nonce.size == 12 && ciphertextAndTag.size == 48)
+    return ByteArrayOutputStream().apply {
+        write(u16be(ephemeralDer.size))
+        write(ephemeralDer)
+        write(nonce)
+        write(ciphertextAndTag)
+    }.toByteArray()
+}
+
+private fun parseCanonicalEcdhPayload(bytes: ByteArray): ParsedCanonicalEcdhPayload {
+    if (bytes.size < 63 || bytes.size > 8_192) {
+        throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+    }
+    val derLength = ((bytes[0].toInt() and 0xff) shl 8) or (bytes[1].toInt() and 0xff)
+    if (derLength !in 1..2_048) {
+        throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+    }
+    val nonceAt = 2 + derLength
+    val cipherAt = nonceAt + 12
+    val end = cipherAt + 32 + 16
+    if (end != bytes.size) {
+        throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
+    }
+    return ParsedCanonicalEcdhPayload(
+        ephemeralDer = bytes.copyOfRange(2, nonceAt),
+        nonce = bytes.copyOfRange(nonceAt, cipherAt),
+        ciphertextAndTag = bytes.copyOfRange(cipherAt, end),
+    )
+}
+
 private fun agree(
     privateKey: java.security.PrivateKey,
     peer: PublicKey,
