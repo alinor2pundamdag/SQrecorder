@@ -6,6 +6,7 @@ import com.alinor.sqrecorder.domain.VaultV2WrapSuite
 import java.security.MessageDigest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
+import kotlin.test.assertEquals
 
 class AndroidSqveV2HeaderCodecTest {
     @Test
