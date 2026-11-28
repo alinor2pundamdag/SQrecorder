@@ -54,6 +54,9 @@ private class FixedDekBridge : VaultNativeKeyBridge {
         handle: VaultFileKeyHandle, nonce: ByteArray, aad: ByteArray, ciphertextAndTag: ByteArray,
     ) = ByteArray(ciphertextAndTag.size - 16)
 
+}
+
+class AndroidSqveV2RsaSuiteTest {
     @Test
     fun api23RsaSuiteSerializesExplicitSuiteAnd384ByteCiphertext() {
         val recipient = VaultV2RecipientWrap(
