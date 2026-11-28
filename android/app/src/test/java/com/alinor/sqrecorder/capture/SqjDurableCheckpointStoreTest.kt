@@ -148,11 +148,8 @@ class SqjDurableCheckpointStoreTest {
             )
             assertEquals(SqacVerificationResult.VALID, store.verifyPersisted(journalFile, cp, verifier))
 
-            CaptureSessionJournal.create(File(root, "advance-$session.sqj"), UUID.randomUUID()).use { }
-            // Any later valid append changes the terminal sequence; the old
-            // signed checkpoint must no longer be accepted as the current head.
-            // Reopen is intentionally prohibited by the writer, so append a
-            // valid next record only via a fresh test fixture journal.
+            // A separately valid journal with a later terminal sequence must
+            // not accept this checkpoint as its current-head proof.
             val advancedFile = File(root, "advanced.sqj")
             val advancedId = UUID.randomUUID()
             CaptureSessionJournal.create(advancedFile, advancedId).use { journal ->
