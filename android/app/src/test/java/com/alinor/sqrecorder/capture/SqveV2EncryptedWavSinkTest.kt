@@ -45,6 +45,13 @@ class SqveV2EncryptedWavSinkTest {
                 fileId, salt, noncePrefix, header, 48_000,
             )
             val pcm = ByteArray(2 * 1_048_576 + 19) { 0x5a }
+            var overflowOffsetRejected = false
+            try {
+                sink.writePcm(pcm, Int.MAX_VALUE, 1)
+            } catch (_: IllegalArgumentException) {
+                overflowOffsetRejected = true
+            }
+            assertTrue("overflowing offset+length must be rejected", overflowOffsetRejected)
             sink.writePcm(pcm, 0, pcm.size)
             val envelopeBytes = sink.finish(pcm.size.toLong())
             sink.verifyFinished(pcm.size.toLong())
