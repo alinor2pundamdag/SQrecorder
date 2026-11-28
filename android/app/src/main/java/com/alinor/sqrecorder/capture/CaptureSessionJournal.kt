@@ -128,6 +128,12 @@ internal class CaptureSessionJournal private constructor(
                     var previousDigest = ByteArray(DIGEST_BYTES)
                     var priorTimestamp: Long? = null
                     var sessionId: ByteArray? = null
+                    var sessionCreated = false
+                    var captureStarted = false
+                    var stopRequested = false
+                    var captureStopped = false
+                    var encryptionStarted = false
+                    var encryptionCompleted = false
                     var finalized = false
                     while (offset < size) {
                         if (size - offset < 4L) {
@@ -179,6 +185,26 @@ internal class CaptureSessionJournal private constructor(
                             previousDigest.fill(0)
                             return ScanResult(false, false, expectedSequence - 1L, finalized, "unknown journal record type")
                         }
+                        // Enforce the capture lifecycle contract, not just a valid
+                        // digest chain. An unkeyed hash chain alone must not allow
+                        // a reordered/duplicated terminal event to look finalized.
+                        val transitionValid = when (type) {
+                            RECORD_SESSION_CREATED -> expectedSequence == 1L && !sessionCreated
+                            RECORD_CAPTURE_STARTED -> sessionCreated && !captureStarted && !stopRequested
+                            RECORD_CAPTURE_STOP_REQUESTED -> captureStarted && !stopRequested
+                            RECORD_CAPTURE_STOPPED -> stopRequested && !captureStopped
+                            RECORD_VAULT_ENCRYPTION_STARTED -> captureStopped && !encryptionStarted
+                            RECORD_VAULT_ENCRYPTION_COMPLETED -> encryptionStarted && !encryptionCompleted
+                            RECORD_FILE_FINALIZED -> encryptionCompleted && !finalized
+                            RECORD_INTEGRITY_INCIDENT -> sessionCreated && !finalized
+                            RECORD_RECOVERY_COMPLETED, RECORD_MIGRATION_APPENDED -> sessionCreated && !finalized
+                            else -> false
+                        }
+                        if (!transitionValid || finalized) {
+                            record.fill(0)
+                            previousDigest.fill(0)
+                            return ScanResult(false, false, expectedSequence - 1L, finalized, "invalid lifecycle transition")
+                        }
                         val payload = record.copyOfRange(80, 80 + payloadLength)
                         if (!isCanonicalJournalPayload(payload, type)) {
                             payload.fill(0)
@@ -202,7 +228,15 @@ internal class CaptureSessionJournal private constructor(
                         previousDigest.fill(0)
                         previousDigest = actualDigest.copyOf()
                         actualDigest.fill(0); storedDigest.fill(0); record.fill(0)
-                        finalized = finalized || type == RECORD_FILE_FINALIZED
+                        when (type) {
+                            RECORD_SESSION_CREATED -> sessionCreated = true
+                            RECORD_CAPTURE_STARTED -> captureStarted = true
+                            RECORD_CAPTURE_STOP_REQUESTED -> stopRequested = true
+                            RECORD_CAPTURE_STOPPED -> captureStopped = true
+                            RECORD_VAULT_ENCRYPTION_STARTED -> encryptionStarted = true
+                            RECORD_VAULT_ENCRYPTION_COMPLETED -> encryptionCompleted = true
+                            RECORD_FILE_FINALIZED -> finalized = true
+                        }
                         priorTimestamp = timestamp
                         expectedSequence = Math.addExact(expectedSequence, 1L)
                         offset = Math.addExact(offset, 4L + bodyLength.toLong())
