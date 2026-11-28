@@ -31,7 +31,6 @@ pub struct RecipientWrap {
     pub wrapped: Vec<u8>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
 /// Decoded ECDH recipient record payload, before platform private-key unwrap.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EcdhWrappedDek {
