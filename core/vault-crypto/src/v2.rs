@@ -101,6 +101,7 @@ pub struct Header {
     pub nonce_prefix: [u8; 4],
     pub plaintext_len: u64,
     pub chunk_count: u64,
+    pub streaming: bool,
     pub recipients: Vec<RecipientWrap>,
 }
 
@@ -147,6 +148,7 @@ impl Header {
             nonce_prefix,
             plaintext_len,
             chunk_count: expected_chunks(plaintext_len),
+            streaming: false,
             recipients,
         };
         validate(&header)?;
@@ -177,7 +179,8 @@ fn valid_key_id(id: &str) -> bool {
 }
 
 fn validate(header: &Header) -> Result<(), Error> {
-    if header.chunk_count != expected_chunks(header.plaintext_len)
+    if (!header.streaming && header.chunk_count != expected_chunks(header.plaintext_len))
+        || (header.streaming && (header.plaintext_len != u64::MAX || header.chunk_count != u64::MAX))
         || header.recipients.is_empty()
         || header.recipients.len() > RECIPIENTS_MAX
     {
@@ -220,7 +223,7 @@ pub fn serialize_header(header: &Header, key: &VaultFileKey) -> Result<Vec<u8>, 
     body.extend_from_slice(&VERSION.to_be_bytes());
     body.extend_from_slice(&0u32.to_be_bytes()); // patched total header length
     body.extend_from_slice(&CONTENT_SUITE_AES_256_GCM.to_be_bytes());
-    body.extend_from_slice(&0u16.to_be_bytes()); // flags
+    body.extend_from_slice(&(if header.streaming { 1u16 } else { 0u16 }).to_be_bytes()); // flags
     body.extend_from_slice(&header.file_id);
     body.extend_from_slice(&header.file_salt);
     body.extend_from_slice(&header.nonce_prefix);
@@ -262,7 +265,7 @@ pub fn parse_header(bytes: &[u8], key: &VaultFileKey) -> Result<Header, Error> {
         || u16::from_be_bytes(bytes[4..6].try_into().unwrap()) != VERSION
         || u32::from_be_bytes(bytes[6..10].try_into().unwrap()) as usize != bytes.len()
         || u16::from_be_bytes(bytes[10..12].try_into().unwrap()) != CONTENT_SUITE_AES_256_GCM
-        || bytes[12..14] != [0, 0]
+        || u16::from_be_bytes(bytes[12..14].try_into().unwrap()) > 1
         || u32::from_be_bytes(bytes[66..70].try_into().unwrap()) as usize != CHUNK_BYTES
     {
         return Err(Error::InvalidHeader);
@@ -325,6 +328,7 @@ pub fn parse_header(bytes: &[u8], key: &VaultFileKey) -> Result<Header, Error> {
         nonce_prefix: bytes[62..66].try_into().unwrap(),
         plaintext_len,
         chunk_count,
+        streaming: u16::from_be_bytes(bytes[12..14].try_into().unwrap()) == 1,
         recipients,
     };
     validate(&header)?;
@@ -415,6 +419,7 @@ impl<W: Write> Writer<W> {
         })
     }
     pub fn write_chunk(&mut self, plaintext: &mut [u8]) -> Result<(), Error> {
+        if self.header.streaming { return Err(Error::InvalidHeader); }
         if self.next >= self.header.chunk_count {
             return Err(Error::ChunkOrder);
         }
