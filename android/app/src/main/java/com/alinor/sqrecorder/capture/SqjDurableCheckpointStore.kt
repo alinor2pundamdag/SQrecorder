@@ -137,7 +137,7 @@ internal class SqjDurableCheckpointStore {
     }
 
     private fun decodeCanonicalSqac(bytes: ByteArray): JournalSignatureAnchor {
-        require(bytes.size in 69..340)
+        require(bytes.size in 71..340)
         require(bytes.copyOfRange(0, 4).contentEquals(byteArrayOf(0x53, 0x51, 0x41, 0x43)))
         val buffer = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
         require(buffer.getShort(4).toInt() == 1)
@@ -201,7 +201,7 @@ internal class SqjDurableCheckpointStore {
     private fun readCheckpointBounded(file: File): ByteArray =
         FileChannel.open(file.toPath(), StandardOpenOption.READ).use { channel ->
             val size = channel.size()
-            check(size in 69L..340L) { "SQAC size outside canonical bounds" }
+            check(size in 71L..340L) { "SQAC size outside canonical bounds" }
             val buffer = ByteBuffer.allocate(size.toInt())
             while (buffer.hasRemaining()) {
                 val count = channel.read(buffer)
