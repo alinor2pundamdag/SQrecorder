@@ -46,3 +46,10 @@ SQVE v1 fixes a non-empty RSA-OAEP label `SQREC-VAULT-DEK-v1`. Android Keystore'
 - Do not promise identical hardware security, background recording policy, or feature availability on every OS/device.
 - Do not export raw private keys or plaintext DEKs in logs, crash reports, or public APIs.
 - Do not change SQVE v1 constants or existing v1 ciphertext.
+
+
+## Canonical implementation profile (2026-11-28)
+
+The byte-level V2 profile is now specified in `docs/security/sqve-v2-envelope-design.md`: big-endian fixed-width integers; bounded, sorted ASCII recipient records; authenticated canonical header; versioned HKDF domain labels; explicit V2 content/wrap suite IDs; exact ECDH wrapped-DEK framing; chunk framing/AAD; and a full SHA-256 stream footer. Implement this as a distinct V2 module and parser. Do not repurpose or mutate V1 serialization.
+
+This is an implementation baseline for deterministic vector generation, **not** independent cryptographic approval. Production acceptance still requires independently reproduced Rust + platform golden vectors, parser fuzz/negative tests, provider conformance, review of nonce recovery and recipient rewrap, and successful encrypted-capture/SQJ/durable recovery integration. If review identifies a cryptographic or byte-profile defect, correct it before deployment and version the suite/profile rather than preserving an unsafe draft.
