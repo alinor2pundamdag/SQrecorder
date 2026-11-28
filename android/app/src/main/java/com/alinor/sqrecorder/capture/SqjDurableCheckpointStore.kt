@@ -4,7 +4,6 @@ import com.alinor.sqrecorder.domain.JournalSignatureAnchor
 import com.alinor.sqrecorder.vault.android.AndroidJournalAnchorVerifier
 import com.alinor.sqrecorder.vault.android.JournalAnchorVerificationResult
 import java.io.File
-import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
@@ -52,9 +51,17 @@ internal class SqjDurableCheckpointStore {
         }
         val temp = File(checkpointDirectory, ".${target.name}.${java.util.UUID.randomUUID()}.tmp")
         try {
-            FileOutputStream(temp, false).use { output ->
-                output.write(encoded)
-                output.fd.sync()
+            FileChannel.open(
+                temp.toPath(),
+                StandardOpenOption.CREATE_NEW,
+                StandardOpenOption.WRITE,
+            ).use { channel ->
+                var buffer = ByteBuffer.wrap(encoded)
+                while (buffer.hasRemaining()) {
+                    val written = channel.write(buffer)
+                    check(written > 0) { "Checkpoint write made no progress" }
+                }
+                channel.force(true)
             }
             // Hard-link publication is atomic and no-clobber on the same
             // filesystem. Never rely on ATOMIC_MOVE's provider-specific
