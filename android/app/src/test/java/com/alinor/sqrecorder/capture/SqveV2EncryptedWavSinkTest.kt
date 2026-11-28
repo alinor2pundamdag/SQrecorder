@@ -47,8 +47,29 @@ class SqveV2EncryptedWavSinkTest {
             sink.writePcm(pcm, 0, pcm.size)
             val envelopeBytes = sink.finish(pcm.size.toLong())
             sink.verifyFinished(pcm.size.toLong())
-            sink.close()
             pcm.fill(0)
+
+            // The same verification gate must reject footer tampering before
+            // any caller can promote this staged file.
+            RandomAccessFile(output, "rw").use { tamper ->
+                val at = tamper.length() - 1L
+                tamper.seek(at)
+                val original = tamper.readByte()
+                tamper.seek(at)
+                tamper.writeByte(original xor 0x01)
+                var rejected = false
+                try {
+                    sink.verifyFinished(2 * 1_048_576L + 19L)
+                } catch (_: IllegalArgumentException) {
+                    rejected = true
+                } finally {
+                    tamper.seek(at)
+                    tamper.writeByte(original.toInt())
+                    tamper.fd.sync()
+                }
+                assertTrue("tampered footer digest must fail verification", rejected)
+            }
+            sink.close()
 
             val encoded = output.readBytes()
             assertEquals(envelopeBytes, encoded.size.toLong())
