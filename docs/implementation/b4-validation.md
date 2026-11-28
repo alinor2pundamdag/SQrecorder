@@ -249,3 +249,16 @@ B4 remains **BLOCKED / NOT 100% accepted** until all gates pass.
 - Android Vault contract Run #188 (`46107670104`): **PASS**.
 - GitHub Actions confirms all three completed successfully on the exact same source SHA. The B4 source-slice CI wait is closed for that commit; this documentation update advances the branch and requires fresh exact-head CI.
 - B4 remains **not release-complete**: SQVE v2 cryptographic implementation/golden vectors/provider conformance, Android encrypted finalization wiring, SQJ durable journal/checkpoint and key-registry integration, encrypted durable promotion/recovery, crash-cut/ENOSPC/force-stop matrix, full combined-candidate CI, and physical-device acceptance remain open. SQVE v1 and all other blueprint decisions remain locked.
+
+
+## SQVE v2 implementation + encrypted capture checkpoint — 2026-11-28
+
+This supersedes the prior checkpoint wording that V2 cryptographic implementation and Android finalization wiring had not started. They are now **implemented as candidate slices**, not release-accepted:
+
+- Rust core/vault-crypto/src/v2.rs: canonical fixed-length V2 header, authenticated HKDF/HMAC header, chunk AAD/nonce, AES-256-GCM streaming writer/verifier, strict footer/EOF, ECDH recipient record encoding and validation, deterministic fixed + streaming envelope golden vectors, and explicit RSA-3072 suite framing.
+- Live capture: authenticated streaming flag/sentinels and SQVC records allow final byte/chunk counts in footer. Rust writer holds a bounded 1 MiB buffer and zeroizes it on drop. No plaintext file staging.
+- Android: AudioRecord → bounded native queue → single consumer → SqveV2EncryptedWavSink writes SQVE v2 .sqve.part; native Rust chunk AES-GCM is used; header codec emits canonical HMAC; first chunk is reserved so WAV size fields are patched before encryption; buffers are scrubbed. App no longer writes plaintext .wav.part in this path.
+- Android provider: API 31+ ECDH-P256 suite; API 23–30 explicit RSA-3072/OAEP-SHA256/MGF1-SHA1/empty-label suite 0x0003. This is an explicit V2 suite, never a V1 fallback. API23 emulator/provider verification and independent crypto review are still gates.
+- Android tests now include independent header golden vectors and encrypted sink multi-chunk/footer assertions. Latest exact candidate head before this evidence edit: b9171e03c81c9ec139796d30ad3c05ec8691e5cf. Rust, cross-platform and Android workflows were started for that exact head; capture their final conclusions after the evidence commit, because this commit advances the head.
+
+Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/final hash and idempotent journal-backed finalization; encrypted durable-store stage/verify/promote/reconcile and startup recovery; crash-cut/force-stop/ENOSPC/sink-failure/queue-overrun matrix; recording-list/playback/decryption/authenticated recovery UI; API23 + API31+ emulator and physical device matrix; independent crypto review; iOS V2 recipient provider and cross-provider vectors. PR #2 and controlled candidate PR #7 remain draft/open/unmerged.
