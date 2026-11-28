@@ -6,6 +6,7 @@ on:
       - batch-1-foundation
       - b4-hardening-approved-foundation
       - android-b5-capture
+      - b4-b5-controlled-validation-candidate
     paths:
       - Cargo.toml
       - Cargo.lock
