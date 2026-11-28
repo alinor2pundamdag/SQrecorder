@@ -403,13 +403,17 @@ pub fn decrypt_chunk(
         if header.plaintext_len != u64::MAX || header.chunk_count != u64::MAX {
             return Err(Error::MalformedChunk);
         }
-        if index == u64::MAX || plaintext_len == 0 || plaintext_len as usize > CHUNK_BYTES
+        if index == u64::MAX
+            || plaintext_len == 0
+            || plaintext_len as usize > CHUNK_BYTES
             || ciphertext.len() != plaintext_len as usize
         {
             return Err(Error::MalformedChunk);
         }
     } else {
-        if index >= header.chunk_count || header.chunk_count != expected_chunks(header.plaintext_len) {
+        if index >= header.chunk_count
+            || header.chunk_count != expected_chunks(header.plaintext_len)
+        {
             return Err(Error::MalformedChunk);
         }
         let offset = index
