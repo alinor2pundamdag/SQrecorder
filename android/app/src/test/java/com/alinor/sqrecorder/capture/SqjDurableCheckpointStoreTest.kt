@@ -1,6 +1,14 @@
 package com.alinor.sqrecorder.capture
 
 import com.alinor.sqrecorder.domain.JournalSignatureAnchor
+import com.alinor.sqrecorder.vault.android.AndroidJournalAnchorVerifier
+import com.alinor.sqrecorder.vault.android.JournalAnchorPublicKeyResolver
+import java.io.ByteArrayOutputStream
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.security.KeyPairGenerator
+import java.security.MessageDigest
+import java.security.Signature
 import java.io.File
 import java.util.UUID
 import org.junit.Assert.assertEquals
@@ -83,6 +91,78 @@ class SqjDurableCheckpointStoreTest {
             }
             assertTrue(rejected)
             assertEquals(original.toList(), cpDir.listFiles()!!.single().readBytes().toList())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+
+    @Test
+    fun persistedCheckpointSignatureVerifiesAndBecomesStaleAfterJournalAdvance() {
+        val root = createTempDir(prefix = "sqrec-sqac-verify-")
+        val session = UUID.randomUUID()
+        val journalFile = File(root, "session-$session.sqj")
+        val cpDir = File(root, "cp")
+        try {
+            CaptureSessionJournal.create(journalFile, session).use { journal ->
+                journal.append(CaptureSessionJournal.RECORD_SESSION_CREATED, 100L)
+            }
+            val journalBytes = journalFile.readBytes()
+            val digest = journalBytes.takeLast(32).toByteArray()
+            val digestHex = digest.joinToString("") { "%02x".format(it) }
+            val pair = KeyPairGenerator.getInstance("EC").apply {
+                initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+            }.generateKeyPair()
+            val fingerprint = MessageDigest.getInstance("SHA-256").digest(pair.public.encoded)
+                .take(16).joinToString("") { "%02x".format(it) }
+            val keyId = "ecdsa-p256-sha256-v1-$fingerprint"
+            val epoch = 4L
+            val timestamp = 1234L
+            val preimage = ByteArrayOutputStream().apply {
+                write("SQREC-JOURNAL-ANCHOR-V1".toByteArray(Charsets.US_ASCII))
+                write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(1L).array())
+                write(digest)
+                write(ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(keyId.length.toShort()).array())
+                write(keyId.toByteArray(Charsets.UTF_8))
+                write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(epoch).array())
+                write(ByteBuffer.allocate(8).order(ByteOrder.LITTLE_ENDIAN).putLong(timestamp).array())
+            }.toByteArray()
+            val signer = Signature.getInstance("SHA256withECDSA").apply {
+                initSign(pair.private)
+                update(preimage)
+            }
+            val anchor = JournalSignatureAnchor(
+                formatVersion = 1,
+                sequence = 1L,
+                digestHex = digestHex,
+                signatureAlgorithmId = "ecdsa-p256-sha256-v1",
+                signingKeyId = keyId,
+                signatureBase64 = java.util.Base64.getEncoder().encodeToString(signer.sign()),
+                authenticationEpoch = epoch,
+                monotonicTimestampNs = timestamp,
+            )
+            val store = SqjDurableCheckpointStore()
+            val cp = store.persistAfterJournalSync(journalFile, cpDir, anchor)
+            val verifier = AndroidJournalAnchorVerifier(
+                JournalAnchorPublicKeyResolver { requested -> if (requested == keyId) pair.public.encoded else null },
+            )
+            assertEquals(SqacVerificationResult.VALID, store.verifyPersisted(journalFile, cp, verifier))
+
+            CaptureSessionJournal.create(File(root, "advance-$session.sqj"), UUID.randomUUID()).use { }
+            // Any later valid append changes the terminal sequence; the old
+            // signed checkpoint must no longer be accepted as the current head.
+            // Reopen is intentionally prohibited by the writer, so append a
+            // valid next record only via a fresh test fixture journal.
+            val advancedFile = File(root, "advanced.sqj")
+            val advancedId = UUID.randomUUID()
+            CaptureSessionJournal.create(advancedFile, advancedId).use { journal ->
+                journal.append(CaptureSessionJournal.RECORD_SESSION_CREATED, 100L)
+                journal.append(CaptureSessionJournal.RECORD_CAPTURE_STARTED, 200L)
+            }
+            assertEquals(SqacVerificationResult.SEQUENCE_MISMATCH, store.verifyPersisted(advancedFile, cp, verifier))
+            preimage.fill(0)
+            digest.fill(0)
+            journalBytes.fill(0)
         } finally {
             root.deleteRecursively()
         }
