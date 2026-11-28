@@ -38,6 +38,10 @@ internal class SqjDurableCheckpointStore {
         val encoded = encodeCanonicalSqac(anchor)
         val target = File(checkpointDirectory, "sqac-${anchor.sequence.toString().padStart(20, '0')}.checkpoint")
         if (target.exists()) {
+            check(target.length() == encoded.size.toLong()) {
+                encoded.fill(0)
+                error("Existing checkpoint length conflicts with canonical encoding; preserve it")
+            }
             val existing = target.readBytes()
             val identical = existing.contentEquals(encoded)
             existing.fill(0)
@@ -90,6 +94,9 @@ internal class SqjDurableCheckpointStore {
         checkpointFile: File,
         verifier: AndroidJournalAnchorVerifier,
     ): SqacVerificationResult {
+        if (!checkpointFile.isFile || checkpointFile.length() !in 69L..340L) {
+            return SqacVerificationResult.INVALID_CHECKPOINT
+        }
         val bytes = try {
             checkpointFile.readBytes()
         } catch (_: Exception) {
