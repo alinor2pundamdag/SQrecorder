@@ -130,17 +130,32 @@ public class AndroidSqveV2KeyAccess(
             throw VaultKeyAccessException(VaultKeyAccessFailure.AUTH_CONTEXT_INVALID)
         }
         val alias = aliasForKeyId(wrap.recipientKeyId)
-        val ephemeralDer = decodeCanonicalBase64(wrap.ephemeralPublicKeyBase64)
-        val ciphertextAndTag = decodeCanonicalBase64(wrap.wrappedDekBase64)
-        val nonce = wrap.wrapNonceHex.hexToBytes()
+        val canonicalPayload = decodeCanonicalBase64(wrap.wrappedDekBase64)
+        val parsed = try {
+            parseCanonicalEcdhPayload(canonicalPayload)
+        } catch (e: Exception) {
+            canonicalPayload.fill(0)
+            throw e
+        }
+        val ephemeralDer = parsed.ephemeralDer
+        val ciphertextAndTag = parsed.ciphertextAndTag
+        val nonce = parsed.nonce
+        val separatelyEncodedEphemeral = decodeCanonicalBase64(wrap.ephemeralPublicKeyBase64)
+        val separatelyEncodedNonce = wrap.wrapNonceHex.hexToBytes()
         if (ephemeralDer.size !in MIN_SPKI_BYTES..MAX_SPKI_BYTES ||
-            ciphertextAndTag.size != DEK_BYTES + TAG_BYTES
+            !ephemeralDer.contentEquals(separatelyEncodedEphemeral) ||
+            !nonce.contentEquals(separatelyEncodedNonce)
         ) {
+            canonicalPayload.fill(0)
             ephemeralDer.fill(0)
             ciphertextAndTag.fill(0)
             nonce.fill(0)
+            separatelyEncodedEphemeral.fill(0)
+            separatelyEncodedNonce.fill(0)
             throw VaultKeyAccessException(VaultKeyAccessFailure.INVALID_WRAP)
         }
+        separatelyEncodedEphemeral.fill(0)
+        separatelyEncodedNonce.fill(0)
 
         var shared: ByteArray? = null
         var kek: ByteArray? = null
@@ -173,6 +188,7 @@ public class AndroidSqveV2KeyAccess(
         } catch (e: Exception) {
             throw VaultKeyAccessException(VaultKeyAccessFailure.CRYPTO_FAILURE, e)
         } finally {
+            canonicalPayload.fill(0)
             ephemeralDer.fill(0)
             ciphertextAndTag.fill(0)
             nonce.fill(0)
