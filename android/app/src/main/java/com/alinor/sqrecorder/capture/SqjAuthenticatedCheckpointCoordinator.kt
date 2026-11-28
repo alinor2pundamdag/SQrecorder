@@ -2,6 +2,7 @@ package com.alinor.sqrecorder.capture
 
 import com.alinor.sqrecorder.domain.JournalAnchorSigner
 import com.alinor.sqrecorder.domain.VaultAuthContext
+import android.os.SystemClock
 import com.alinor.sqrecorder.vault.android.AndroidJournalAnchorVerifier
 import java.io.File
 import java.nio.channels.FileChannel
@@ -26,6 +27,9 @@ internal class SqjAuthenticatedCheckpointCoordinator(
         checkpointDirectory: File,
         authContext: VaultAuthContext,
     ): File {
+        check(authContext.validate(SystemClock.elapsedRealtimeNanos())) {
+            "Refusing to checkpoint without a current authenticated Vault context"
+        }
         val scan = CaptureSessionJournal.scan(journalFile)
         check(scan.valid && !scan.damagedTail) { "Refusing to sign a damaged or incomplete SQJ" }
         val digest = readTerminalDigest(journalFile)
