@@ -50,12 +50,14 @@ internal class SqjDurableCheckpointStore {
             "Checkpoint directory unavailable"
         }
         val temp = File(checkpointDirectory, ".${target.name}.${java.util.UUID.randomUUID()}.tmp")
+        var tempCreated = false
         try {
             FileChannel.open(
                 temp.toPath(),
                 StandardOpenOption.CREATE_NEW,
                 StandardOpenOption.WRITE,
             ).use { channel ->
+                tempCreated = true
                 var buffer = ByteBuffer.wrap(encoded)
                 while (buffer.hasRemaining()) {
                     val written = channel.write(buffer)
@@ -73,7 +75,7 @@ internal class SqjDurableCheckpointStore {
         } catch (failure: Exception) {
             // If rename succeeded but directory sync failed, preserve target as
             // ambiguous durable evidence. Only remove an uncommitted temp file.
-            if (temp.exists()) temp.delete()
+            if (tempCreated && temp.exists()) temp.delete()
             throw IllegalStateException("SQAC persistence ambiguous; preserve journal and checkpoint evidence", failure)
         } finally {
             encoded.fill(0)
