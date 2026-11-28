@@ -2,7 +2,7 @@ name: SQRecorder Android Vault contract validation
 
 on:
   push:
-    branches: [main, b4-hardening-approved-foundation]
+    branches: [main, b4-hardening-approved-foundation, b4-b5-controlled-validation-candidate]
     paths:
       - "build.gradle.kts"
       - "android/**"
