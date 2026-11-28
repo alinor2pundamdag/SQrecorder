@@ -358,3 +358,11 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Commits: store/read-back `3bcdf3922e02ac2f267b0b2d6e7fb46f939c90ef`; tests `b896b8c2ba9da316d808fafbc5277249252c75e8`, cleanup `7ff388da6357f997ba635e6be641d595e153feea`; exclusive temp write `01d158896c1e605ce9e8bf74453ee60e6735a18b`, collision-safe cleanup `2faa49bc3568da1e44205d5b60bdb722da80bcf6`; coordinator `7bc41332ce2e4c81b2bea8ed5037127ed4a595e6`; coordinator test `dd02ce6706c061740c178d57aafd507e9f90f1c6`.
 - Integration boundary still matters: CaptureForegroundService does not yet obtain/pass an authenticated `VaultAuthContext` or invoke this coordinator. Do not sign from background capture without approved user-auth state. Next is app-level authenticated finalization/recovery wiring and lifecycle/fault tests.
 - **Not verified:** Kotlin compile/unit test execution, exact-head Actions, emulator or physical device. No gate is promoted to PASS.
+
+
+## Auth-context enforcement in SQJ checkpoint coordinator — 2026-11-28
+
+- Coordinator now independently rejects an expired/invalid `VaultAuthContext` before scanning/signing; the production signer also revalidates at its signing boundary. This prevents a future alternate signer implementation from silently bypassing the coordinator's auth precondition.
+- Monotonic clock is injectable for deterministic host tests. Test context uses a controlled clock and a valid unexpired session.
+- Commits: auth guard `f485a0b081887822df2023855890560659d8c8bc`; clock injection `cf7434c893cc981e03dec8ad600d1aca374e54a8`; deterministic test `0a0531e45d15e3aa4b5dccd7d6a43f3cf64b9d88`.
+- These are source-level changes only. No Android build/unit run, CI, emulator or physical-device result is claimed.
