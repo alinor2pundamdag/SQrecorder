@@ -123,6 +123,9 @@ internal class CaptureSessionJournal private constructor(
             return try {
                 FileChannel.open(file.toPath(), StandardOpenOption.READ).use { channel ->
                     val size = channel.size()
+                    if (size == 0L) {
+                        return ScanResult(false, true, 0L, false, "empty journal; SESSION_CREATED was not durably recorded")
+                    }
                     var offset = 0L
                     var expectedSequence = 1L
                     var previousDigest = ByteArray(DIGEST_BYTES)
