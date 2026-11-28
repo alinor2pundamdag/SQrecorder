@@ -362,7 +362,8 @@ pub fn verify_authenticated_stream<R: Read + Seek>(
     if input.read(&mut [0u8; 1]).map_err(|_| Error::Read)? != 0 { return Err(Error::TrailingData); }
     Ok(header)
 }
-\n/// Fixed-length input stream encryption with a single reusable 1 MiB buffer.
+
+/// Fixed-length input stream encryption with a single reusable 1 MiB buffer.
 /// It never accepts short input or silently ignores trailing bytes.
 pub fn encrypt_stream<R: Read, W: Write>(
     input: &mut R, output: W, header: Header, key: VaultFileKey,
