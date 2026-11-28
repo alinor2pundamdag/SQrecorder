@@ -373,3 +373,11 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Checkpoint retry comparison and read-back verification now use bounded FileChannel reads (69–340 byte SQAC limit), reject malformed/oversized files before allocation, and fail closed on zero-progress reads. This avoids unbounded `readBytes()` allocation from a corrupted checkpoint path.
 - Commits: `b4562cf17efe39a2c1b94b40f69cdad869d0ddef` (size guard), `e5e00b094f450bf92a51aea56d0f6f9b0887e372` (bounded channel reads).
 - Source-level audit only. Kotlin compilation/tests, exact-head CI, emulator and physical-device checks remain not verified.
+
+
+## SQAC directory durability and concurrent-read checks — 2026-11-28
+
+- Checkpoint store now requires the checkpoint parent to pre-exist, fsyncs the parent when creating the checkpoint subdirectory, and confirms checkpoint file size remains stable during bounded read-back. This closes a directory-entry durability gap and detects concurrent checkpoint mutation.
+- Added regression test rejecting a 1 MiB checkpoint before decoding/signature work; canonical checkpoint cap remains 340 bytes.
+- Commits: `061bd245c6a163c437a0f4a425fe23acc06b7256`, test `3b9e46e4249dc78524397159025ed805b8eb1134`.
+- Exact-head build/test/CI/device validation is still not available from the connected GitHub workflow interface; source is committed, not runtime-verified.
