@@ -33,6 +33,10 @@ import com.alinor.sqrecorder.vault.android.VaultAuthContextVerifier
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
+import java.nio.channels.FileChannel
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -177,13 +181,16 @@ public class CaptureForegroundService : Service() {
    reduce(SessionEvent.CaptureStopped(SystemClock.elapsedRealtimeNanos()))
    check(bytes > 0L && bytes % 2L == 0L) { "No complete PCM frames captured; encrypted partial retained" }
    val encryptedBytes = encryptedSink!!.finish(bytes)
+   encryptedSink!!.verifyFinished(bytes)
    encryptedSink!!.close()
    encryptedSink = null
    nativeVault.destroyFileKeyHandle(fileKeyHandle)
    vaultKeyHandle = null
    fileId.fill(0); fileSalt.fill(0); noncePrefix.fill(0)
    val destination = File(partial.parentFile, partial.name.removeSuffix(".part"))
-   check(partial.renameTo(destination)) { "Encrypted finalize rename failed; partial retained" }
+   // Same-filesystem atomic promotion only; never silently fall back to a copy.
+   Files.move(partial.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE)
+   FileChannel.open(destination.parentFile!!.toPath(), StandardOpenOption.READ).use { it.force(true) }
    reduce(SessionEvent.FinalizationSucceeded(SystemClock.elapsedRealtimeNanos(), encryptedBytes))
    success = true
   } catch (failure: Exception) {
