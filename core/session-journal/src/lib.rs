@@ -8,10 +8,6 @@ pub mod file_sink;
 pub use file_sink::{FileJournalOpenError, FileJournalSink};
 pub mod anchor_verifier;
 pub mod checkpoint;
-pub use checkpoint::{
-    BoundCheckpointVerification, CheckpointCodecError, decode_checkpoint, encode_checkpoint,
-    verify_checkpoint_binding,
-};
 pub use anchor_registry::{
     AnchorKeyRegistryError, AnchorKeyRegistryStatus, AnchorKeyRegistryVerification,
     AnchorKeyRegistryWriter, RetainedAnchorPublicKey, anchor_public_key_id,
@@ -21,6 +17,11 @@ pub use anchor_verifier::{
     AnchorCryptoProviderError, AnchorSigningPayloadError, JournalAnchorVerificationResult,
     JournalSignatureAnchor, P256Sha256SignatureProvider, journal_anchor_signing_payload,
     verify_journal_anchor,
+};
+
+pub use checkpoint::{
+    BoundCheckpointVerification, CheckpointCodecError, decode_checkpoint, encode_checkpoint,
+    verify_checkpoint_binding,
 };
 
 pub const JOURNAL_MAGIC: &[u8; 4] = b"SQJR";
