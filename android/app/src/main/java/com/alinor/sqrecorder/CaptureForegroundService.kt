@@ -25,22 +25,29 @@ import com.alinor.sqrecorder.domain.SessionFailureCode
 import com.alinor.sqrecorder.domain.TransitionOutcome
 import com.alinor.sqrecorder.capture.CaptureQueuePump
 import com.alinor.sqrecorder.capture.JniCaptureQueue
+import com.alinor.sqrecorder.capture.SqveV2EncryptedWavSink
+import com.alinor.sqrecorder.vault.android.AndroidSqveV2HeaderCodec
+import com.alinor.sqrecorder.vault.android.AndroidSqveV2KeyAccess
+import com.alinor.sqrecorder.vault.android.JniVaultNativeKeyBridge
+import com.alinor.sqrecorder.vault.android.VaultAuthContextVerifier
 import java.io.File
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * B5 capture slice: foreground microphone capture to app-private PCM WAV.
- * Failed writes/finalization leave a .part recovery artifact, never a success WAV.
- * Journal/Vault/durable-store integration is explicitly not yet wired.
+ * B5 capture slice: foreground microphone capture into a bounded-memory SQVE v2
+ * encrypted WAV stream. Journal/durable-store promotion and authenticated recovery
+ * are separate release gates; failed finalization retains only an encrypted .part.
  */
 public class CaptureForegroundService : Service() {
  private val stopping = AtomicBoolean(false)
  @Volatile private var stopReason = StopReason.USER_REQUEST
  @Volatile private var captureThread: Thread? = null
  @Volatile private var recorder: AudioRecord? = null
- @Volatile private var output: RandomAccessFile? = null
+ @Volatile private var encryptedSink: SqveV2EncryptedWavSink? = null
+ @Volatile private var vaultNative: JniVaultNativeKeyBridge? = null
+ @Volatile private var vaultKeyHandle: com.alinor.sqrecorder.domain.VaultFileKeyHandle? = null
 
  override fun onCreate() { super.onCreate(); createNotificationChannel() }
 
@@ -100,10 +107,26 @@ public class CaptureForegroundService : Service() {
    check(directory.exists() || directory.mkdirs()) { "Private recordings directory unavailable" }
    // UUID plus explicit truncate prevents timestamp collisions from reusing
    // stale tail bytes in a previous .part file.
-   partial = File(directory, "capture-" + java.util.UUID.randomUUID() + ".wav.part")
-   output = RandomAccessFile(partial, "rw")
-   output!!.setLength(0L)
-   output!!.write(PcmWavHeader.create(rate, 0L))
+   partial = File(directory, "capture-" + java.util.UUID.randomUUID() + ".sqve.part")
+   val nativeVault = JniVaultNativeKeyBridge()
+   vaultNative = nativeVault
+   // Capture only needs the recipient's public key. This verifier deliberately
+   // rejects decrypt until the app's authenticated recovery flow is integrated.
+   val v2Keys = AndroidSqveV2KeyAccess(nativeVault, VaultAuthContextVerifier { false })
+   val fileKeyHandle = v2Keys.createRandomV2FileKeyHandle()
+   vaultKeyHandle = fileKeyHandle
+   val secureRandom = java.security.SecureRandom()
+   val fileId = ByteArray(16).also(secureRandom::nextBytes)
+   val fileSalt = ByteArray(32).also(secureRandom::nextBytes)
+   val noncePrefix = ByteArray(4).also(secureRandom::nextBytes)
+   val recipientId = v2Keys.currentPublicV2RecipientKeyId()
+   val recipientWrap = v2Keys.wrapFileKeyForV2(fileKeyHandle, recipientId, fileId, fileSalt)
+   val headerBytes = AndroidSqveV2HeaderCodec(nativeVault).serializeStreamingHeader(
+    fileKeyHandle, fileId, fileSalt, noncePrefix, recipientWrap)
+   encryptedSink = SqveV2EncryptedWavSink(
+    RandomAccessFile(partial, "rw"), nativeVault, fileKeyHandle,
+    fileId, fileSalt, noncePrefix, headerBytes, rate)
+   headerBytes.fill(0)
    active.startRecording()
    check(active.recordingState == AudioRecord.RECORDSTATE_RECORDING) { "AudioRecord start failed" }
    reduce(SessionEvent.CaptureStarted(SystemClock.elapsedRealtimeNanos(), 1L))
@@ -115,7 +138,7 @@ public class CaptureForegroundService : Service() {
     queueBlockCapacity = QUEUE_BLOCK_CAPACITY,
     maxBlockFrames = MAX_CAPTURE_BLOCK_FRAMES,
    )
-   pump = CaptureQueuePump(queue, rate, output!!, 1L) { failure ->
+   pump = CaptureQueuePump(queue, rate, encryptedSink!!, 1L) { failure ->
     android.util.Log.e(TAG, "PCM sink failed; requesting controlled capture stop", failure)
     requestStop(StopReason.CAPTURE_FAILURE)
    }
@@ -146,15 +169,16 @@ public class CaptureForegroundService : Service() {
    pump!!.stopAndDrain()
    pump = null
    reduce(SessionEvent.CaptureStopped(SystemClock.elapsedRealtimeNanos()))
-   check(bytes > 0L && bytes % 2L == 0L) { "No complete PCM frames captured; partial retained" }
-   output!!.seek(0)
-   output!!.write(PcmWavHeader.create(rate, bytes))
-   output!!.fd.sync()
-   output!!.close()
-   output = null
+   check(bytes > 0L && bytes % 2L == 0L) { "No complete PCM frames captured; encrypted partial retained" }
+   val encryptedBytes = encryptedSink!!.finish(bytes)
+   encryptedSink!!.close()
+   encryptedSink = null
+   nativeVault.destroyFileKeyHandle(fileKeyHandle)
+   vaultKeyHandle = null
+   fileId.fill(0); fileSalt.fill(0); noncePrefix.fill(0)
    val destination = File(partial.parentFile, partial.name.removeSuffix(".part"))
-   check(partial.renameTo(destination)) { "Finalize rename failed; partial file retained" }
-   reduce(SessionEvent.FinalizationSucceeded(SystemClock.elapsedRealtimeNanos(), bytes + 44L))
+   check(partial.renameTo(destination)) { "Encrypted finalize rename failed; partial retained" }
+   reduce(SessionEvent.FinalizationSucceeded(SystemClock.elapsedRealtimeNanos(), encryptedBytes))
    success = true
   } catch (failure: Exception) {
    try {
@@ -171,9 +195,15 @@ public class CaptureForegroundService : Service() {
     android.util.Log.e(TAG, "Native queue did not drain cleanly; preserve partial artifact", pumpFailure)
    }
    pump = null
-   try { output?.fd?.sync() } catch (_: Exception) {}
-   try { output?.close() } catch (_: Exception) {}
-   output = null
+   try { encryptedSink?.close() } catch (_: Exception) {}
+   encryptedSink = null
+   vaultKeyHandle?.let { handle ->
+    try { vaultNative?.destroyFileKeyHandle(handle) } catch (failure: Exception) {
+     android.util.Log.e(TAG, "Native V2 key-handle cleanup failed", failure)
+    }
+   }
+   vaultKeyHandle = null
+   vaultNative = null
    captureThread = null
    android.util.Log.i(TAG, if (success) "Capture finalized" else "Capture incomplete; recovery file may exist")
    if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE) else stopForeground(true)
