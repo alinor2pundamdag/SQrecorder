@@ -56,7 +56,7 @@ class SqveV2EncryptedWavSinkTest {
                 tamper.seek(at)
                 val original = tamper.readByte()
                 tamper.seek(at)
-                tamper.writeByte(original xor 0x01)
+                tamper.writeByte(original.toInt() xor 0x01)
                 var rejected = false
                 try {
                     sink.verifyFinished(2 * 1_048_576L + 19L)
