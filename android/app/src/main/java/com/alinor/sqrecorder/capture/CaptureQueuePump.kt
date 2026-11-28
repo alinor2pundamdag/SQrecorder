@@ -20,6 +20,7 @@ internal class CaptureQueuePump(
     private val output: SqveV2EncryptedWavSink,
     private val captureEpoch: Long,
     private val onConsumerFailure: (Throwable) -> Unit = {},
+    private val onCaptureEvent: (CaptureEventMetadata) -> Unit = {},
 ) : AutoCloseable {
     private val drainRequested = AtomicBoolean(false)
     private val consumerFailure = AtomicReference<Throwable?>(null)
@@ -167,9 +168,10 @@ internal class CaptureQueuePump(
             check(status == JniCaptureQueue.STATUS_OK) {
                 "native capture event dequeue failed with sq_status_v1=$status"
             }
-            // The event ring is metadata-only at this slice. Persistence to SQJ
-            // is a required later integration; do not claim journal durability.
             val event = JniCaptureQueue.decodeEventMetadata(buffer)
+            // Persist and fsync the SQJ integrity record before continuing drain.
+            // A journal error is a consumer failure, never a log-only condition.
+            onCaptureEvent(event)
             Log.i(TAG, "Capture integrity event type=${event.eventType}, sequence=${event.eventSequence}, code=${event.detailCode}")
         }
     }
