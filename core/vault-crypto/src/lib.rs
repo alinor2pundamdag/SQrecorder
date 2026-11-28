@@ -222,7 +222,7 @@ pub(crate) fn sqve_v2_header_mac(
     salt: &[u8; 32],
     authenticated_bytes: &[u8],
 ) -> [u8; 32] {
-    let prk = hmac_sha256(salt, &key.bytes);
+    let mut prk = hmac_sha256(salt, &key.bytes);
     let info = b"SQREC-SQVE2-HEADER-MAC-v1";
     let mut expand_input = Vec::with_capacity(info.len() + 1);
     expand_input.extend_from_slice(info);
