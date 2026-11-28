@@ -5,7 +5,8 @@
 //! private-key operations and enforce authenticated unwrap.
 #![deny(unsafe_op_in_unsafe_fn)]
 
-pub mod envelope;\npub mod v2;
+pub mod envelope;
+pub mod v2;
 
 use aes_gcm::{
     Aes256Gcm, Nonce, Tag,
