@@ -277,3 +277,13 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Final publication now uses a same-filesystem hard-link create (atomic destination-name creation that fails if the final name exists), directory sync, stage unlink, and a second directory sync. It avoids `ATOMIC_MOVE` provider semantics that may replace an existing target. A crash between link and unlink can leave both names for the same verified ciphertext; recovery preserves/reconciles them, never overwrites.
 - Implementation commit: `bbbdde6cba02d7111d8245de03eddfb7e7b2837d`; follow-up removed the now-unused move import: `3ca7fe3b823098c6f35ca90943709634271b8532`.
 - **Verification pending:** this relies on hard-link support for the app-private recording filesystem; Android API/device and crash-cut tests must validate link + directory-sync + unlink behavior. Do not mark durable promotion acceptance until those tests and exact-head CI pass.
+
+
+## Follow-up source audit — canonical WAV metadata verification — 2026-11-28
+
+- Audited the current Android capture sink and found its staged-envelope verifier checked the WAV signature and PCM data-length field, but did not compare the complete 44-byte RIFF/WAVE header. That left RIFF size and format metadata (sample rate, byte rate, channel/bit-depth fields, block alignment) outside the explicit verification assertion.
+- Hardened `SqveV2EncryptedWavSink.verifyFinished()` to compare the authenticated first-chunk plaintext header byte-for-byte against `PcmWavHeader.create(sampleRateHz, pcmBytes)` before promotion. The temporary expected header is zeroized after comparison.
+- Updated the encrypted sink host test to assert the full canonical header rather than only the RIFF signature/data size.
+- Commits: verifier `16241e828fa1529ad124a0b10b3269e5c434de0f`; test `85f14fab1bfce40297bb70b5b3386bd94148fca1`.
+- **CI: NOT RUN / NOT VERIFIED** for current SHA `85f14fab1bfce40297bb70b5b3386bd94148fca1`: Actions workflow lookup returned zero runs and combined commit status returned no checks. The connected GitHub actions expose failed-job rerun, but not workflow dispatch; no run was triggered here. Do not claim this Kotlin patch compiled or passed.
+- PR #7 remains draft/open/unmerged. This source audit is a correctness hardening delta, not a gate closure. Exact-head CI, emulator and physical-device crash/storage testing, authenticated recovery/reconciliation, independent crypto review, and full B4/B5 acceptance remain open.
