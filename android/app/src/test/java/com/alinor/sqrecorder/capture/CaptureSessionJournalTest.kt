@@ -22,6 +22,10 @@ class CaptureSessionJournalTest {
                     200L,
                     mapOf("captureEpoch" to 1L, "sampleRateHz" to 48_000L),
                 )
+                journal.append(CaptureSessionJournal.RECORD_CAPTURE_STOP_REQUESTED, 250L)
+                journal.append(CaptureSessionJournal.RECORD_CAPTURE_STOPPED, 260L, mapOf("pcmBytes" to 960L))
+                journal.append(CaptureSessionJournal.RECORD_VAULT_ENCRYPTION_STARTED, 270L, mapOf("pcmBytes" to 960L))
+                journal.append(CaptureSessionJournal.RECORD_VAULT_ENCRYPTION_COMPLETED, 290L, mapOf("encryptedBytes" to 1_234L))
                 journal.append(
                     CaptureSessionJournal.RECORD_FILE_FINALIZED,
                     300L,
@@ -31,7 +35,7 @@ class CaptureSessionJournalTest {
             val result = CaptureSessionJournal.scan(journalFile)
             assertTrue(result.valid)
             assertFalse(result.damagedTail)
-            assertEquals(3L, result.lastSequence)
+            assertEquals(7L, result.lastSequence)
             assertTrue(result.finalized)
         } finally {
             directory.deleteRecursively()
