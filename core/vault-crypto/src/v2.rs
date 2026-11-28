@@ -959,4 +959,33 @@ mod tests {
             Err(Error::InvalidRecipient)
         );
     }
+
+    #[test]
+    fn streaming_header_uses_authenticated_sentinels_and_footer_actuals() {
+        let key = VaultFileKey::from_bytes(&[0x66; 32]).unwrap();
+        let mut header = sample();
+        header.streaming = true;
+        header.plaintext_len = u64::MAX;
+        header.chunk_count = u64::MAX;
+        let mut writer = StreamingWriter::new(Vec::new(), header.clone(), key).unwrap();
+        writer.write_plaintext(b"stream-").unwrap();
+        writer.write_plaintext(b"capture").unwrap();
+        let encoded = writer.finish().unwrap();
+        let mut reader = std::io::Cursor::new(encoded);
+        let verify_key = VaultFileKey::from_bytes(&[0x66; 32]).unwrap();
+        assert_eq!(verify_authenticated_stream(&mut reader, &verify_key).unwrap(), header);
+    }
+
+    #[test]
+    fn streaming_writer_and_verifier_support_empty_take() {
+        let key = VaultFileKey::from_bytes(&[0x67; 32]).unwrap();
+        let header = Header::new_random_streaming(sample().recipients).unwrap();
+        let encoded = StreamingWriter::new(Vec::new(), header.clone(), key)
+            .unwrap()
+            .finish()
+            .unwrap();
+        let mut reader = std::io::Cursor::new(encoded);
+        let verify_key = VaultFileKey::from_bytes(&[0x67; 32]).unwrap();
+        assert_eq!(verify_authenticated_stream(&mut reader, &verify_key).unwrap(), header);
+    }
 }
