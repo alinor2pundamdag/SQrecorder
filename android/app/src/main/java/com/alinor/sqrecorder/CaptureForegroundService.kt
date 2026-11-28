@@ -46,7 +46,7 @@ public class CaptureForegroundService : Service() {
 
  override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
   when (intent?.action) {
-   ACTION_STOP -> { stopReason = StopReason.USER_REQUEST; stopping.set(true) }
+   ACTION_STOP -> requestStop(StopReason.USER_REQUEST)
    ACTION_START -> if (captureThread == null) {
     if (Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     else startForeground(NOTIFICATION_ID, notification())
@@ -135,7 +135,7 @@ public class CaptureForegroundService : Service() {
     bytes = Math.addExact(bytes, count.toLong())
    }
    reduce(SessionEvent.StopRequested(SystemClock.elapsedRealtimeNanos(), stopReason))
-   active.stop()
+   stopRecorderIfRecording(active)
    pump!!.stopAndDrain()
    pump = null
    reduce(SessionEvent.CaptureStopped(SystemClock.elapsedRealtimeNanos()))
@@ -195,7 +195,32 @@ public class CaptureForegroundService : Service() {
  }
 
  override fun onBind(intent: Intent?): IBinder? = null
- override fun onDestroy() { stopping.set(true); super.onDestroy() }
+
+ /**
+  * AudioRecord.READ_BLOCKING may not return merely because the stop flag changed.
+  * Stop the active recorder from the service control thread to unblock the
+  * capture read; captureLoop then owns queue drain and finalization.
+  */
+ private fun requestStop(reason: StopReason) {
+  stopReason = reason
+  stopping.set(true)
+  recorder?.let { stopRecorderIfRecording(it) }
+ }
+
+ private fun stopRecorderIfRecording(active: AudioRecord) {
+  try {
+   if (active.recordingState == AudioRecord.RECORDSTATE_RECORDING) active.stop()
+  } catch (failure: IllegalStateException) {
+   // A concurrent stop/read transition can make stop invalid; finalization
+   // still proceeds through the single capture-thread cleanup path.
+   android.util.Log.w(TAG, "AudioRecord stop raced with capture shutdown", failure)
+  }
+ }
+
+ override fun onDestroy() {
+  requestStop(StopReason.USER_REQUEST)
+  super.onDestroy()
+ }
 
  companion object {
   const val ACTION_START = "com.alinor.sqrecorder.action.START"
