@@ -366,3 +366,10 @@ Still **NOT 100% / NOT release-accepted**: SQJ persisted events/checkpoints/fina
 - Monotonic clock is injectable for deterministic host tests. Test context uses a controlled clock and a valid unexpired session.
 - Commits: auth guard `f485a0b081887822df2023855890560659d8c8bc`; clock injection `cf7434c893cc981e03dec8ad600d1aca374e54a8`; deterministic test `0a0531e45d15e3aa4b5dccd7d6a43f3cf64b9d88`.
 - These are source-level changes only. No Android build/unit run, CI, emulator or physical-device result is claimed.
+
+
+## SQAC bounded-read hardening — 2026-11-28
+
+- Checkpoint retry comparison and read-back verification now use bounded FileChannel reads (69–340 byte SQAC limit), reject malformed/oversized files before allocation, and fail closed on zero-progress reads. This avoids unbounded `readBytes()` allocation from a corrupted checkpoint path.
+- Commits: `b4562cf17efe39a2c1b94b40f69cdad869d0ddef` (size guard), `e5e00b094f450bf92a51aea56d0f6f9b0887e372` (bounded channel reads).
+- Source-level audit only. Kotlin compilation/tests, exact-head CI, emulator and physical-device checks remain not verified.
