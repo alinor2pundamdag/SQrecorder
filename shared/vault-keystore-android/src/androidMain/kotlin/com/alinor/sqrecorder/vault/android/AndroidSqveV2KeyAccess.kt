@@ -81,8 +81,9 @@ public class AndroidSqveV2KeyAccess(
             if (dek.size != DEK_BYTES) {
                 throw VaultKeyAccessException(VaultKeyAccessFailure.NATIVE_BRIDGE_FAILURE)
             }
-            shared = agree(ephemeral.private, recipientPublic, androidKeyStore = false)
-            kek = deriveKek(shared, fileSalt, fileId, idBytes)
+            val sharedSecret = agree(ephemeral.private, recipientPublic, androidKeyStore = false)
+            shared = sharedSecret
+            kek = deriveKek(sharedSecret, fileSalt, fileId, idBytes)
             val cipher = Cipher.getInstance(AES_GCM)
             cipher.init(Cipher.ENCRYPT_MODE, SecretKeySpec(kek, AES_KEY), GCMParameterSpec(TAG_BITS, nonce))
             cipher.updateAAD(wrapAad(fileId, idBytes, ephemeralDer))
