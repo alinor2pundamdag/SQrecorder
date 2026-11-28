@@ -94,6 +94,7 @@ pub fn parse_ecdh_wrapped_dek(bytes: &[u8]) -> Result<EcdhWrappedDek, Error> {
     })
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Header {
     pub file_id: [u8; 16],
     pub file_salt: [u8; 32],
