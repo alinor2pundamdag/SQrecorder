@@ -65,7 +65,7 @@ class SqveV2EncryptedWavSinkTest {
             val aad0 = chunkAad(fileId, salt, noncePrefix, 0, plain0Length)
             val plain0 = native.decrypt(handle, nonce0, aad0, encoded.copyOfRange(encrypted0At, encrypted0At + plain0Length + 16))
             assertContentEquals("RIFF".toByteArray(Charsets.US_ASCII), plain0.copyOfRange(0, 4))
-            assertEquals(pcm.size, readU32(plain0, 40).toInt())
+            assertEquals(pcm.size, readLeU32(plain0, 40).toInt())
             plain0.fill(0)
 
             val chunk1At = encrypted0At + plain0Length + 16
@@ -126,6 +126,9 @@ private fun chunkAad(
 private fun u16be(v: Int) = byteArrayOf((v ushr 8).toByte(), v.toByte())
 private fun u32be(v: Int) = byteArrayOf((v ushr 24).toByte(), (v ushr 16).toByte(), (v ushr 8).toByte(), v.toByte())
 private fun u64be(v: Long) = ByteArray(8) { (v ushr (56 - it * 8)).toByte() }
+private fun readLeU32(b: ByteArray, at: Int): Long =
+    (b[at].toLong() and 0xff) or ((b[at + 1].toLong() and 0xff) shl 8) or
+        ((b[at + 2].toLong() and 0xff) shl 16) or ((b[at + 3].toLong() and 0xff) shl 24)
 private fun readU32(b: ByteArray, at: Int): Long =
     ((b[at].toLong() and 0xff) shl 24) or ((b[at + 1].toLong() and 0xff) shl 16) or
         ((b[at + 2].toLong() and 0xff) shl 8) or (b[at + 3].toLong() and 0xff)
