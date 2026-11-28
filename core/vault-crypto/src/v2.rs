@@ -1078,4 +1078,16 @@ mod tests {
             header
         );
     }
+
+    #[test]
+    fn explicit_android_api23_rsa3072_v2_suite_is_structurally_exact() {
+        let key = VaultFileKey::from_bytes(&[0x68; 32]).unwrap();
+        let mut header = sample();
+        header.recipients[0].suite = WRAP_SUITE_RSA3072_OAEP_SHA256_MGF1_SHA1_EMPTY;
+        header.recipients[0].wrapped = vec![0x5a; RSA3072_WRAPPED_DEK_BYTES];
+        let encoded = serialize_header(&header, &key).unwrap();
+        assert_eq!(parse_header(&encoded, &key).unwrap(), header);
+        header.recipients[0].wrapped.pop();
+        assert_eq!(serialize_header(&header, &key), Err(Error::InvalidRecipient));
+    }
 }
