@@ -5,7 +5,6 @@ import com.alinor.sqrecorder.domain.VaultFileKeyHandle
 import com.alinor.sqrecorder.vault.android.VaultNativeKeyBridge
 import java.io.RandomAccessFile
 import java.security.MessageDigest
-import java.util.Arrays
 
 /**
  * Capture-time encrypted WAV sink. It never creates a plaintext WAV file:
@@ -133,7 +132,12 @@ internal class SqveV2EncryptedWavSink(
         require(size in 1..CHUNK_BYTES)
         val nonce = noncePrefix + u64be(index)
         val aad = chunkAad(index, size)
-        val ciphertextAndTag = native.encryptChunk(keyHandle, nonce, aad, buffer.copyOfRange(0, size))
+        val plaintext = buffer.copyOfRange(0, size)
+        val ciphertextAndTag = try {
+            native.encryptChunk(keyHandle, nonce, aad, plaintext)
+        } finally {
+            plaintext.fill(0)
+        }
         require(ciphertextAndTag.size == size + GCM_TAG_BYTES) {
             ciphertextAndTag.fill(0)
             throw IllegalStateException("Native V2 encrypt returned malformed ciphertext")
